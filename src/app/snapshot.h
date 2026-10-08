@@ -10,6 +10,7 @@
 #pragma once
 #include "logic/types.h"
 #include "logic/params.h"
+#include "logic/proc_json.h"
 
 void snapshotPublish(const ProcData& d);
 void snapshotGet(ProcData& out);
@@ -30,8 +31,7 @@ bool snapshotTakeRebootRequest();
 void     snapshotSetLastApiRx(uint32_t now_ms);
 uint32_t snapshotLastApiRx();
 
-/// V1.1 – control cycle monitoring (written by the control task every cycle).
-/// max_us: longest cycle work time since boot; overruns: cycles with work time
-/// > CONTROL_PERIOD_MS. Reported in the GET_STATE response (stateExtraToJson).
-void snapshotSetCycleStats(uint32_t max_us, uint32_t overruns);
-void snapshotGetCycleStats(uint32_t& max_us, uint32_t& overruns);
+/// V1.1 – control timing (written by the control task every cycle, CycleStats
+/// in logic/proc_json.h). Reported in the GET_STATE response (stateExtraToJson).
+void snapshotSetCycleStats(const CycleStats& cs);
+void snapshotGetCycleStats(CycleStats& cs);

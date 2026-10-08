@@ -13,6 +13,8 @@
 | 4 | Cycle time monitoring: `cycle_max_us`, `overruns` in the GET_STATE reply | §5.2, §10 |
 | 5 | Fault screen: all buttons hidden, one full-width ACK area, 1 s hold, touch-down edge required (`display_logic.h`) | §13 |
 | 6 | BUSY retry rule, simulated-flag marking, safety disclaimer | §5.2, §6.8, §6.9 |
+| 7 | `cmdQueueSendAndWait` serialised by a mutex; a priority command is still queued if the mutex is busy | §1, §6.7 |
+| 8 | Device-side timing: `period_max_us` (jitter) and `prio_lat_max_us` (priority command enqueue → outputs applied); `CycleStats`, `Command.t_enq_us` | §5.2, §10 |
 
 This document is the single source of truth for every agent and every sprint.
 The headers in `src/**/*.h` are the machine-readable part of this contract; this
@@ -49,6 +51,13 @@ Every other task communicates through exactly two channels:
 
 No other shared mutable globals exist. Nobody but snapshot/command_queue uses
 `taskENTER_CRITICAL`.
+
+**Replies to concurrent callers.** Only callers of `cmdQueueSendAndWait()` get a
+reply. That function is serialised by a mutex: one caller waits at a time, so a
+caller can never consume or drop another caller's reply. With the Arduino
+`WebServer` (one request at a time) there is only one caller anyway; the mutex
+keeps the rule true if the server is ever replaced. If the mutex is not free in
+time the result is `BUSY`; a priority command is nevertheless queued (no reply).
 
 **Pure logic.** Everything that decides anything lives in `src/logic/` as pure
 C++17 functions without Arduino/ESP-IDF/FreeRTOS. It is tested on the host
@@ -219,7 +228,7 @@ because of a full normal queue (§6.7).
 | `START_MEASURE` | `pos` (opt., default `measure_pos`) | RUNNING | move to pos (5 < pos ≤ 240), then stationary measurement until `STOP`; shutter opens automatically |
 | `START_TRAVERSE` | `start`, `end`, `speed` (opt., defaults `traverse_*`) | RUNNING | approach start, traverse to end at speed; shutter opens during the run, closes at the end; HV stays on |
 | `STOP` | – | all | controlled stop; acquisition ends, shutter closes |
-| `GET_STATE` | – | all | heartbeat; reply extra `"state":"READY","sys_err":0,"local":false,"cycle_max_us":312,"overruns":0` (`stateExtraToJson`) |
+| `GET_STATE` | – | all | heartbeat; reply extra `"state":"READY","sys_err":0,"local":false,"cycle_max_us":312,"period_max_us":1010,"overruns":0,"prio_lat_max_us":1450` (`stateExtraToJson`, §10) |
 | `GET_CONFIG` | – | all | reply extra `"config":{...}` (§5.3) |
 | `SET` | `key`, `value` | all | §9 |
 | `CALIB` | `action`: `near` `far` `base` `save` `reset` | SAFE_START, READY, RUNNING | §7.3 |
@@ -325,9 +334,12 @@ cycle where `appTick` already produced a driver request**. The driver requests
 are merged by rank (NONE < MOVE_TO/RUN_BACKWARD < STOP < FORCE_STOP/ZERO_HERE);
 an immediate stop is never weakened.
 
-Guaranteed bound: from entering the queue to the driver request **≤ 2 control
-cycles (2 ms)**. End-to-end over WLAN the HTTP round trip dominates
-(acceptance: reply < 150 ms, measured with `scripts/stress_api.py latency`).
+Design bound: from entering the queue to the applied driver request **≤ 2 control
+cycles (2 ms)**. This is a design target until measured: the device measures it
+itself as `prio_lat_max_us` (`cmdQueueSend` timestamp `Command.t_enq_us` →
+outputs applied) – acceptance ≤ 2000 µs. End-to-end over WLAN the HTTP round
+trip dominates (reply < 150 ms, `scripts/stress_api.py latency`); the two
+numbers are different quantities and are reported separately.
 The fastest stop is still the physical E-stop (≤ 2 ms, independent of software
 queues) and the STOP button on the display.
 
@@ -428,9 +440,17 @@ Order inside one control cycle:
 4. outputs: **shutter → motor → HV LED**
 5. reply to the command (`cmdQueueReply`) – **after** the outputs
 6. `appFillProc()` → `snapshotPublish()`
-7. cycle time: work time of steps 1–6 with `esp_timer_get_time()`;
-   `cycle_max_us` = maximum since boot, `overruns` = cycles > 1000 µs.
-   Acceptance: `cycle_max_us < 500`, `overruns == 0` over 10 min.
+7. timing (`CycleStats`, maxima since boot, `esp_timer_get_time()`, uint32 µs, wrap-safe):
+
+| Field | Measures | Acceptance (10 min) |
+|---|---|---|
+| `cycle_max_us` | work time of steps 1–6 | < 500 |
+| `overruns` | cycles with work time > 1000 µs | 0 |
+| `period_max_us` | distance between two cycle starts (scheduling jitter) | < 1500 |
+| `prio_lat_max_us` | priority command: `cmdQueueSend` → outputs applied | ≤ 2000 |
+
+The publication of the statistics itself (< 2 µs) is not part of `cycle_max_us`.
+`prio_lat_max_us` stays 0 until the first priority command was executed.
 
 ---
 

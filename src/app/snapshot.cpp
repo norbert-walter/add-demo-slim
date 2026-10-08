@@ -50,15 +50,14 @@ bool snapshotTakeRebootRequest() {
     return r;
 }
 
-static uint32_t s_cycle_max_us = 0;
-static uint32_t s_overruns = 0;
-void snapshotSetCycleStats(uint32_t max_us, uint32_t overruns) {
+static CycleStats s_cycle;
+void snapshotSetCycleStats(const CycleStats& cs) {
     taskENTER_CRITICAL(&s_mux);
-    s_cycle_max_us = max_us; s_overruns = overruns;
+    s_cycle = cs;
     taskEXIT_CRITICAL(&s_mux);
 }
-void snapshotGetCycleStats(uint32_t& max_us, uint32_t& overruns) {
+void snapshotGetCycleStats(CycleStats& cs) {
     taskENTER_CRITICAL(&s_mux);
-    max_us = s_cycle_max_us; overruns = s_overruns;
+    cs = s_cycle;
     taskEXIT_CRITICAL(&s_mux);
 }

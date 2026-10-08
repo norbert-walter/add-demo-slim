@@ -12,7 +12,10 @@
  *    if the cycle already has a driver request. The reply is sent AFTER the
  *    outputs were applied ("OK" = accepted and outputs set; the end of a
  *    motion is only visible in /proc).
- *  - V1.1: the work time of every cycle is measured (cycle_max_us, overruns).
+ *  - V1.1: timing is measured on the target (CycleStats, CONTRACT §10):
+ *    work time per cycle, distance between cycle starts (jitter), overruns and
+ *    the latency of priority commands from cmdQueueSend() to applied outputs.
+ *    The publication of the statistics itself (< 2 µs) is not included.
  */
 #include "control_task.h"
 #include <Arduino.h>
@@ -67,10 +70,18 @@ static void controlLoop(void*) {
     TickType_t last = xTaskGetTickCount();
     uint32_t next_measure = 0;
     uint16_t samples[ADC_SAMPLES];
-    uint32_t cycle_max_us = 0, overruns = 0;
+    CycleStats cs;
+    uint32_t prev_start_us = 0;
+    bool have_prev = false;
     for (;;) {
         vTaskDelayUntil(&last, pdMS_TO_TICKS(CONTROL_PERIOD_MS));
-        const int64_t t_start = esp_timer_get_time();
+        const uint32_t t_start = (uint32_t)esp_timer_get_time();   // wrap-safe differences
+        if (have_prev) {
+            const uint32_t period = t_start - prev_start_us;
+            if (period > cs.period_max_us) cs.period_max_us = period;
+        }
+        prev_start_us = t_start;
+        have_prev = true;
         const uint32_t now = millis();
 
         // 1. measurement at 50 Hz
@@ -99,7 +110,13 @@ static void controlLoop(void*) {
         applyOutputs(out, now);
 
         // 5. reply only now: "OK" means accepted AND outputs set
-        if (have_cmd) cmdQueueReply(cmd, cmd_err);
+        if (have_cmd) {
+            if (appCmdIsPriority(cmd.id)) {
+                const uint32_t lat = (uint32_t)esp_timer_get_time() - cmd.t_enq_us;
+                if (lat > cs.prio_lat_max_us) cs.prio_lat_max_us = lat;
+            }
+            cmdQueueReply(cmd, cmd_err);
+        }
 
         // 6. publish process image
         ProcData pd;
@@ -107,10 +124,10 @@ static void controlLoop(void*) {
         snapshotPublish(pd);
 
         // 7. cycle time monitoring
-        const uint32_t dt_us = (uint32_t)(esp_timer_get_time() - t_start);
-        if (dt_us > cycle_max_us) cycle_max_us = dt_us;
-        if (dt_us > CONTROL_PERIOD_MS * 1000u) overruns++;
-        snapshotSetCycleStats(cycle_max_us, overruns);
+        const uint32_t dt_us = (uint32_t)esp_timer_get_time() - t_start;
+        if (dt_us > cs.cycle_max_us) cs.cycle_max_us = dt_us;
+        if (dt_us > CONTROL_PERIOD_MS * 1000u) cs.overruns++;
+        snapshotSetCycleStats(cs);
 
         esp_task_wdt_reset();
     }

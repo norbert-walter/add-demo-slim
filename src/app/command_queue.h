@@ -16,9 +16,15 @@
  *   => STOP latency from enqueue to driver request <= 2 control cycles (2 ms),
  *      as long as fewer than CMD_PRIO_QUEUE_LEN priority commands are waiting.
  *
- * RULE: cmdQueueSendAndWait() may ONLY be called from the network task
- *       (the HTTP server is single-threaded, so at most one reply is pending).
- *       The display uses cmdQueueSend() (no reply).
+ * Concurrent callers (V1.1): cmdQueueSendAndWait() is SERIALISED by a mutex,
+ *   so only one caller waits for a reply at any time and nobody can consume or
+ *   drop a foreign reply. Today there is only one caller (the WebServer of the
+ *   network task handles one request at a time); the mutex keeps this true if
+ *   that ever changes (e.g. AsyncWebServer).
+ *   If the mutex is not free within timeout_ms the call returns BUSY. A priority
+ *   command (STOP, HV_OFF, SHUTTER_CLOSE) is then STILL queued without a reply,
+ *   so a safety command is never lost because another request is waiting.
+ * The display uses cmdQueueSend() (no reply).
  */
 #pragma once
 #include "logic/types.h"
@@ -29,7 +35,7 @@ void cmdQueueInit();
 /// Returns false if the target queue is full (-> ApiError::BUSY).
 bool cmdQueueSend(Command& cmd);
 
-/// Network task only: sends cmd and waits up to timeout_ms for its result.
+/// Sends cmd and waits up to timeout_ms for its result (serialised, see above).
 /// Returns BUSY if the queue is full or no reply arrives in time. After a timeout
 /// the command may still be executed later – clients must check /proc before
 /// retrying (CONTRACT §5.2 retry rule).

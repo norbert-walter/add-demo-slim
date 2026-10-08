@@ -125,17 +125,20 @@ void test_response_cap_too_small() {
 
 // V1.1: GET_STATE extra
 void test_state_extra_exact() {
-    char e[128];
-    int n = stateExtraToJson(SafetyState::READY, ErrorCode::NONE, true, 312, 0, e, sizeof(e));
+    char e[192];
+    CycleStats cs; cs.cycle_max_us = 312; cs.period_max_us = 1010; cs.overruns = 0; cs.prio_lat_max_us = 1450;
+    int n = stateExtraToJson(SafetyState::READY, ErrorCode::NONE, true, cs, e, sizeof(e));
     TEST_ASSERT_EQUAL_INT((int)strlen(e), n);
     TEST_ASSERT_EQUAL_STRING(
-        "\"state\":\"READY\",\"sys_err\":0,\"local\":true,\"cycle_max_us\":312,\"overruns\":0", e);
+        "\"state\":\"READY\",\"sys_err\":0,\"local\":true,\"cycle_max_us\":312,"
+        "\"period_max_us\":1010,\"overruns\":0,\"prio_lat_max_us\":1450", e);
 }
 void test_state_extra_worst_case_and_in_response() {
-    char e[128];
-    int n = stateExtraToJson(SafetyState::SAFE_START, (ErrorCode)255, false, 4294967295u, 4294967295u, e, sizeof(e));
-    TEST_ASSERT_TRUE(n > 0 && n < 128);
-    TEST_ASSERT_EQUAL_INT(-1, stateExtraToJson(SafetyState::READY, ErrorCode::NONE, false, 1, 1, e, 20));
+    char e[192];
+    CycleStats cs; cs.cycle_max_us = cs.period_max_us = cs.overruns = cs.prio_lat_max_us = 4294967295u;
+    int n = stateExtraToJson(SafetyState::SAFE_START, (ErrorCode)255, false, cs, e, sizeof(e));
+    TEST_ASSERT_TRUE(n > 0 && n < 192);
+    TEST_ASSERT_EQUAL_INT(-1, stateExtraToJson(SafetyState::READY, ErrorCode::NONE, false, CycleStats{}, e, 20));
     int m = responseToJson(CmdId::GET_STATE, ApiError::OK, nullptr, e, B, sizeof(B));
     TEST_ASSERT_TRUE(m > 0);
     TEST_ASSERT_TRUE(crcFrameVerify(B, (size_t)m));

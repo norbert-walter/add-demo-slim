@@ -16,7 +16,8 @@
 | Bedienvorrang | nicht geregelt (Display und API gleichrangig) | **Display hat Vorrang (LOCAL)**: nach jedem Display-Befehl lehnt die Anlage Start-Befehle von der API mit `LOCAL_CONTROL (−10)` ab; STOP/HV_OFF/SHUTTER_CLOSE/SET bleiben erlaubt. Ende 30 s nach dem letzten Display-Befehl, sobald Achse steht und HV aus ist |
 | STOP-Latenz | STOP wartete u. U. auf einen Zyklus ohne Fahrauftrag, volle Queue → BUSY | **Prioritäts-Queue** für STOP/HV_OFF/SHUTTER_CLOSE, Ausführung auch bei laufendem Fahrauftrag; ≤ 2 ms bis zum Treiber |
 | API-Antwort | vor dem Setzen der Ausgänge | **nach** dem Setzen der Ausgänge: `OK` = angenommen und Ausgänge gesetzt; Bewegungsende nur über `/proc` |
-| Zykluszeit | nicht überwacht | `cycle_max_us`, `overruns` in `GET_STATE`; Abnahme < 500 µs, 0 Überläufe in 10 min |
+| Zykluszeit | nicht überwacht | im Gerät gemessen und in `GET_STATE` gemeldet: Rechenzeit `cycle_max_us` < 500 µs, Überläufe 0, Jitter `period_max_us` < 1500 µs, Prioritätsbefehl-Latenz `prio_lat_max_us` ≤ 2000 µs |
+| Gleichzeitige API-Aufrufe | eine Antwort-Queue, Annahme „ein Aufrufer“ nur als Kommentar | Warten auf Antwort per Mutex **serialisiert**; STOP/HV_OFF/SHUTTER_CLOSE werden auch bei belegtem Mutex eingereiht |
 | Display im Fehlerfall | 5 Tasten bleiben sichtbar | **alle Tasten ausgeblendet**, Fehlertext groß, **eine** ACK-Fläche über die volle Breite, 1 s halten; grau solange die Ursache anliegt |
 | Display-Logik | im Display-Code | reine Funktionen `display_logic.h`, nativ getestet |
 | BUSY | Wiederholregel offen | erst `/proc` prüfen, dann wiederholen (CONTRACT §5.2) |
@@ -465,8 +466,9 @@ steht, HV aus ist und seit dem letzten Display-Befehl 30 s vergangen sind.
 STOP, HV_OFF und SHUTTER_CLOSE laufen über eine eigene Prioritäts-Queue und werden auch
 in einem Zyklus ausgeführt, der schon einen Fahrauftrag hat. Ein Sofort-Stopp
 (Not-Halt, Nullsetzen am Endschalter) wird nie zu einem gebremsten Stopp abgeschwächt.
-Garantie: ≤ 2 ms von der Queue bis zum Treiber. Der schnellste Stopp bleibt der
-physische Not-Aus.
+Auslegungsziel: ≤ 2 ms von der Queue bis zum Treiber. Das Gerät misst diese Zeit
+selbst (`prio_lat_max_us` in `GET_STATE`); erst die Messung bei der Abnahme ist der
+Nachweis. Der schnellste Stopp bleibt der physische Not-Aus.
 
 ### Fail-Safe-Grundsätze
 - Sicherheitsflags werden nie gespeichert (nach Boot gesperrt)
@@ -604,8 +606,11 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 - [ ] Shutter öffnet nie in der Parkzone
 - [ ] Not-Aus und `cooling_flow = false` gleichzeitig → `FAULT ESTOP`
 - [ ] STOP per API während Profilfahrt: Antwort < 150 ms, Achse steht < 1 s (`stress_api.py latency`)
-- [ ] Zykluszeit: `cycle_max_us` < 500, `overruns` = 0 nach 10 min (`stress_api.py soak`)
+- [ ] Zeitverhalten nach 10 min (`stress_api.py soak`): `cycle_max_us` < 500, `overruns` = 0,
+      `period_max_us` < 1500 (Jitter), nach STOP-Tests `prio_lat_max_us` ≤ 2000
 - [ ] Queue-Flut (200 SET): nur OK/BUSY, alle CRC gültig (`stress_api.py flood`)
+- [ ] Parallele Anfragen (8 Threads, 400 gemischte Befehle mit bekanntem Ergebnis):
+      keine vertauschte Antwort, nur erwartetes Ergebnis oder BUSY (`stress_api.py parallel`)
 
 **5. REST-API + /proc**
 - [ ] Alle Endpunkte < 1 s

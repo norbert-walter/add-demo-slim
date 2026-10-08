@@ -44,11 +44,19 @@ int procToJson(const ProcData& d, char* buf, size_t cap);
 int responseToJson(CmdId cmd, ApiError err, const char* msg, const char* extra,
                    char* buf, size_t cap);
 
+/// V1.1 – control task timing, measured on the target since boot (CONTRACT §10).
+struct CycleStats {
+    uint32_t cycle_max_us    = 0;  ///< longest work time of one cycle (steps 1..6), µs
+    uint32_t period_max_us   = 0;  ///< longest distance between two cycle starts (jitter), µs
+    uint32_t overruns        = 0;  ///< cycles with work time > CONTROL_PERIOD_MS
+    uint32_t prio_lat_max_us = 0;  ///< longest priority command latency: cmdQueueSend -> outputs applied, µs
+};
+
 /**
  * V1.1 – extra member list of the GET_STATE response (no leading comma, no frame):
- *   "state":"<SafetyState>","sys_err":<int>,"local":<b>,"cycle_max_us":<u32>,"overruns":<u32>
- * cycle_max_us: longest control cycle since boot (µs); overruns: cycles > CONTROL_PERIOD_MS.
- * @return length (without NUL) or -1 if cap is too small (cap >= 128 never fails).
+ *   "state":"<SafetyState>","sys_err":<int>,"local":<b>,"cycle_max_us":<u32>,
+ *   "period_max_us":<u32>,"overruns":<u32>,"prio_lat_max_us":<u32>
+ * @return length (without NUL) or -1 if cap is too small (cap >= 192 never fails).
  */
-int stateExtraToJson(SafetyState state, ErrorCode err, bool local,
-                     uint32_t cycle_max_us, uint32_t overruns, char* buf, size_t cap);
+int stateExtraToJson(SafetyState state, ErrorCode err, bool local, const CycleStats& cs,
+                     char* buf, size_t cap);

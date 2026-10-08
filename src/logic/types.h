@@ -96,6 +96,8 @@ struct Command {
     char      str[64] = {0};       ///< SET: string value
 
     CalibAction calib = CalibAction::NONE;
+
+    uint32_t  t_enq_us = 0;        ///< V1.1: enqueue time (µs, set by cmdQueueSend) for latency measurement
 };
 
 /// Result returned to the HTTP task for commands with want_reply = true.

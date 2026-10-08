@@ -22,7 +22,7 @@ agentenbasierte Entwicklung mit code-server + Cline.
 | `test/embedded/*` | On-Target-Tests (S5) |
 | `scripts/serial_cmd.py` | nicht-interaktiver Serial-Client (auch für Cline) |
 | `scripts/add_client.py` | REST-Client mit CRC-Rahmenregel (Referenz) |
-| `scripts/stress_api.py` | Abnahme V1.1: STOP-Latenz, Queue-Flut, Dauerlauf, Bedienvorrang |
+| `scripts/stress_api.py` | Abnahme V1.1: STOP-Latenz, Queue-Flut, parallele Anfragen, Dauerlauf, Bedienvorrang |
 
 ## Schnellstart
 

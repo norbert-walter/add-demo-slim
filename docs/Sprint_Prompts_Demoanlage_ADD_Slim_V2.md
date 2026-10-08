@@ -363,8 +363,9 @@ Task:
    list every change with the reason. No behavioural changes.
 3. Review control_task.cpp against CONTRACT §10 and §6.7 and report deviations (do not fix
    them). Check in particular: cmdQueueReceive(cmd, out.drv.op == NONE) (priority commands
-   always), reply AFTER applyOutputs, cycle time measured with esp_timer_get_time and
-   published with snapshotSetCycleStats every cycle.
+   always), reply AFTER applyOutputs, CycleStats (work time, period between cycle
+   starts, overruns, priority latency from cmd.t_enq_us) published every cycle,
+   cmdQueueSendAndWait serialised by its mutex.
 Definition of done: firmware builds; native tests still green; report with changes.
 Do NOT flash.
 ```
@@ -372,7 +373,7 @@ Do NOT flash.
 **Hardware-Prüfung S2.6 (du)** – über `scripts/add_client.py` erst ab S3; bis dahin Display/Serial:
 - [ ] Boot, Watchdog läuft, kein Reset in 5 min
 - [ ] Nach S3: `INIT`, `MOVE`, Not-Aus → FAULT → ACK → SAFE_START
-- [ ] Nach S3: `GET_STATE` zeigt `cycle_max_us` < 500 und `overruns` 0
+- [ ] Nach S3: `GET_STATE` zeigt `cycle_max_us` < 500, `overruns` 0, `period_max_us` < 1500
 
 ---
 
@@ -422,6 +423,7 @@ python scripts/add_client.py cmd START_TRAVERSE start=10 end=230 speed=600
 
 # V1.1 – Last und Zykluszeit (keine Bewegung):
 python scripts/stress_api.py --host 192.168.4.1 flood
+python scripts/stress_api.py --host 192.168.4.1 parallel     # 8 Threads, keine vertauschten Antworten
 python scripts/stress_api.py --host 192.168.4.1 soak --minutes 10
 # STOP-Latenz – BEWEGT DIE ACHSE, nur in RUNNING, Not-Aus in Reichweite:
 python scripts/stress_api.py --host 192.168.4.1 latency
@@ -535,7 +537,7 @@ frozen check clean. Do NOT flash.
 ## Sprint 5 – Integration und Abnahme (du)
 
 - Abnahme nach Pflichtenheft Kapitel 10, in der dort genannten Reihenfolge.
-- V1.1-Messungen mit `scripts/stress_api.py`: `flood`, `soak` (10 min), `local`,
+- V1.1-Messungen mit `scripts/stress_api.py`: `flood`, `parallel`, `soak` (10 min), `local`,
   `latency` (bewegt die Achse – nur mit Not-Aus in Reichweite).
 - `pio test -e esp32-test` nach Freigabe.
 - Fehleranalyse mit Claude: Log (`/log`), `/proc`-Mitschnitt und betroffene Datei übergeben.
@@ -610,7 +612,7 @@ Then run the ADD validation (spec §13) against the live device together with me
 | alle | Regressionsregel in DoD und `.clinerules` |
 | S2.4 | LOCAL-Vorrang, Prioritätstabellen, Fahrauftrags-Rang; 13 neue Szenariotests |
 | S2.6 | Prioritäts-Queue, Antwort nach den Ausgängen, Zykluszeitmessung (Review-Punkte) |
-| S3 | `stateExtraToJson` für GET_STATE; `stress_api.py` flood/soak/latency |
+| S3 | `stateExtraToJson` (mit `CycleStats`) für GET_STATE; `stress_api.py` flood/parallel/soak/latency |
 | S4a | LOCAL-Pill, SIM-Kennzeichnung, keine automatische BUSY-Wiederholung |
 | S4b | `display_logic.cpp` (getestet) + Fehlerbild mit einer ACK-Fläche, 1 s halten |
 | S6 | Level 2 als Konzept, Regeln zu LOCAL/BUSY/OK, Fehlercode −10 |

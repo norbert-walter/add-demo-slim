@@ -4,6 +4,7 @@ stress_api.py - acceptance and stress tests for the REST API (Contract V1.1).
 
   python scripts/stress_api.py --host 192.168.4.1 latency  [--n 10]
   python scripts/stress_api.py --host 192.168.4.1 flood    [--n 200]
+  python scripts/stress_api.py --host 192.168.4.1 parallel [--n 400] [--threads 8]
   python scripts/stress_api.py --host 192.168.4.1 soak     [--minutes 10]
   python scripts/stress_api.py --host 192.168.4.1 local
 
@@ -14,7 +15,13 @@ start motion. Every test aborts if the device reports a fault.
 Acceptance criteria (Pflichtenheft V1.5 §7):
   latency : STOP reply < 150 ms (HTTP round trip incl. WLAN), axis idle in /proc < 1 s
   flood   : every response CRC-valid, no response other than OK/BUSY,
-            afterwards cycle_max_us < 500 and overruns == 0
+            afterwards timing ok (see below)
+  parallel: 8 threads send mixed commands with a KNOWN expected result at the
+            same time; every reply must be CRC-valid, carry the right "cmd" and
+            either the expected err or BUSY (-7) -> no reply is ever mixed up
+  timing  : (GET_STATE after every test) cycle_max_us < 500, overruns == 0,
+            period_max_us < 1500 (jitter), prio_lat_max_us <= 2000
+            (priority command: enqueue -> outputs applied, measured in the device)
   soak    : 10 min GET_STATE every 1 s: cycle_max_us < 500, overruns == 0,
             no COMM_TIMEOUT, all frames valid
   local   : (manual) press any display button, then API HV_ON -> err -10
@@ -23,7 +30,9 @@ Acceptance criteria (Pflichtenheft V1.5 §7):
 Only the Python standard library is used (plus scripts/add_client.py).
 """
 import argparse
+import concurrent.futures
 import json
+import random
 import statistics
 import sys
 import time
@@ -57,11 +66,21 @@ def fail_on_fault(p):
         raise SystemExit(f"ABORT: device in {p['state']}, err={p['err']}")
 
 
+LIMITS = {"cycle_max_us": 500, "period_max_us": 1500, "prio_lat_max_us": 2001}
+
+
 def cycle_ok(host):
+    """Device-side timing (CycleStats, CONTRACT §10). prio_lat_max_us stays 0 until
+    the first priority command (STOP, HV_OFF, SHUTTER_CLOSE) was executed."""
     r, _ = api(host, "GET_STATE")
-    mx, ov = r.get("cycle_max_us"), r.get("overruns")
-    ok = mx is not None and mx < 500 and ov == 0
-    print(f"  cycle_max_us={mx} overruns={ov} -> {'OK' if ok else 'FAIL'}")
+    ok = r.get("overruns") == 0
+    parts = [f"overruns={r.get('overruns')}"]
+    for k, lim in LIMITS.items():
+        v = r.get(k)
+        good = v is not None and v < lim
+        ok = ok and good
+        parts.append(f"{k}={v}{'' if good else ' (!)'}")
+    print("  " + " ".join(parts) + f" -> {'OK' if ok else 'FAIL'}")
     return ok
 
 
@@ -95,6 +114,7 @@ def t_latency(host, n):
     ok = max(replies) < 150 and max(idles) < 1000
     print(f"reply  min/median/max: {min(replies):.1f} / {statistics.median(replies):.1f} / {max(replies):.1f} ms")
     print(f"idle   min/median/max: {min(idles):.1f} / {statistics.median(idles):.1f} / {max(idles):.1f} ms")
+    print("  (HTTP round trip incl. WLAN; the device-internal STOP latency is prio_lat_max_us below)")
     return ok and cycle_ok(host)
 
 
@@ -111,6 +131,42 @@ def t_flood(host, n):
     return ok and cycle_ok(host)
 
 
+def t_parallel(host, n, threads):
+    p = proc(host)
+    fail_on_fault(p)
+    if p["state"] not in ("SAFE_START", "READY") or p.get("local"):
+        raise SystemExit("precondition: state SAFE_START or READY, HV off, local false")
+    # (cmd, params, expected err) - all without motion, deterministic in SAFE_START/READY
+    cases = [
+        ("SET", {"key": "temp", "value": 18.0}, 0),
+        ("SET", {"key": "temp", "value": 500.0}, -4),   # out of range
+        ("SHUTTER_OPEN", {}, -5),                       # only in RUNNING
+        ("ACK", {}, -5),                                # only in WAIT_ACK
+        ("SHUTTER_CLOSE", {}, 0),                       # priority queue
+        ("HV_OFF", {}, 0),                              # priority queue
+        ("GET_STATE", {}, 0),                           # answered by the HTTP task
+    ]
+    jobs = [random.choice(cases) for _ in range(n)]
+
+    def one(job):
+        cmd, params, exp = job
+        r, dt = api(host, cmd, params)
+        return cmd, exp, r, dt
+
+    bad, busy, worst = [], 0, 0.0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as ex:
+        for cmd, exp, r, dt in ex.map(one, jobs):
+            worst = max(worst, dt)
+            if r.get("err") == BUSY:
+                busy += 1
+            elif r.get("cmd") != cmd or r.get("err") != exp:
+                bad.append((cmd, exp, r))
+    print(f"  {n} requests, {threads} threads: {len(bad)} mismatches, {busy} BUSY, worst {worst:.1f} ms")
+    for b in bad[:10]:
+        print("   mismatch:", b)
+    return not bad and cycle_ok(host)
+
+
 def t_soak(host, minutes):
     end = time.time() + minutes * 60
     worst = 0
@@ -123,6 +179,8 @@ def t_soak(host, minutes):
             raise SystemExit("FAIL: COMM_TIMEOUT during soak")
         if r.get("overruns", 0) != 0:
             raise SystemExit(f"FAIL: overruns={r['overruns']} after {k} s")
+        if r.get("period_max_us", 0) >= LIMITS["period_max_us"]:
+            print(f"  WARNING: period_max_us={r['period_max_us']} after {k} s")
         time.sleep(1.0)
     print(f"  {k} heartbeats, cycle_max_us={worst}")
     return cycle_ok(host)
@@ -150,7 +208,8 @@ def t_local(host):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--host", default="192.168.4.1")
-    ap.add_argument("test", choices=["latency", "flood", "soak", "local"])
+    ap.add_argument("test", choices=["latency", "flood", "parallel", "soak", "local"])
+    ap.add_argument("--threads", type=int, default=8)
     ap.add_argument("--n", type=int, default=0)
     ap.add_argument("--minutes", type=float, default=10)
     a = ap.parse_args()
@@ -158,6 +217,8 @@ def main():
         ok = t_latency(a.host, a.n or 10)
     elif a.test == "flood":
         ok = t_flood(a.host, a.n or 200)
+    elif a.test == "parallel":
+        ok = t_parallel(a.host, a.n or 400, a.threads)
     elif a.test == "soak":
         ok = t_soak(a.host, a.minutes)
     else:
