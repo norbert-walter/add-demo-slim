@@ -366,7 +366,8 @@ Task:
    always), reply AFTER applyOutputs, CycleStats (work time, period between cycle
    starts, overruns, priority latency from cmd.t_enq_us) published every cycle,
    cmdQueueSendAndWait serialised by its mutex.
-Definition of done: firmware builds; native tests still green; report with changes.
+Definition of done: firmware builds; ALL native tests green (incl. test_command_queue,
+which compiles the real src/app/command_queue.cpp against a FreeRTOS shim); report with changes.
 Do NOT flash.
 ```
 
@@ -611,7 +612,7 @@ Then run the ADD validation (spec §13) against the live device together with me
 |---|---|
 | alle | Regressionsregel in DoD und `.clinerules` |
 | S2.4 | LOCAL-Vorrang, Prioritätstabellen, Fahrauftrags-Rang; 13 neue Szenariotests |
-| S2.6 | Prioritäts-Queue, Antwort nach den Ausgängen, Zykluszeitmessung (Review-Punkte) |
+| S2.6 | Prioritäts-Queue mit Überlauf-Latch, Antwort nach den Ausgängen, Zykluszeitmessung (Review-Punkte); `test_command_queue` muss grün sein |
 | S3 | `stateExtraToJson` (mit `CycleStats`) für GET_STATE; `stress_api.py` flood/parallel/soak/latency |
 | S4a | LOCAL-Pill, SIM-Kennzeichnung, keine automatische BUSY-Wiederholung |
 | S4b | `display_logic.cpp` (getestet) + Fehlerbild mit einer ACK-Fläche, 1 s halten |

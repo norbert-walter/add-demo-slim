@@ -618,6 +618,33 @@ void test_stop_never_weakens_immediate_stop() {
     TEST_ASSERT_TRUE(out2.drv.op == DrvOp::ZERO_HERE);
 }
 
+// ---- V1.1: priority overflow latch ------------------------------------------------------
+void test_prio_latch_order_coalesce_and_source() {
+    uint32_t bits = 0; Command out;
+    TEST_ASSERT_FALSE(appPrioLatchTake(bits, out));
+    appPrioLatchSet(bits, mk(CmdId::INIT));                  // ignored
+    appPrioLatchSet(bits, mk(CmdId::ACK));
+    TEST_ASSERT_EQUAL_UINT32(0, bits);
+    appPrioLatchSet(bits, mk(CmdId::SHUTTER_CLOSE));
+    appPrioLatchSet(bits, mk(CmdId::HV_OFF));
+    appPrioLatchSet(bits, mk(CmdId::STOP));
+    appPrioLatchSet(bits, mk(CmdId::STOP));                  // coalesced
+    appPrioLatchSet(bits, mk(CmdId::STOP, CmdSource::LOCAL));
+    TEST_ASSERT_TRUE(appPrioLatchTake(bits, out));
+    TEST_ASSERT_TRUE(out.id == CmdId::STOP);
+    TEST_ASSERT_TRUE(out.source == CmdSource::LOCAL);
+    TEST_ASSERT_FALSE(out.want_reply);
+    TEST_ASSERT_TRUE(appPrioLatchTake(bits, out));
+    TEST_ASSERT_TRUE(out.id == CmdId::HV_OFF);
+    TEST_ASSERT_TRUE(appPrioLatchTake(bits, out));
+    TEST_ASSERT_TRUE(out.id == CmdId::SHUTTER_CLOSE);
+    TEST_ASSERT_FALSE(appPrioLatchTake(bits, out));
+    TEST_ASSERT_EQUAL_UINT32(0, bits);                       // LOCAL bit cleared too
+    appPrioLatchSet(bits, mk(CmdId::HV_OFF));
+    TEST_ASSERT_TRUE(appPrioLatchTake(bits, out));
+    TEST_ASSERT_TRUE(out.source == CmdSource::API);          // no stale LOCAL
+}
+
 // ---- V1.1: concurrent faults -------------------------------------------------------------
 void test_estop_and_cooling_loss_simultaneous() {
     running();
@@ -678,5 +705,6 @@ int main(int, char**) {
     RUN_TEST(test_stop_overrides_pending_move_request);
     RUN_TEST(test_stop_never_weakens_immediate_stop);
     RUN_TEST(test_estop_and_cooling_loss_simultaneous);
+    RUN_TEST(test_prio_latch_order_coalesce_and_source);
     return UNITY_END();
 }

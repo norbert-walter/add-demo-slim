@@ -15,6 +15,7 @@
 | 6 | BUSY retry rule, simulated-flag marking, safety disclaimer | §5.2, §6.8, §6.9 |
 | 7 | `cmdQueueSendAndWait` serialised by a mutex; a priority command is still queued if the mutex is busy | §1, §6.7 |
 | 8 | Device-side timing: `period_max_us` (jitter) and `prio_lat_max_us` (priority command enqueue → outputs applied); `CycleStats`, `Command.t_enq_us` | §5.2, §10 |
+| 9 | Overflow latch for priority commands (cannot overflow, coalesces identical requests); host integration test of the real `command_queue.cpp` with threads (`test_command_queue`) | §6.7, §1 |
 
 This document is the single source of truth for every agent and every sprint.
 The headers in `src/**/*.h` are the machine-readable part of this contract; this
@@ -57,7 +58,10 @@ reply. That function is serialised by a mutex: one caller waits at a time, so a
 caller can never consume or drop another caller's reply. With the Arduino
 `WebServer` (one request at a time) there is only one caller anyway; the mutex
 keeps the rule true if the server is ever replaced. If the mutex is not free in
-time the result is `BUSY`; a priority command is nevertheless queued (no reply).
+time the result is `BUSY`; a priority command is nevertheless queued or latched
+(no reply). Verified on the host by `test_command_queue` (8 threads, real
+`command_queue.cpp`, FreeRTOS shim): without the mutex, replies are not mixed
+up (sequence check) but most of them are lost (`BUSY`).
 
 **Pure logic.** Everything that decides anything lives in `src/logic/` as pure
 C++17 functions without Arduino/ESP-IDF/FreeRTOS. It is tested on the host
@@ -330,7 +334,16 @@ priority.
 
 `STOP`, `HV_OFF`, `SHUTTER_CLOSE` (`appCmdIsPriority`) go into a separate
 priority queue (length 4). The control task serves it first and **even in a
-cycle where `appTick` already produced a driver request**. The driver requests
+cycle where `appTick` already produced a driver request**.
+
+**Overflow:** if the priority queue is full, the request is stored in a latch
+(one bit per command, `appPrioLatchSet/Take`). The latch cannot overflow;
+identical pending requests coalesce (ten STOPs → one STOP), different ones are
+all kept and served in the order STOP → HV_OFF → SHUTTER_CLOSE, after the
+priority queue and before normal commands. A latched request gets no reply
+(a waiting caller sees `BUSY`, the effect is visible in `/proc`). So a priority
+request is never dropped; `cmdQueueSend()` returns `true` for every priority
+command. The driver requests
 are merged by rank (NONE < MOVE_TO/RUN_BACKWARD < STOP < FORCE_STOP/ZERO_HERE);
 an immediate stop is never weakened.
 
@@ -340,6 +353,18 @@ itself as `prio_lat_max_us` (`cmdQueueSend` timestamp `Command.t_enq_us` →
 outputs applied) – acceptance ≤ 2000 µs. End-to-end over WLAN the HTTP round
 trip dominates (reply < 150 ms, `scripts/stress_api.py latency`); the two
 numbers are different quantities and are reported separately.
+
+| Section of the reaction chain | Measured by | Target |
+|---|---|---|
+| physical E-stop → step pulses stop | oscilloscope (acceptance §4) | ≤ 2 ms |
+| HTTP packet parsed → enqueued | not measured (µs, same task) | – |
+| enqueued → outputs applied (STOP, HV_OFF, SHUTTER_CLOSE together) | `prio_lat_max_us` | ≤ 2000 µs |
+| API client → reply received (incl. WLAN) | `stress_api.py latency` | < 150 ms |
+| display STOP touch → enqueued | touch poll period | ≤ 20 ms |
+| STOP request → axis stands | `/proc` (`stress_api.py latency`) | < 1 s (deceleration ramp) |
+
+`prio_lat_max_us` covers all three priority commands together (conservative);
+a per-command split is not planned.
 The fastest stop is still the physical E-stop (≤ 2 ms, independent of software
 queues) and the STOP button on the display.
 

@@ -12,6 +12,9 @@ static QueueHandle_t s_cmd = nullptr;
 static QueueHandle_t s_prio = nullptr;
 static QueueHandle_t s_reply = nullptr;
 static SemaphoreHandle_t s_wait_mutex = nullptr;   // serialises cmdQueueSendAndWait
+static portMUX_TYPE  s_latch_mux = portMUX_INITIALIZER_UNLOCKED;
+static uint32_t      s_latch_bits = 0;              // priority overflow latch (appPrioLatch*)
+static uint32_t      s_latch_t_us = 0;              // enqueue time of the oldest latched request
 static portMUX_TYPE  s_seq_mux = portMUX_INITIALIZER_UNLOCKED;
 static uint32_t      s_seq = 0;
 
@@ -32,8 +35,15 @@ static uint32_t nextSeq() {
 bool cmdQueueSend(Command& cmd) {
     cmd.seq = nextSeq();
     cmd.t_enq_us = (uint32_t)esp_timer_get_time();
-    QueueHandle_t q = appCmdIsPriority(cmd.id) ? s_prio : s_cmd;
-    return xQueueSend(q, &cmd, 0) == pdTRUE;
+    if (!appCmdIsPriority(cmd.id)) return xQueueSend(s_cmd, &cmd, 0) == pdTRUE;
+    if (xQueueSend(s_prio, &cmd, 0) == pdTRUE) return true;
+    // Priority queue full: latch the request. It may be coalesced with an
+    // identical pending one, but it is never dropped. No reply will come.
+    taskENTER_CRITICAL(&s_latch_mux);
+    if (s_latch_bits == 0) s_latch_t_us = cmd.t_enq_us;
+    appPrioLatchSet(s_latch_bits, cmd);
+    taskEXIT_CRITICAL(&s_latch_mux);
+    return true;
 }
 
 static ApiError sendAndWaitLocked(Command& cmd, uint32_t timeout_ms) {
@@ -53,7 +63,7 @@ static ApiError sendAndWaitLocked(Command& cmd, uint32_t timeout_ms) {
 
 ApiError cmdQueueSendAndWait(Command& cmd, uint32_t timeout_ms) {
     if (xSemaphoreTake(s_wait_mutex, pdMS_TO_TICKS(timeout_ms)) != pdTRUE) {
-        if (appCmdIsPriority(cmd.id)) {          // never lose a safety command
+        if (appCmdIsPriority(cmd.id)) {          // queue or latch: never dropped
             cmd.want_reply = false;
             cmdQueueSend(cmd);
         }
@@ -66,6 +76,12 @@ ApiError cmdQueueSendAndWait(Command& cmd, uint32_t timeout_ms) {
 
 bool cmdQueueReceive(Command& out, bool allow_normal) {
     if (xQueueReceive(s_prio, &out, 0) == pdTRUE) return true;
+    bool latched;
+    taskENTER_CRITICAL(&s_latch_mux);
+    latched = appPrioLatchTake(s_latch_bits, out);
+    if (latched) out.t_enq_us = s_latch_t_us;
+    taskEXIT_CRITICAL(&s_latch_mux);
+    if (latched) return true;
     return allow_normal && xQueueReceive(s_cmd, &out, 0) == pdTRUE;
 }
 

@@ -94,6 +94,19 @@ bool appCmdIsPriority(CmdId id);
  */
 bool appLocalBlocksApi(CmdId id);
 
+/**
+ * V1.1 – overflow latch for priority commands (CONTRACT §6.7). Used by
+ * command_queue when the priority queue is full: the request is stored as a
+ * bit, so it can be coalesced with an identical pending one but never dropped.
+ *   bit 0 STOP, bit 1 HV_OFF, bit 2 SHUTTER_CLOSE, bit 7 "a request came from LOCAL".
+ * appPrioLatchSet: non-priority commands are ignored.
+ * appPrioLatchTake: picks STOP before HV_OFF before SHUTTER_CLOSE, writes a fresh
+ *   Command{id, source = LOCAL if bit 7 else API, want_reply = false}, clears the
+ *   command bit and clears bit 7 when no command bit is left. false if none pending.
+ */
+void appPrioLatchSet(uint32_t& bits, const Command& cmd);
+bool appPrioLatchTake(uint32_t& bits, Command& out);
+
 /// Defaults: safetyInitialStatus(), MotionSeq{}, paramsDefaults(), SafetyFlags{}, ...
 void appInit(AppState& s);
 

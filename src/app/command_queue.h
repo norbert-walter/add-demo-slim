@@ -13,8 +13,12 @@
  *            request. A full normal queue can therefore never delay a STOP.
  *   normal queue (CMD_QUEUE_LEN): all other commands, served only when the
  *            cycle has no driver request yet.
- *   => STOP latency from enqueue to driver request <= 2 control cycles (2 ms),
- *      as long as fewer than CMD_PRIO_QUEUE_LEN priority commands are waiting.
+ *   overflow latch: if the priority queue is full, the request is stored as a
+ *            bit (appPrioLatchSet). Identical pending requests coalesce, nothing
+ *            is dropped. Served after the priority queue, before normal commands.
+ *            A latched request gets no reply (a waiting caller sees BUSY).
+ *   => design bound: enqueue -> driver request <= 2 control cycles (2 ms) when the
+ *      priority queue was not full; measured on the target as prio_lat_max_us.
  *
  * Concurrent callers (V1.1): cmdQueueSendAndWait() is SERIALISED by a mutex,
  *   so only one caller waits for a reply at any time and nobody can consume or
@@ -22,8 +26,8 @@
  *   network task handles one request at a time); the mutex keeps this true if
  *   that ever changes (e.g. AsyncWebServer).
  *   If the mutex is not free within timeout_ms the call returns BUSY. A priority
- *   command (STOP, HV_OFF, SHUTTER_CLOSE) is then STILL queued without a reply,
- *   so a safety command is never lost because another request is waiting.
+ *   command (STOP, HV_OFF, SHUTTER_CLOSE) is then STILL queued (or latched)
+ *   without a reply.
  * The display uses cmdQueueSend() (no reply).
  */
 #pragma once
@@ -31,8 +35,9 @@
 
 void cmdQueueInit();
 
-/// Producer side. Sets cmd.seq, routes priority commands to the priority queue.
-/// Returns false if the target queue is full (-> ApiError::BUSY).
+/// Producer side. Sets cmd.seq and cmd.t_enq_us, routes priority commands to the
+/// priority queue (or the overflow latch). Returns false only for a NORMAL command
+/// whose queue is full (-> ApiError::BUSY); priority commands always return true.
 bool cmdQueueSend(Command& cmd);
 
 /// Sends cmd and waits up to timeout_ms for its result (serialised, see above).
@@ -41,8 +46,8 @@ bool cmdQueueSend(Command& cmd);
 /// retrying (CONTRACT §5.2 retry rule).
 ApiError cmdQueueSendAndWait(Command& cmd, uint32_t timeout_ms);
 
-/// Consumer side (control task): non-blocking. Takes a priority command if one
-/// is waiting; otherwise a normal command, but only if allow_normal is true.
+/// Consumer side (control task): non-blocking. Order: priority queue, overflow
+/// latch, then a normal command – the latter only if allow_normal is true.
 bool cmdQueueReceive(Command& out, bool allow_normal);
 
 /// Consumer side: deliver the result of a command with want_reply = true.
