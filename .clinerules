@@ -1,0 +1,46 @@
+# .clinerules — ADD Demo System (read before every task)
+
+## Project
+Firmware for the ADD Demo System: ESP32 (MKS DLC32 V2.1), PlatformIO,
+**pioarduino = Arduino Core 3.x on ESP-IDF 5.x**. Contract: docs/CONTRACT.md.
+Requirements (German): docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.4.md.
+
+## Hard rules
+1. FROZEN files – never modify, rename or delete:
+   - src/**/*.h (all headers), src/config.h
+   - src/app/snapshot.cpp, src/app/command_queue.cpp, src/app/control_task.cpp
+     (exception: Sprint S2.6 may fix compile errors in control_task.cpp – report every change)
+   - everything in test/ and docs/CONTRACT.md
+   If a frozen file seems wrong: STOP and describe the problem. Do not work around it.
+2. Implement exactly the functions declared in the headers. No extra public functions,
+   no changed signatures, no new global variables visible outside a .cpp file.
+3. src/logic/ is pure C++17: NO Arduino.h, NO ESP-IDF, NO FreeRTOS, NO heap allocation
+   (no new/malloc/String/std::vector), NO static mutable state. It must build with g++ on the host.
+4. ESP-IDF 5 APIs only. Forbidden IDF-4 leftovers: esp_task_wdt_init(timeout, panic),
+   analogSetWidth(), <rom/crc.h>, legacy driver/i2s.h, ledcSetup()/ledcAttachPin().
+5. Never use delay() or blocking loops in the control task or in logic. Never call Serial,
+   NVS or the file system from the control task.
+6. Code, comments and identifiers in English.
+
+## Commands
+- Host tests:       pio test -e native            (single suite: -f native/test_<name>)
+- Quiet build:      pio run -e firmware -s          (complete firmware, from Sprint S2.6 on)
+- Partial build:    pio run -e firmware-partial -s  (Sprints S1..S2.5: missing later modules are ok)
+- Frozen check:     git diff --exit-code -- src/config.h ':(glob)src/**/*.h' test docs/CONTRACT.md
+- NEVER run without explicit user approval: any "-t upload", "-t uploadfs",
+  "pio test -e esp32-test", "pio device monitor". (Flashing can move the motor.)
+- Interactive tools hang the agent. For the serial port use:
+  python scripts/serial_cmd.py "<command>" --timeout 10
+
+## Definition of done (every sprint)
+1. pio test -e native  -> all suites listed in the sprint are green (others may still fail
+   only if their module belongs to a later sprint)
+2. pio run -e firmware-partial -s (S1..S2.5) or pio run -e firmware -s (from S2.6)
+   -> no compile errors, no new warnings in your files
+3. Frozen check passes (no diff).
+4. Short report: files created, decisions taken, open questions.
+
+## Library knowledge
+Read the real headers instead of guessing APIs:
+.pio/libdeps/<env>/FastAccelStepper/src/FastAccelStepper.h and FastAccelStepperEngine.h,
+.pio/libdeps/<env>/LovyanGFX/src/, .pio/libdeps/<env>/ArduinoJson/src/.

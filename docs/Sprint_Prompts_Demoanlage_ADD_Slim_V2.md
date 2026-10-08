@@ -1,0 +1,549 @@
+# Sprint-Prompts – Demoanlage ADD (Slim) · V2
+
+**Stand:** 2026-10-08 · **Autor:** Norbert Walter
+**Basis:** Pflichtenheft V1.4, `docs/CONTRACT.md` V1.0
+**Werkzeuge:** code-server + Cline, Modell Qwen3.6-35B-A3B (64k Kontext), Review mit Claude
+
+---
+
+## Arbeitsweise
+
+### Grundidee
+Die Denkarbeit steckt in den eingefrorenen Verträgen (Header, `CONTRACT.md`) und
+den eingefrorenen Tests. Ein Sprint-Prompt beschreibt nur noch **welche Dateien**
+zu implementieren sind und **welche Tests** grün werden müssen. Cline liest
+Header, Tests und Contract selbst aus dem Repository – deshalb sind die Prompts kurz.
+
+`.clinerules` (Projekt-Root) wird von Cline bei jeder Task automatisch geladen
+und enthält die harten Regeln (eingefrorene Dateien, IDF-5-APIs, keine
+blockierenden Aufrufe, kein Flashen ohne Freigabe, Definition of Done).
+Bei Nutzung **ohne Cline**: den Inhalt von `.clinerules` vor jeden Prompt setzen
+und die genannten Header/Tests mit in den Prompt kopieren.
+
+### Ablauf je Sprint
+1. Neue Cline-Task (frischer Kontext). Modus **Plan**: Prompt einfügen.
+   Cline liest die Dateien und legt einen Plan vor → prüfen.
+2. Modus **Act**: Cline implementiert, baut, testet, iteriert.
+3. Cline berichtet. Du prüfst mit der **Review-Checkliste** des Sprints.
+4. Frozen-Check und Commit:
+   ```bash
+   git diff --exit-code -- src/config.h ':(glob)src/**/*.h' test docs/CONTRACT.md
+   git add -A && git commit -m "Sprint S2.1: types, crc32, safety_logic"
+   ```
+
+### Auto-Approve in Cline
+| Erlauben | Nie automatisch |
+|---|---|
+| Dateien lesen/bearbeiten | `-t upload`, `-t uploadfs` |
+| `pio test -e native …` | `pio test -e esp32-test` |
+| `pio run -e firmware-partial -s`, `pio run -e firmware -s` | `pio device monitor` |
+| `python scripts/add_client.py selftest` | alles mit `rm -rf` |
+
+### Modell-Empfehlung
+
+| Sprint | Modell | Grund |
+|---|---|---|
+| S1, S2.1–S2.3, S3 | Qwen3.6-35B-A3B | eng umrissen, Tests als Ziel |
+| S2.4 | Qwen, Review Claude | viele Querbeziehungen |
+| S2.5, S2.6 | du + Qwen/Claude | Hardware, Nebenläufigkeit |
+| S4 | Qwen (Web), Qwen/Claude (Display) | viel UI-Code |
+| S6 | Claude | ADD-Expertise |
+
+### Wenn Tests nicht grün werden
+- Erst die Fehlermeldung des Tests lesen lassen („read the failing assertion and the rule in the header it refers to“).
+- Nach 3 erfolglosen Iterationen: Task stoppen, Ausgabe an Claude zur Analyse geben.
+- **Nie** Tests oder Header ändern lassen. Ist ein Test wirklich falsch → Contract-Änderung (CONTRACT §14).
+
+---
+
+## Sprint 0a – Smoketest (du, an der Hardware)
+
+Ablauf und Protokoll: `docs/Smoketest_Protokoll.md`. Am Ende werden die
+`VERIFY(0a)`-Werte in `src/config.h` eingetragen und eingefroren.
+
+### PROMPT S0a-Probe (Agenten-Probelauf, Protokoll Punkt 8.1)
+
+```
+Add a serial command "uptime" to src/smoketest/smoketest.cpp that prints exactly one
+JSON line: {"uptime_ms":<millis()>}. Follow the existing style of dispatch() and the
+other cmd* functions. Also add "uptime" to the help text.
+Then run: pio run -e smoketest -s
+Fix all errors until the build is clean. Do NOT flash. Report the files you changed.
+```
+
+---
+
+## Sprint 0b – Verträge (Claude, Review durch dich)
+
+Bereits erledigt in diesem Paket. **Review-Checkliste:**
+
+- [ ] `docs/CONTRACT.md` §6 (Sicherheitslogik) fachlich korrekt? Insbesondere: kein automatischer Wiederanlauf, HV-Abfall ohne Fehler (30–32 °C), Parkzone, Watchdog-Regeln
+- [ ] `src/logic/safety_logic.h` Regeln R1–R7 und Invarianten I1–I6 entsprechen deiner Sicherheitsphilosophie
+- [ ] Befehlsmatrix (`test_safety_logic.cpp` → `test_cmd_gate_matrix`) passt
+- [ ] Szenarien in `test_app_logic.cpp` spiegeln die gewünschten Abläufe
+- [ ] Parameterbereiche (`params.h`) sinnvoll
+- [ ] `/proc`-Format (CONTRACT §5.1) passt zu Display, Web und ADD
+- [ ] Nach 0a: `config.h` aktualisiert
+- [ ] Commit „Sprint 0b: contract frozen“
+
+---
+
+## Sprint 1 – System, NVS, WiFi, main
+
+### PROMPT S1
+
+```
+Sprint S1 of the ADD Demo System firmware. Read first:
+- .clinerules, docs/CONTRACT.md §1, §9, §12
+- src/config.h, src/system/system.h, src/system/nvs_config.h, src/comm/wifi_manager.h,
+  src/comm/log_buffer.h, src/app/control_task.h, src/app/snapshot.h, src/comm/http_server.h,
+  src/display/display.h, src/logic/params.h
+
+Implement these files (and nothing else):
+1. src/system/system.cpp      – exactly as documented in system.h. Task watchdog with the
+                                ESP-IDF 5 API (esp_task_wdt_config_t; use esp_task_wdt_reconfigure()
+                                if the core already initialised the TWDT, else esp_task_wdt_init()).
+                                Boot banner: FW_VERSION, ESP_ARDUINO_VERSION_STR, esp_get_idf_version(),
+                                esp_reset_reason().
+2. src/system/nvs_config.cpp  – Preferences, keys exactly as listed in nvs_config.h, "ver" = 1.
+                                nvsLoadParams: start from paramsDefaults(), read each key, replace any
+                                value outside the CONTRACT §9 range by its default. Never store flags.
+3. src/comm/wifi_manager.cpp  – as documented (STA, AP fallback, reconnect, mDNS "add-demo").
+                                wifiLoop must never block longer than 50 ms.
+4. src/comm/log_buffer.cpp    – ring buffer LOG_LINES x LOG_LINE_LEN, spinlock, vsnprintf,
+                                echo to Serial.
+5. src/main.cpp:
+   setup():
+     systemInit(); SPIFFS.begin(true);
+     Params p; nvsLoadParams(p);
+     cmdQueueInit();
+     if (!controlTaskStart(p)) logLine("FATAL: control task start failed");
+     displayStart();
+     wifiInit(p.wifi_ssid, p.wifi_pass);
+     httpServerInit();
+     start the network task: xTaskCreatePinnedToCore(netTask, "net", NET_TASK_STACK, nullptr,
+                                                     NET_TASK_PRIO, nullptr, NET_TASK_CORE);
+   netTask loop (every 5 ms with vTaskDelay):
+     wifiLoop(millis()); httpServerLoop();
+     if (snapshotTakePersistRequest()) { Params q; SafetyFlags f; snapshotGetConfig(q, f);
+                                         bool ok = nvsSaveParams(q); logLine(...); }
+     if (snapshotTakeRebootRequest())  { vTaskDelay(pdMS_TO_TICKS(300)); systemRestart(); }
+   loop(): vTaskDelay(portMAX_DELAY);   // Arduino loop task is not used
+
+Rules: ESP-IDF 5 APIs only. No String in log_buffer. English comments.
+Definition of done:
+- pio run -e firmware-partial -s   -> compiles; unresolved symbols of later sprints are fine
+- frozen check clean
+Report: files, decisions, anything in the headers that was unclear.
+```
+
+**Review-Checkliste S1**
+- [ ] Watchdog mit IDF-5-API, Control-Task wird in `control_task.cpp` registriert (nicht doppelt)
+- [ ] NVS: Bereichsprüfung beim Laden, Flags nie gespeichert
+- [ ] `wifiLoop` blockiert nicht (kein `WiFi.begin` mit Warteschleife im Loop)
+- [ ] Persist/Reboot nur im Netzwerk-Task
+- [ ] Nach S2.6 am Gerät: Boot-Banner, AP sichtbar, Reboot über `REBOOT`
+
+---
+
+## Sprint 2.1 – Typen, CRC32, Sicherheitslogik
+
+### PROMPT S2.1
+
+```
+Sprint S2.1. Pure C++17 logic, host-tested. Read first:
+- .clinerules (rule 3: src/logic is pure C++, no Arduino/IDF/heap)
+- docs/CONTRACT.md §3, §4, §6
+- src/logic/types.h, src/logic/crc32.h, src/logic/safety_logic.h
+- test/native/test_types_crc/test_types_crc.cpp
+- test/native/test_safety_logic/test_safety_logic.cpp
+
+Implement exactly:
+- src/logic/types.cpp         all name functions of types.h
+- src/logic/crc32.cpp         crc32Ieee (bitwise or table, zlib-compatible), crc32Hex,
+                              crcFrameAppend, crcFrameVerify – exactly as documented
+- src/logic/safety_logic.cpp  safetyStep must follow rules R1..R7 in the documented ORDER.
+                              Implement it as a switch over cur.state after the R1 check.
+                              Keep it readable; no if/else chains spanning states.
+
+Example of the expected style (rule R6, READY + HV_ON):
+    case SafetyState::READY:
+        n.hv_on = false; n.shutter_open = false;
+        if (ev == SafetyEvent::HV_ON) {
+            if (safetyHvConditionsOk(in, cfg)) { n.state = SafetyState::RUNNING; n.hv_on = true; r.api = ApiError::OK; }
+            else r.api = ApiError::PRECONDITION;
+        } else if (...) ...
+
+Hints:
+- crcFrameAppend adds exactly 17 characters; it needs cap >= len + 18.
+- crcFrameVerify uses the LAST occurrence of ,"crc":" and accepts trailing whitespace.
+- The random invariant test (test_invariants_random_sequences) fails if any rule lets the
+  shutter be open without HV, HV on outside RUNNING, or outputs on in FAULT/WAIT_ACK/RECOVER.
+
+Definition of done:
+  pio test -e native -f native/test_types_crc -f native/test_safety_logic   -> all green
+  frozen check clean
+```
+
+**Review-Checkliste S2.1**
+- [ ] R1 vor allen Zustandsregeln; FAULT/WAIT_ACK von R1 ausgenommen, RECOVER nicht
+- [ ] WAIT_ACK: `motor_stop` in jedem Schritt
+- [ ] RUNNING prüft Bedingungen bei **jedem** Ereignis zuerst
+- [ ] Keine statischen Variablen in `src/logic`
+
+---
+
+## Sprint 2.2 – Messkette, Parameter
+
+### PROMPT S2.2
+
+```
+Sprint S2.2. Pure C++17 logic. Read first:
+- .clinerules, docs/CONTRACT.md §7, §9
+- src/logic/measure_logic.h, src/logic/params.h, src/logic/types.h
+- test/native/test_measure_logic/test_measure_logic.cpp
+- test/native/test_params/test_params.cpp
+
+Implement exactly:
+- src/logic/measure_logic.cpp
+- src/logic/params.cpp
+
+Hints:
+- Sensor curve gives MILLIMETRES: dist_mm = k_mm * powf(mv / 1000.0f, exponent), k_mm = 120.8.
+- medianMean sorts in place (std::sort from <algorithm> is allowed, it does not allocate).
+- params: table-driven implementation recommended (array of {key, member pointer, lo, hi}).
+  On ANY error nothing changes and *persist stays untouched.
+- paramsToJsonMember must produce the exact string of test_config_json_exact_defaults
+  (snprintf, "%.1f"). Never write wifi_pass.
+- String rule for wifi_ssid / wifi_pass: printable ASCII 0x20..0x7E without '"' and '\'.
+
+Definition of done:
+  pio test -e native -f native/test_measure_logic -f native/test_params   -> all green
+  frozen check clean
+```
+
+**Review-Checkliste S2.2**
+- [ ] Kurve in mm, `mv ≤ 1` → 9999
+- [ ] Kalibrierung: ungültig → Rohwert unverändert
+- [ ] Flags nie `persist = true`
+
+---
+
+## Sprint 2.3 – Ablaufsteuerung Achse
+
+### PROMPT S2.3
+
+```
+Sprint S2.3. Pure C++17 logic. Read first:
+- .clinerules, docs/CONTRACT.md §2, §8
+- src/logic/motion_seq.h (the documentation of motionTick is the specification)
+- test/native/test_motion_seq/test_motion_seq.cpp and test/native/fake_axis.h
+  (fake_axis.h shows how the driver reacts to each DrvOp)
+
+Implement exactly: src/logic/motion_seq.cpp
+
+Structure:
+- small static helpers: setPhase(s, phase, now) (also sets phase_start_ms),
+  moveTo(s, target, hz) (sets s.target_steps, returns the DrvRequest), isHoming(phase)
+- motionTick in this order: (1) homing timeout, (2) unexpected limit switch while
+  drv_running, (3) compute "arrived", (4) switch over phase.
+- Every start function: reset `out` first; on error leave the sequencer unchanged.
+
+Definition of done:
+  pio test -e native -f native/test_motion_seq   -> all green
+  frozen check clean
+```
+
+**Review-Checkliste S2.3**
+- [ ] Endschalter hinten in allen HOME-Phasen erlaubt, sonst Fehler
+- [ ] Not-Halt während Bewegung → `homed = false`
+- [ ] genau ein `DrvRequest` pro Aufruf
+
+---
+
+## Sprint 2.4 – Anwendungslogik
+
+### PROMPT S2.4
+
+```
+Sprint S2.4. Pure C++17 logic that combines all logic modules. Read first:
+- .clinerules, docs/CONTRACT.md §6.4, §6.5, §10
+- src/logic/app_logic.h (step lists of appTick/appCommand are the specification)
+- src/logic/safety_logic.h, motion_seq.h, measure_logic.h, params.h (already implemented)
+- test/native/test_app_logic/test_app_logic.cpp and test/native/fake_axis.h
+
+Implement exactly: src/logic/app_logic.cpp
+
+Recommended private helpers (static, in the .cpp):
+- MotionInputs motionIn(const HwInputs&)
+- SafetyInputs safetyIn(const AppState&, const HwInputs&, const AppConfig&, bool motor_fault)
+- ApiError applySafety(AppState&, SafetyEvent, const SafetyInputs&, const HwInputs&,
+                       const AppConfig&, DrvRequest& d, bool& acqEnded, bool& enteredFault)
+  -> calls safetyStep, stores the new status, and on motor_stop with active motion calls
+     motionEmergencyStop (sets d = FORCE_STOP).
+
+Pay attention to:
+- appTick: follow steps 1..10 of the header in this exact order.
+- Events raised inside appTick by motionStop / motionEmergencyStop (seq.ev.acq_ended) must be
+  consumed in the SAME appTick before the shutter automation (step 8).
+- appCommand: STOP leaves seq.ev.acq_ended pending for the next appTick.
+- Comm watchdog: arm only on SUCCESS of INIT, MOVE, START_*, HV_ON (API -> true, LOCAL -> false).
+
+Definition of done:
+  pio test -e native   -> ALL suites up to test_app_logic green
+  frozen check clean
+```
+
+**Review-Checkliste S2.4** (zusätzlich von Claude prüfen lassen: `app_logic.cpp` + Header)
+- [ ] Not-Halt überschreibt jede andere Fahranforderung
+- [ ] Modus endet, sobald RUNNING verlassen wird
+- [ ] Watchdog-Ent-/Bewaffnung wie CONTRACT §6.5
+
+---
+
+## Sprint 2.5 – Hardware-Schicht (du + KI)
+
+Grundlage ist der funktionierende Smoketest-Code. Die KI überträgt ihn in die
+HAL-Struktur; du prüfst an der Hardware.
+
+### PROMPT S2.5
+
+```
+Sprint S2.5. Hardware layer. Read first:
+- .clinerules, docs/CONTRACT.md §11, src/config.h
+- src/hal/hal_io.h, src/hal/motion_drv.h
+- src/smoketest/smoketest.cpp – the WORKING reference for FastAccelStepper I2S_MUX,
+  i2sMuxSetBit, inputs and ADC on this board. Reuse its calls; do not invent other APIs.
+- .pio/libdeps/firmware/FastAccelStepper/src/FastAccelStepper.h (real API)
+
+Implement exactly:
+- src/hal/motion_drv.cpp – engine/stepper setup as in the header comment, motionDrvApply
+  mapping exactly as documented, speed conversion |getCurrentSpeedInMilliHz()| / 1000 / STEPS_PER_MM * 60.
+- src/hal/hal_io.cpp     – inputs with debounce (limit switches both directions,
+  E-stop: activation immediate, release after INPUT_DEBOUNCE_MS), outputs, non-blocking
+  buzzer via engine->i2sMuxSetBit(I2SO_TO_SLOT(I2SO_BUZZER), ...).
+
+No delay(), no Serial, no heap in any of these functions.
+Definition of done:
+  pio run -e firmware-partial -s -> compiles
+  frozen check clean
+Do NOT flash. The user tests on hardware.
+```
+
+**Hardware-Prüfung S2.5 (du)**
+- [ ] Temporär `pio test -e esp32-test` (Tests ohne Motorlauf zuerst), dann 2-mm-Fahrt
+- [ ] Not-Aus-Aktivierung ohne Verzögerung (Oszilloskop: Not-Aus ↔ letzter Step-Puls)
+
+---
+
+## Sprint 2.6 – Integration Control-Task (du + KI)
+
+### PROMPT S2.6
+
+```
+Sprint S2.6. Integration. Read first: .clinerules, docs/CONTRACT.md §1, §10,
+src/app/control_task.cpp (provided, FROZEN except for compile fixes), src/main.cpp.
+
+Task:
+1. Build the complete firmware: pio run -e firmware -s
+2. Fix compile/link errors. control_task.cpp may only be changed to fix compile errors;
+   list every change with the reason. No behavioural changes.
+3. Review control_task.cpp against CONTRACT §10 and report deviations (do not fix them).
+Definition of done: firmware builds; native tests still green; report with changes.
+Do NOT flash.
+```
+
+**Hardware-Prüfung S2.6 (du)** – über `scripts/add_client.py` erst ab S3; bis dahin Display/Serial:
+- [ ] Boot, Watchdog läuft, kein Reset in 5 min
+- [ ] Nach S3: `INIT`, `MOVE`, Not-Aus → FAULT → ACK → SAFE_START
+
+---
+
+## Sprint 3 – JSON, Parser, HTTP
+
+### PROMPT S3
+
+```
+Sprint S3. Read first:
+- .clinerules, docs/CONTRACT.md §4, §5
+- src/logic/proc_json.h, src/logic/api_parse.h, src/comm/http_server.h, src/comm/log_buffer.h,
+  src/app/snapshot.h, src/app/command_queue.h, src/logic/params.h
+- test/native/test_proc_json/test_proc_json.cpp, test/native/test_api_parse/test_api_parse.cpp
+- docs/reference/ADD_Specification_v1_0.md sections 5.3 (/add.html) and 5.4 (llms.txt) only
+
+Implement exactly:
+1. src/logic/proc_json.cpp  – snprintf only; float sanitising exactly as in the header.
+2. src/logic/api_parse.cpp  – ArduinoJson 7 (JsonDocument). Check order exactly as documented.
+3. src/comm/http_server.cpp – WebServer on HTTP_PORT, all routes of http_server.h.
+   POST /api: read server.arg("plain"); reject bodies > API_BODY_MAX with BAD_JSON.
+   Response buffers: static char[1024] (GET_CONFIG needs ~420 bytes extra). Never String
+   concatenation for JSON. /add.html: HTML page with the add.json content in
+   <script type="application/ld+json"> and in <pre> (HTML-escape < > &), headers
+   Cache-Control: no-store, no-cache, must-revalidate and Pragma: no-cache.
+
+Definition of done:
+  pio test -e native  -> all suites green
+  pio run -e firmware -s -> clean
+  python scripts/add_client.py selftest -> ok
+  frozen check clean
+Do NOT flash.
+```
+
+**Hardware-Prüfung S3 (du)**
+```bash
+python scripts/add_client.py --host 192.168.4.1 proc
+python scripts/add_client.py cmd SET key=interlock value=true
+python scripts/add_client.py cmd SET key=cooling_flow value=true
+python scripts/add_client.py cmd INIT
+python scripts/add_client.py cmd HV_ON
+python scripts/add_client.py cmd START_TRAVERSE start=10 end=230 speed=600
+# innerhalb von 5 s: GET_STATE als Heartbeat, sonst COMM_TIMEOUT (gewollt!)
+```
+
+---
+
+## Sprint 4a – Weboberfläche
+
+### PROMPT S4a
+
+```
+Sprint S4a. Web UI (vanilla HTML/CSS/JS, no framework, no CDN). Read first:
+- .clinerules, docs/CONTRACT.md §4 (JavaScript crc32/frame/verify – copy them verbatim),
+  §5 (all JSON formats), §6.5 (heartbeat), §9 (parameters)
+- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.4.md §5.7 (content of both pages)
+- docs/reference/style_guide_excerpt_S4.md (CSS variables, themes, components – use them exactly)
+
+Deliver:
+- data/www/index.html, data/www/settings.html – each self-contained (inline CSS/JS).
+- Fonts: @font-face from /www/fonts/ubuntu-regular.woff2, ubuntu-bold.woff2,
+  ubuntu-mono-regular.woff2 (the user copies the files), fallback sans-serif/monospace.
+- Themes: body classes theme-dark/theme-light/theme-night/theme-bw, localStorage key
+  "add-dashboard-theme" (wrap in try/catch), variables exactly from Appendix A.
+
+Behaviour (index.html):
+- poll GET /proc every 500 ms, verify CRC, show "CRC error" pill on failure, "Offline" on fetch error
+- values: THICK shows "---" if !measure.valid or !measure.on_material
+- buttons: INIT, HV ON/OFF (toggle by safety.hv_on), MEASURE, TRAVERSE (no params ->
+  device defaults), STOP, ACK (enabled only if state == "WAIT_ACK")
+- confirmation dialog (style guide 7.8) for HV ON and ACK
+- while safety.comm_armed: send GET_STATE every 2 s
+- every /api response: show toast with msg if err != 0
+- chart: canvas, last 100 values of dist and thick, auto-scale, no library
+- validation strip: fetch /add once, show validation.validated_by entries (or "not validated")
+settings.html: load GET_CONFIG on open; one input per parameter with its range from
+CONTRACT §9; send SET on change; calibration buttons (CALIB near/far/base/save/reset);
+WiFi ssid/pass + REBOOT button with confirmation.
+
+Size budget: each page < 40 KB. Test locally: open the files with a small mock is optional.
+Definition of done: files exist, no external URLs (grep -n "http" data/www/*.html shows only
+relative paths), frozen check clean.
+```
+
+**Review-Checkliste S4a**
+- [ ] Ohne Internet (AP-Modus) vollständig nutzbar
+- [ ] CRC-Prüfung von `/proc` und Antworten
+- [ ] Heartbeat aktiv, solange `comm_armed`
+- [ ] B&W-Theme: alle Zustände ohne Farbe unterscheidbar (Text/Symbol)
+
+---
+
+## Sprint 4b – Display
+
+### PROMPT S4b
+
+```
+Sprint S4b. Local display. Read first:
+- .clinerules, docs/CONTRACT.md §13, src/display/display.h, src/display/lgfx_config.h
+- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.4.md §5.8 (layout, colours, sizes – binding)
+- src/app/snapshot.h, src/app/command_queue.h, src/logic/types.h
+- .pio/libdeps/firmware/LovyanGFX/src/ (real API; examples/ for getTouch)
+
+Implement exactly: src/display/display.cpp
+- displayStart(): lcd.init(), setRotation(1), draw static frame, create task
+  (core 1, priority 1, stack 6144) with period DISPLAY_PERIOD_MS.
+- Task: snapshotGet(); redraw only zones whose content changed (cache last values);
+  draw text with setTextDatum + fillRect background (no full-screen clear, no flicker).
+- Touch: lcd.getTouch(); a button press = touch down inside the button and not pressed
+  in the previous cycle; brighten 50 ms; send Command{source = LOCAL, want_reply = false}
+  via cmdQueueSend(). HV button: HV_OFF if snapshot.safety.hv_on else HV_ON.
+  STOP is always active.
+- IP line: show the IP via wifiGetIp() (comm/wifi_manager.h).
+No calls into logic/ or hal/. No Serial in the task loop.
+Definition of done: pio run -e firmware -s clean; frozen check clean. Do NOT flash.
+```
+
+---
+
+## Sprint 5 – Integration und Abnahme (du)
+
+- Abnahme nach Pflichtenheft Kapitel 10, in der dort genannten Reihenfolge.
+- `pio test -e esp32-test` nach Freigabe.
+- Fehleranalyse mit Claude: Log (`/log`), `/proc`-Mitschnitt und betroffene Datei übergeben.
+
+---
+
+## Sprint 6 – ADD-Dokument und Demo-Skripte (du + Claude)
+
+### PROMPT S6
+
+```
+You are an expert in the ADD (AI Device Description) standard v1.0.
+Read completely before writing anything:
+- docs/reference/ADD_Specification_v1_0.md (normative: top-level schema §9, blocks §10)
+- docs/reference/ADD_Developer_Guide_v1_0.md
+- docs/reference/style_guide_excerpt_S4.md (only for the optional "ui" block)
+- docs/CONTRACT.md (the device behaviour – every statement in add.json must match it)
+- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.4.md §1, §6, §7
+
+Task 1 – data/add.json (served at /add, max. 32 KB, valid JSON):
+- Exactly the header fields schema, version, spec_url, spec_license and the seven blocks
+  autonomy, device, security, interfaces, actions, rules, validation – plus the optional
+  "ui" block of the style guide. No other top-level keys (no "live_data").
+- autonomy: compute the three scores honestly for THIS demo device and propose the level.
+  Before writing, ask me: should the document describe the demo hardware as it is, or
+  deliberately model the real radiometric M50 risk profile? Wait for my answer.
+- device: include "ip" (ask me), firmware "1.0.0", hardware "ESP32 (MKS DLC32 V2.1)",
+  doc_url "/doc" with doc_url_note.
+- security: network_scope "local", authentication "none", remote_access false, and an
+  "enforcement" text listing everything the device enforces itself (CONTRACT §5.2 gate,
+  ranges, park zone, HV conditions, comm watchdog, fail-safe flags).
+- interfaces: one HTTP interface with data entries /proc, /api, /add, /add.html, /llms.txt,
+  /doc, /log, /, /settings. Describe the CRC frame rule (CONTRACT §4) in the interface
+  description, including the two test vectors.
+- actions: one action per API command (and one "read_process_data" for GET /proc) with
+  parameters, ranges, units, safe, reversible, idempotent, requires_confirmation,
+  confirmation_scope, actor. HV_ON, START_*, INIT, ACK require confirmation.
+- rules: mandatory rules 1 and 2 at positions 1 and 2, standard rules, the Level-2
+  session-integrity rules if level >= 2, then device rules: heartbeat GET_STATE every
+  <= 4 s during remote operation, verify /proc after each command, stop and report if
+  err != 0, ACK only after the user confirmed the situation is safe, never retry HV_ON
+  automatically, "/add describes capabilities only, live data via /proc".
+- validation: add_version "1.0", validated_by [] (draft).
+- ui: style_guide_url, style_guide_version "1.0", theme_default "dark".
+
+Task 2 – data/doc.md: operator documentation (English, < 15 KB) with state diagram,
+error codes and their remedies, calibration procedure.
+
+Task 3 – scripts/demo_traverse.py (stdlib only, reuse scripts/add_client.py functions):
+scenario: SET flags, INIT (wait homed), HV_ON, START_TRAVERSE, poll /proc every 200 ms
+with GET_STATE heartbeat every 2 s, record pos/dist/thick/on_material/valid, HV_OFF at the
+end, detect material edges, print step thicknesses and write profile.csv.
+
+Task 4 – scripts/demo_safety.py: traverse, then SET temp=31 (HV drop, no fault),
+SET temp=35 (fault), show ACK rejected, SET temp=18, ACK, show state SAFE_START/READY.
+
+Then run the ADD validation (spec §13) against the live device together with me.
+```
+
+---
+
+## Anhang: Was sich gegenüber V1 geändert hat
+
+| V1 | V2 |
+|---|---|
+| Jeder Prompt enthält alles, Modell erfindet Schnittstellen | Prompts verweisen auf eingefrorene Header und Tests im Repository |
+| Tests vom implementierenden Modell | Tests vorab eingefroren, gegen Referenzimplementierung geprüft |
+| S2 mit 13 Dateien | S2.1–S2.6, je 1–2 Dateien |
+| `platform = espressif32`, IDF-4-APIs | pioarduino, IDF-5-APIs, Verbotsliste in `.clinerules` |
+| Style Guide per URL | lokaler Auszug `docs/reference/style_guide_excerpt_S4.md` (~6k Tokens) |
+| ADD-Feldnamen frei erfunden | streng nach ADD Spec v1.0, Spec liegt lokal bei |

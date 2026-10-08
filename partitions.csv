@@ -1,0 +1,15 @@
+# partitions.csv — ADD Demo System (Demoanlage ADD Slim V1.4)
+# Board: MKS DLC32 V2.1 (ESP32-WROOM-32U, 4 MB flash). No OTA.
+#
+#   (bootloader + partition table: 0x0000 - 0x8FFF, 36 KB)
+#   nvs      0x009000  0x005000    20 KB  parameters, WiFi credentials, calibration
+#   otadata  0x00E000  0x002000     8 KB  kept for tooling compatibility
+#   app0     0x010000  0x2E0000  2944 KB  factory app
+#   spiffs   0x2F0000  0x110000  1088 KB  web UI, add.json, doc.md, fonts
+#   total                        4096 KB
+#
+# Name,     Type, SubType,  Offset,    Size
+nvs,        data, nvs,      0x9000,    0x5000
+otadata,    data, ota,      0xe000,    0x2000
+app0,       app,  factory,  0x10000,   0x2E0000
+spiffs,     data, spiffs,   0x2F0000,  0x110000

@@ -1,0 +1,9 @@
+# Build output: thousands of files, never useful for the agent
+.pio/build/
+.pio/libdeps/*/Unity/
+# Keep .pio/libdeps/<env>/FastAccelStepper, LovyanGFX, ArduinoJson visible:
+# the agent must read the real library API instead of guessing it.
+.git/
+*.bin
+*.elf
+*.map

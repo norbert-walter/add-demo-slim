@@ -1,0 +1,45 @@
+/**
+ * @file proc_json.h
+ * @brief Serialisation of /proc and /api responses (FROZEN CONTRACT §5).
+ *
+ * Implementation: src/logic/proc_json.cpp (Sprint S3). snprintf only, no
+ * heap, no ArduinoJson. Output is framed with crcFrameAppend().
+ *
+ * Number format: all floats "%.1f". Before printing every float is sanitised:
+ * non-finite -> 0.0; clamped to [-99999.9, 99999.9]; |v| < 0.05 -> 0.0 (never "-0.0").
+ * Integers "%lu"/"%d".
+ */
+#pragma once
+
+#include "types.h"
+
+/// Maximum size of a /proc document including the CRC frame and NUL.
+constexpr size_t PROC_JSON_MAX = 512;
+
+/**
+ * Writes /proc exactly in this member order (one line, no spaces):
+ * {"ts":<u32>,"state":"<SafetyState>","err":<ErrorCode int>,
+ *  "motion":{"pos":<f>,"vel":<f>,"state":"<motionState>","mode":"<opMode>",
+ *            "homed":<b>,"limit_fwd":<b>,"limit_bwd":<b>},
+ *  "measure":{"dist":<f>,"thick":<f>,"on_material":<b>,"valid":<b>,
+ *             "in_range":<b>,"avg":<f>,"n":<u32>},
+ *  "safety":{"estop":<b>,"hv_on":<b>,"hv_ok":<b>,"shutter":"open"|"closed",
+ *            "interlock":<b>,"cooling_flow":<b>,"temp":<f>,"temp_ok":<b>,
+ *            "comm_armed":<b>},
+ *  "crc":"XXXXXXXX"}
+ * @return length (without NUL) or -1 if cap is too small.
+ *         With cap = PROC_JSON_MAX it never fails for any ProcData value.
+ */
+int procToJson(const ProcData& d, char* buf, size_t cap);
+
+/**
+ * Writes an /api response:
+ *   {"status":"ok"|"error","err":<int>,"cmd":"<cmdName>"[,"msg":"<text>"][,<extra>],"crc":"XXXXXXXX"}
+ * - status is "ok" iff err == OK.
+ * - "msg" is present iff err != OK; text = msg if non-NULL, else apiErrorMessage(err).
+ * - extra: optional pre-formatted JSON member list without leading comma
+ *   (e.g. from paramsToJsonMember), or NULL.
+ * @return length or -1 if cap is too small.
+ */
+int responseToJson(CmdId cmd, ApiError err, const char* msg, const char* extra,
+                   char* buf, size_t cap);
