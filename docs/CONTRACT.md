@@ -15,7 +15,8 @@
 | 6 | BUSY retry rule, simulated-flag marking, safety disclaimer | §5.2, §6.8, §6.9 |
 | 7 | `cmdQueueSendAndWait` serialised by a mutex; a priority command is still queued if the mutex is busy | §1, §6.7 |
 | 8 | Device-side timing: `period_max_us` (jitter) and `prio_lat_max_us` (priority command enqueue → outputs applied); `CycleStats`, `Command.t_enq_us` | §5.2, §10 |
-| 9 | Overflow latch for priority commands (cannot overflow, coalesces identical requests); host integration test of the real `command_queue.cpp` with threads (`test_command_queue`) | §6.7, §1 |
+| 9 | Overflow latch for priority commands (cannot overflow, coalesces identical requests, origin API/LOCAL stored per command); host integration test of the real `command_queue.cpp` with threads (`test_command_queue`) | §6.7, §1 |
+| 10 | **All** pending priority commands are executed in the same cycle (`cmdQueueReceivePriority`, max. 7) – the 2 ms bound holds independent of how many are pending | §6.7, §10 |
 
 This document is the single source of truth for every agent and every sprint.
 The headers in `src/**/*.h` are the machine-readable part of this contract; this
@@ -337,18 +338,34 @@ priority queue (length 4). The control task serves it first and **even in a
 cycle where `appTick` already produced a driver request**.
 
 **Overflow:** if the priority queue is full, the request is stored in a latch
-(one bit per command, `appPrioLatchSet/Take`). The latch cannot overflow;
-identical pending requests coalesce (ten STOPs → one STOP), different ones are
-all kept and served in the order STOP → HV_OFF → SHUTTER_CLOSE, after the
-priority queue and before normal commands. A latched request gets no reply
+(`appPrioLatchSet/Take`, one bit per command **and origin**: API and LOCAL are
+kept separately, so a LOCAL request never turns an API request into a LOCAL
+one). The latch cannot overflow; identical pending requests coalesce (ten
+STOPs → one STOP; API + LOCAL STOP → one LOCAL STOP, the operator did press it),
+different ones are all kept and served in the order STOP → HV_OFF →
+SHUTTER_CLOSE, after the priority queue. A latched request gets no reply
 (a waiting caller sees `BUSY`, the effect is visible in `/proc`). So a priority
 request is never dropped; `cmdQueueSend()` returns `true` for every priority
-command. The driver requests
+command.
+
+**All pending priority commands per cycle.** In step 3a the control task takes
+every priority request that is pending at that moment
+(`cmdQueueReceivePriority`: up to 4 from the queue + the whole latch, max. 7)
+and executes all of them in the same cycle. This is safe because all three are
+idempotent and act in the safe direction; driver requests are merged by rank.
+Consequence: a STOP never waits behind other priority commands. Requests that
+arrive during step 3a are taken in the next cycle.
+
+**Bound.** enqueue → outputs applied ≤ `period_max_us` + `cycle_max_us`. With
+the acceptance values (< 1500 µs and < 500 µs) this is ≤ 2000 µs **for any number
+of pending priority requests**. It is a property of the software path under
+these measured timing conditions, not a safety function: the physical E-stop
+acts independently of every queue (§6.9). The driver requests
 are merged by rank (NONE < MOVE_TO/RUN_BACKWARD < STOP < FORCE_STOP/ZERO_HERE);
 an immediate stop is never weakened.
 
-Design bound: from entering the queue to the applied driver request **≤ 2 control
-cycles (2 ms)**. This is a design target until measured: the device measures it
+Design bound: from entering the queue to the applied driver request **≤ 2 ms**
+(see Bound above). It is a design target until measured: the device measures it
 itself as `prio_lat_max_us` (`cmdQueueSend` timestamp `Command.t_enq_us` →
 outputs applied) – acceptance ≤ 2000 µs. End-to-end over WLAN the HTTP round
 trip dominates (reply < 150 ms, `scripts/stress_api.py latency`); the two
@@ -460,10 +477,11 @@ Order inside one control cycle:
 1. every 20 ms `appMeasure()`
 2. `appTick()` – motion tick, events, safety TICK, emergency stop, mode stop,
    statistics, shutter automation, watchdog disarm, LOCAL release
-3. `cmdQueueReceive(cmd, allow_normal = no driver request yet)` → `appCommand()`
-   (max. one; priority commands always, §6.7)
+3. a) `cmdQueueReceivePriority()` → `appCommand()` for **every** pending priority
+      command (max. 7, §6.7)
+   b) if no driver request yet: `cmdQueueReceive()` → at most one further `appCommand()`
 4. outputs: **shutter → motor → HV LED**
-5. reply to the command (`cmdQueueReply`) – **after** the outputs
+5. replies (`cmdQueueReply`) – **after** the outputs; `prio_lat_max_us` updated
 6. `appFillProc()` → `snapshotPublish()`
 7. timing (`CycleStats`, maxima since boot, `esp_timer_get_time()`, uint32 µs, wrap-safe):
 

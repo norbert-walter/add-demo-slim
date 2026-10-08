@@ -95,10 +95,16 @@ static void controlLoop(void*) {
         HwInputs hw = readInputs(now);
         HwOutputs out = appTick(s_app, hw, s_cfg);
 
-        // 3. at most one command per cycle. Priority commands always; normal
-        //    commands only if the cycle has no driver request yet.
+        // 3a. ALL pending priority commands (STOP, HV_OFF, SHUTTER_CLOSE) in this
+        //     cycle – idempotent, safe direction, driver requests merged by rank.
+        Command  pcmd[CMD_PRIO_MAX_PER_CYCLE];
+        ApiError perr[CMD_PRIO_MAX_PER_CYCLE];
+        const int np = cmdQueueReceivePriority(pcmd, CMD_PRIO_MAX_PER_CYCLE);
+        for (int i = 0; i < np; ++i) perr[i] = appCommand(s_app, pcmd[i], hw, s_cfg, out);
+
+        // 3b. at most one further command, only if the cycle has no driver request
         Command cmd;
-        bool have_cmd = cmdQueueReceive(cmd, out.drv.op == DrvOp::NONE);
+        bool have_cmd = out.drv.op == DrvOp::NONE && cmdQueueReceive(cmd, true);
         ApiError cmd_err = ApiError::OK;
         if (have_cmd) {
             cmd_err = appCommand(s_app, cmd, hw, s_cfg, out);
@@ -109,10 +115,16 @@ static void controlLoop(void*) {
         // 4. outputs
         applyOutputs(out, now);
 
-        // 5. reply only now: "OK" means accepted AND outputs set
+        // 5. replies only now: "OK" means accepted AND outputs set
+        const uint32_t t_out = (uint32_t)esp_timer_get_time();
+        for (int i = 0; i < np; ++i) {
+            const uint32_t lat = t_out - pcmd[i].t_enq_us;
+            if (lat > cs.prio_lat_max_us) cs.prio_lat_max_us = lat;
+            cmdQueueReply(pcmd[i], perr[i]);
+        }
         if (have_cmd) {
-            if (appCmdIsPriority(cmd.id)) {
-                const uint32_t lat = (uint32_t)esp_timer_get_time() - cmd.t_enq_us;
+            if (appCmdIsPriority(cmd.id)) {          // arrived during step 3a
+                const uint32_t lat = t_out - cmd.t_enq_us;
                 if (lat > cs.prio_lat_max_us) cs.prio_lat_max_us = lat;
             }
             cmdQueueReply(cmd, cmd_err);

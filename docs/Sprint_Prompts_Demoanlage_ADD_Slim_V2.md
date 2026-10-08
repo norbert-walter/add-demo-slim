@@ -362,8 +362,9 @@ Task:
 2. Fix compile/link errors. control_task.cpp may only be changed to fix compile errors;
    list every change with the reason. No behavioural changes.
 3. Review control_task.cpp against CONTRACT §10 and §6.7 and report deviations (do not fix
-   them). Check in particular: cmdQueueReceive(cmd, out.drv.op == NONE) (priority commands
-   always), reply AFTER applyOutputs, CycleStats (work time, period between cycle
+   them). Check in particular: step 3a executes ALL commands from
+   cmdQueueReceivePriority(), step 3b at most one from cmdQueueReceive() only if
+   out.drv.op == NONE, replies AFTER applyOutputs, CycleStats (work time, period between cycle
    starts, overruns, priority latency from cmd.t_enq_us) published every cycle,
    cmdQueueSendAndWait serialised by its mutex.
 Definition of done: firmware builds; ALL native tests green (incl. test_command_queue,

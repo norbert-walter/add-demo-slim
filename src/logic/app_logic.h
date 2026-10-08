@@ -12,11 +12,15 @@
  * Call order in the control task (1 kHz cycle, Core 1):
  *   1. every 20 ms:  appMeasure(state, cfg, median_mv, now)
  *   2. every cycle:  out = appTick(state, hw, cfg)
- *   3. peek the queue; if a command is queued and
- *        (out.drv.op == NONE || appCmdIsPriority(cmd.id)):
- *                    err = appCommand(state, cmd, hw, cfg, out)   (max. ONE per cycle)
+ *   3a. ALL pending priority commands (cmdQueueReceivePriority: up to
+ *       CMD_PRIO_QUEUE_LEN from the queue + the whole overflow latch, max.
+ *       CMD_PRIO_MAX_PER_CYCLE) -> appCommand each, in the order received.
+ *       They are idempotent and act in the safe direction, so executing them
+ *       together is always allowed (CONTRACT §6.7).
+ *   3b. if out.drv.op == NONE: at most ONE further command (cmdQueueReceive)
+ *       -> appCommand
  *   4. apply out to hardware in the order: shutter, motor request, HV LED
- *   5. reply to the command (AFTER the outputs: "OK" means accepted AND outputs set)
+ *   5. reply to the commands (AFTER the outputs: "OK" means accepted AND outputs set)
  *   6. appFillProc(state, cfg, hw, proc) -> publish snapshot
  */
 #pragma once
@@ -98,11 +102,15 @@ bool appLocalBlocksApi(CmdId id);
  * V1.1 – overflow latch for priority commands (CONTRACT §6.7). Used by
  * command_queue when the priority queue is full: the request is stored as a
  * bit, so it can be coalesced with an identical pending one but never dropped.
- *   bit 0 STOP, bit 1 HV_OFF, bit 2 SHUTTER_CLOSE, bit 7 "a request came from LOCAL".
+ * The origin is stored PER COMMAND:
+ *   bit 0 STOP/API, bit 1 HV_OFF/API, bit 2 SHUTTER_CLOSE/API,
+ *   bit 3 STOP/LOCAL, bit 4 HV_OFF/LOCAL, bit 5 SHUTTER_CLOSE/LOCAL.
  * appPrioLatchSet: non-priority commands are ignored.
  * appPrioLatchTake: picks STOP before HV_OFF before SHUTTER_CLOSE, writes a fresh
- *   Command{id, source = LOCAL if bit 7 else API, want_reply = false}, clears the
- *   command bit and clears bit 7 when no command bit is left. false if none pending.
+ *   Command{id, source, want_reply = false} and clears both bits of that command.
+ *   source = LOCAL if that command's LOCAL bit was set (an API and a LOCAL request
+ *   of the SAME command coalesce into one LOCAL command – the operator did press
+ *   it), else API. Another command's origin never influences it. false if none pending.
  */
 void appPrioLatchSet(uint32_t& bits, const Command& cmd);
 bool appPrioLatchTake(uint32_t& bits, Command& out);

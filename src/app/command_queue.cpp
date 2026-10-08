@@ -74,14 +74,23 @@ ApiError cmdQueueSendAndWait(Command& cmd, uint32_t timeout_ms) {
     return e;
 }
 
-bool cmdQueueReceive(Command& out, bool allow_normal) {
-    if (xQueueReceive(s_prio, &out, 0) == pdTRUE) return true;
-    bool latched;
+int cmdQueueReceivePriority(Command* out, int max) {
+    int n = 0;
+    for (int i = 0; i < CMD_PRIO_QUEUE_LEN && n < max; ++i) {   // only what was there
+        if (xQueueReceive(s_prio, &out[n], 0) != pdTRUE) break;
+        n++;
+    }
     taskENTER_CRITICAL(&s_latch_mux);
-    latched = appPrioLatchTake(s_latch_bits, out);
-    if (latched) out.t_enq_us = s_latch_t_us;
+    while (n < max && appPrioLatchTake(s_latch_bits, out[n])) {
+        out[n].t_enq_us = s_latch_t_us;
+        n++;
+    }
     taskEXIT_CRITICAL(&s_latch_mux);
-    if (latched) return true;
+    return n;
+}
+
+bool cmdQueueReceive(Command& out, bool allow_normal) {
+    if (xQueueReceive(s_prio, &out, 0) == pdTRUE) return true;   // arrived after step 3a
     return allow_normal && xQueueReceive(s_cmd, &out, 0) == pdTRUE;
 }
 

@@ -15,10 +15,12 @@
  *            cycle has no driver request yet.
  *   overflow latch: if the priority queue is full, the request is stored as a
  *            bit (appPrioLatchSet). Identical pending requests coalesce, nothing
- *            is dropped. Served after the priority queue, before normal commands.
+ *            is dropped. Served by cmdQueueReceivePriority() after the queue.
  *            A latched request gets no reply (a waiting caller sees BUSY).
- *   => design bound: enqueue -> driver request <= 2 control cycles (2 ms) when the
- *      priority queue was not full; measured on the target as prio_lat_max_us.
+ *   => every priority request pending when the control task reaches step 3a is
+ *      executed in that cycle (cmdQueueReceivePriority), independent of how many
+ *      are pending. Bound: enqueue -> outputs <= period_max_us + cycle_max_us
+ *      (acceptance: <= 2000 µs, measured as prio_lat_max_us).
  *
  * Concurrent callers (V1.1): cmdQueueSendAndWait() is SERIALISED by a mutex,
  *   so only one caller waits for a reply at any time and nobody can consume or
@@ -32,6 +34,7 @@
  */
 #pragma once
 #include "logic/types.h"
+#include "config.h"
 
 void cmdQueueInit();
 
@@ -46,8 +49,19 @@ bool cmdQueueSend(Command& cmd);
 /// retrying (CONTRACT §5.2 retry rule).
 ApiError cmdQueueSendAndWait(Command& cmd, uint32_t timeout_ms);
 
-/// Consumer side (control task): non-blocking. Order: priority queue, overflow
-/// latch, then a normal command – the latter only if allow_normal is true.
+/// Maximum number of priority commands returned by one cmdQueueReceivePriority().
+constexpr int CMD_PRIO_MAX_PER_CYCLE = CMD_PRIO_QUEUE_LEN + 3;
+
+/// Consumer side (control task, step 3a): non-blocking. Returns ALL priority
+/// commands that are pending at the moment of the call: up to CMD_PRIO_QUEUE_LEN
+/// from the priority queue (FIFO), then every latched request. out must hold
+/// CMD_PRIO_MAX_PER_CYCLE entries. Requests arriving during the call are taken
+/// by the next call.
+int cmdQueueReceivePriority(Command* out, int max);
+
+/// Consumer side (control task, step 3b): non-blocking. A priority command that
+/// arrived after step 3a first, else a normal command if allow_normal. The
+/// overflow latch is served ONLY by cmdQueueReceivePriority().
 bool cmdQueueReceive(Command& out, bool allow_normal);
 
 /// Consumer side: deliver the result of a command with want_reply = true.

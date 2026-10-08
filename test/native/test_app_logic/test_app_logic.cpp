@@ -626,23 +626,47 @@ void test_prio_latch_order_coalesce_and_source() {
     appPrioLatchSet(bits, mk(CmdId::ACK));
     TEST_ASSERT_EQUAL_UINT32(0, bits);
     appPrioLatchSet(bits, mk(CmdId::SHUTTER_CLOSE));
-    appPrioLatchSet(bits, mk(CmdId::HV_OFF));
+    appPrioLatchSet(bits, mk(CmdId::HV_OFF, CmdSource::LOCAL));
     appPrioLatchSet(bits, mk(CmdId::STOP));
     appPrioLatchSet(bits, mk(CmdId::STOP));                  // coalesced
-    appPrioLatchSet(bits, mk(CmdId::STOP, CmdSource::LOCAL));
     TEST_ASSERT_TRUE(appPrioLatchTake(bits, out));
     TEST_ASSERT_TRUE(out.id == CmdId::STOP);
-    TEST_ASSERT_TRUE(out.source == CmdSource::LOCAL);
+    TEST_ASSERT_TRUE(out.source == CmdSource::API);          // origin per command: LOCAL HV_OFF does not leak
     TEST_ASSERT_FALSE(out.want_reply);
     TEST_ASSERT_TRUE(appPrioLatchTake(bits, out));
     TEST_ASSERT_TRUE(out.id == CmdId::HV_OFF);
+    TEST_ASSERT_TRUE(out.source == CmdSource::LOCAL);
     TEST_ASSERT_TRUE(appPrioLatchTake(bits, out));
     TEST_ASSERT_TRUE(out.id == CmdId::SHUTTER_CLOSE);
+    TEST_ASSERT_TRUE(out.source == CmdSource::API);
     TEST_ASSERT_FALSE(appPrioLatchTake(bits, out));
-    TEST_ASSERT_EQUAL_UINT32(0, bits);                       // LOCAL bit cleared too
-    appPrioLatchSet(bits, mk(CmdId::HV_OFF));
+    TEST_ASSERT_EQUAL_UINT32(0, bits);
+    appPrioLatchSet(bits, mk(CmdId::STOP));                  // same command from API and LOCAL
+    appPrioLatchSet(bits, mk(CmdId::STOP, CmdSource::LOCAL));
     TEST_ASSERT_TRUE(appPrioLatchTake(bits, out));
-    TEST_ASSERT_TRUE(out.source == CmdSource::API);          // no stale LOCAL
+    TEST_ASSERT_TRUE(out.source == CmdSource::LOCAL);        // -> one LOCAL STOP
+    TEST_ASSERT_FALSE(appPrioLatchTake(bits, out));
+}
+
+// All pending priority commands in ONE cycle (control task step 3a).
+void test_all_priority_commands_in_one_cycle() {
+    running();
+    API(ApiError::OK, traverse(10, 230, 600));
+    run(2000);
+    TEST_ASSERT_TRUE(last_out.shutter_open);
+    now++; A.step(1);
+    HwOutputs out = appTick(S, hw(), C);
+    const CmdId ids[] = {CmdId::SHUTTER_CLOSE, CmdId::HV_OFF, CmdId::STOP, CmdId::STOP};
+    for (CmdId id : ids) API(ApiError::OK, appCommand(S, mk(id), hw(), C, out));
+    A.apply(out.drv);
+    TEST_ASSERT_TRUE(out.drv.op == DrvOp::STOP);
+    TEST_ASSERT_FALSE(out.hv_on);
+    TEST_ASSERT_FALSE(out.shutter_open);
+    STATE(SafetyState::READY);
+    run(500);
+    TEST_ASSERT_FALSE(A.running);
+    TEST_ASSERT_TRUE(proc().motion.mode == OpMode::NONE);
+    TEST_ASSERT_TRUE(S.seq.homed);                           // controlled stop keeps reference
 }
 
 // ---- V1.1: concurrent faults -------------------------------------------------------------
@@ -706,5 +730,6 @@ int main(int, char**) {
     RUN_TEST(test_stop_never_weakens_immediate_stop);
     RUN_TEST(test_estop_and_cooling_loss_simultaneous);
     RUN_TEST(test_prio_latch_order_coalesce_and_source);
+    RUN_TEST(test_all_priority_commands_in_one_cycle);
     return UNITY_END();
 }

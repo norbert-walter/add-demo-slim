@@ -94,29 +94,83 @@ void test_priority_overflow_is_latched_never_dropped() {
         Command s = mkCmd(CmdId::STOP);
         TEST_ASSERT_TRUE(cmdQueueSend(s));
     }
-    Command h = mkCmd(CmdId::HV_OFF), z = mkCmd(CmdId::SHUTTER_CLOSE, 0, CmdSource::LOCAL);
+    Command h = mkCmd(CmdId::HV_OFF, 0, CmdSource::LOCAL), z = mkCmd(CmdId::SHUTTER_CLOSE);
     TEST_ASSERT_TRUE(cmdQueueSend(h));
     TEST_ASSERT_TRUE(cmdQueueSend(z));
     Command n = mkCmd(CmdId::INIT);
     TEST_ASSERT_TRUE(cmdQueueSend(n));
 
-    std::vector<CmdId> got;
-    Command out;
-    while (cmdQueueReceive(out, false)) {
-        got.push_back(out.id);
-        if (got.size() > CMD_PRIO_QUEUE_LEN) {
-            TEST_ASSERT_FALSE(out.want_reply);                    // latched: no reply
-            TEST_ASSERT_TRUE(out.t_enq_us != 0);                  // latency still measurable
-        }
+    // ONE call returns everything that is pending (control task step 3a)
+    Command got[CMD_PRIO_MAX_PER_CYCLE];
+    int k = cmdQueueReceivePriority(got, CMD_PRIO_MAX_PER_CYCLE);
+    TEST_ASSERT_EQUAL_INT(CMD_PRIO_QUEUE_LEN + 3, k);
+    for (int i = 0; i < CMD_PRIO_QUEUE_LEN; ++i) TEST_ASSERT_TRUE(got[i].id == CmdId::STOP);
+    const int L = CMD_PRIO_QUEUE_LEN;
+    TEST_ASSERT_TRUE(got[L].id == CmdId::STOP);                   // 10 STOPs coalesced
+    TEST_ASSERT_TRUE(got[L].source == CmdSource::API);            // origin per command
+    TEST_ASSERT_TRUE(got[L + 1].id == CmdId::HV_OFF);
+    TEST_ASSERT_TRUE(got[L + 1].source == CmdSource::LOCAL);
+    TEST_ASSERT_TRUE(got[L + 2].id == CmdId::SHUTTER_CLOSE);
+    TEST_ASSERT_TRUE(got[L + 2].source == CmdSource::API);
+    for (int i = L; i < L + 3; ++i) {
+        TEST_ASSERT_FALSE(got[i].want_reply);                     // latched: no reply
+        TEST_ASSERT_TRUE(got[i].t_enq_us != 0);                   // latency still measurable
     }
-    TEST_ASSERT_EQUAL_INT(CMD_PRIO_QUEUE_LEN + 3, (int)got.size());
-    for (int i = 0; i < CMD_PRIO_QUEUE_LEN; ++i) TEST_ASSERT_TRUE(got[i] == CmdId::STOP);
-    TEST_ASSERT_TRUE(got[CMD_PRIO_QUEUE_LEN] == CmdId::STOP);     // 10 STOPs coalesced
-    TEST_ASSERT_TRUE(got[CMD_PRIO_QUEUE_LEN + 1] == CmdId::HV_OFF);
-    TEST_ASSERT_TRUE(got[CMD_PRIO_QUEUE_LEN + 2] == CmdId::SHUTTER_CLOSE);
-    TEST_ASSERT_TRUE(out.source == CmdSource::LOCAL);             // LOCAL origin kept
+    TEST_ASSERT_EQUAL_INT(0, cmdQueueReceivePriority(got, CMD_PRIO_MAX_PER_CYCLE));
+    Command out;
     TEST_ASSERT_TRUE(cmdQueueReceive(out, true));                 // normal command afterwards
     TEST_ASSERT_TRUE(out.id == CmdId::INIT);
+}
+
+void test_receive_priority_leaves_normal_commands() {
+    Command a = mkCmd(CmdId::MOVE), b = mkCmd(CmdId::SHUTTER_CLOSE);
+    TEST_ASSERT_TRUE(cmdQueueSend(a));
+    TEST_ASSERT_TRUE(cmdQueueSend(b));
+    Command got[CMD_PRIO_MAX_PER_CYCLE];
+    TEST_ASSERT_EQUAL_INT(1, cmdQueueReceivePriority(got, CMD_PRIO_MAX_PER_CYCLE));
+    TEST_ASSERT_TRUE(got[0].id == CmdId::SHUTTER_CLOSE);
+    Command out;
+    TEST_ASSERT_TRUE(cmdQueueReceive(out, true));
+    TEST_ASSERT_TRUE(out.id == CmdId::MOVE);
+}
+
+void test_priority_burst_from_many_threads_fully_served() {
+    // 8 producers fire 50 priority commands each while a consumer drains with
+    // cmdQueueReceivePriority every 0.5 ms: nothing may be lost, every kind arrives.
+    std::atomic<bool> go{true};
+    std::atomic<int> seen_stop{0}, seen_hv{0}, seen_sc{0}, calls{0}, max_k{0};
+    std::thread cons([&] {
+        Command got[CMD_PRIO_MAX_PER_CYCLE];
+        while (go) {
+            int k = cmdQueueReceivePriority(got, CMD_PRIO_MAX_PER_CYCLE);
+            if (k > max_k) max_k = k;              // no Unity asserts inside threads
+            for (int i = 0; i < k; ++i) {
+                if (got[i].id == CmdId::STOP) seen_stop++;
+                else if (got[i].id == CmdId::HV_OFF) seen_hv++;
+                else if (got[i].id == CmdId::SHUTTER_CLOSE) seen_sc++;
+            }
+            calls++;
+            std::this_thread::sleep_for(std::chrono::microseconds(500));
+        }
+    });
+    std::vector<std::thread> prod;
+    std::atomic<int> refused{0};
+    for (int t = 0; t < 8; ++t) prod.emplace_back([&, t] {
+        const CmdId ids[] = {CmdId::STOP, CmdId::HV_OFF, CmdId::SHUTTER_CLOSE};
+        for (int i = 0; i < 50; ++i) {
+            Command c = mkCmd(ids[(t + i) % 3]);
+            if (!cmdQueueSend(c)) refused++;
+        }
+    });
+    for (auto& p : prod) p.join();
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    go = false; cons.join();
+    Command rest[CMD_PRIO_MAX_PER_CYCLE];
+    TEST_ASSERT_EQUAL_INT(0, cmdQueueReceivePriority(rest, CMD_PRIO_MAX_PER_CYCLE));   // fully drained
+    TEST_ASSERT_EQUAL_INT(0, refused.load());                     // priority send never refused
+    TEST_ASSERT_TRUE(max_k.load() <= CMD_PRIO_MAX_PER_CYCLE);
+    TEST_ASSERT_TRUE(seen_stop > 0 && seen_hv > 0 && seen_sc > 0);
+    TEST_ASSERT_TRUE(seen_stop + seen_hv + seen_sc <= 400);        // coalescing only reduces
 }
 
 void test_mutex_busy_priority_still_delivered() {
@@ -162,6 +216,8 @@ int main(int, char**) {
     RUN_TEST(test_priority_before_normal);
     RUN_TEST(test_normal_held_back_when_not_allowed);
     RUN_TEST(test_priority_overflow_is_latched_never_dropped);
+    RUN_TEST(test_receive_priority_leaves_normal_commands);
+    RUN_TEST(test_priority_burst_from_many_threads_fully_served);
     RUN_TEST(test_mutex_busy_priority_still_delivered);
     RUN_TEST(test_normal_queue_full_returns_busy);
     RUN_TEST(test_late_reply_of_timed_out_command_is_ignored);

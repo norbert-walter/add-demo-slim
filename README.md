@@ -18,7 +18,7 @@ agentenbasierte Entwicklung mit code-server + Cline.
 | `src/app/*` | Snapshot, Command-Queue, Control-Task (vorgegeben) |
 | `src/hal/*.h`, `src/system/*.h`, `src/comm/*.h`, `src/display/*.h` | Hardware-Verträge |
 | `src/smoketest/smoketest.cpp` | Sprint 0a |
-| `test/native/*` | eingefrorene Host-Tests (224 Testfälle, 11 Suiten; `test_command_queue` braucht einen Linux/macOS-Host mit pthreads) |
+| `test/native/*` | eingefrorene Host-Tests (227 Testfälle, 11 Suiten; `test_command_queue` braucht einen Linux/macOS-Host mit pthreads) |
 | `test/embedded/*` | On-Target-Tests (S5) |
 | `scripts/serial_cmd.py` | nicht-interaktiver Serial-Client (auch für Cline) |
 | `scripts/add_client.py` | REST-Client mit CRC-Rahmenregel (Referenz) |

@@ -18,7 +18,8 @@
 | API-Antwort | vor dem Setzen der Ausgänge | **nach** dem Setzen der Ausgänge: `OK` = angenommen und Ausgänge gesetzt; Bewegungsende nur über `/proc` |
 | Zykluszeit | nicht überwacht | im Gerät gemessen und in `GET_STATE` gemeldet: Rechenzeit `cycle_max_us` < 500 µs, Überläufe 0, Jitter `period_max_us` < 1500 µs, Prioritätsbefehl-Latenz `prio_lat_max_us` ≤ 2000 µs |
 | Gleichzeitige API-Aufrufe | eine Antwort-Queue, Annahme „ein Aufrufer“ nur als Kommentar | Warten auf Antwort per Mutex **serialisiert**; STOP/HV_OFF/SHUTTER_CLOSE werden auch bei belegtem Mutex eingereiht; Integrationstest mit 8 Threads gegen den echten Queue-Code |
-| Überlauf Prioritäts-Queue | Befehl hätte verloren gehen können | **Überlauf-Latch**: ein Bit je Befehl, kann nicht überlaufen, gleiche Anforderungen werden zusammengefasst, keine geht verloren |
+| Überlauf Prioritäts-Queue | Befehl hätte verloren gehen können | **Überlauf-Latch**: ein Bit je Befehl und Herkunft (API/LOCAL getrennt), kann nicht überlaufen, gleiche Anforderungen werden zusammengefasst, keine geht verloren |
+| Abarbeitung Prioritätsbefehle | einer pro Zyklus (STOP konnte hinter anderen warten) | **alle** wartenden Prioritätsbefehle im selben Zyklus (max. 7); 2-ms-Grenze unabhängig von der Anzahl |
 | Display im Fehlerfall | 5 Tasten bleiben sichtbar | **alle Tasten ausgeblendet**, Fehlertext groß, **eine** ACK-Fläche über die volle Breite, 1 s halten; grau solange die Ursache anliegt |
 | Display-Logik | im Display-Code | reine Funktionen `display_logic.h`, nativ getestet |
 | BUSY | Wiederholregel offen | erst `/proc` prüfen, dann wiederholen (CONTRACT §5.2) |
@@ -467,9 +468,13 @@ steht, HV aus ist und seit dem letzten Display-Befehl 30 s vergangen sind.
 STOP, HV_OFF und SHUTTER_CLOSE laufen über eine eigene Prioritäts-Queue und werden auch
 in einem Zyklus ausgeführt, der schon einen Fahrauftrag hat. Ein Sofort-Stopp
 (Not-Halt, Nullsetzen am Endschalter) wird nie zu einem gebremsten Stopp abgeschwächt.
-Ist die Prioritäts-Queue voll, wird die Anforderung als Bit gespeichert (Latch): Es
-kann nicht überlaufen, zehn STOPs werden zu einem STOP zusammengefasst, keine
-Anforderung geht verloren. Auslegungsziel: ≤ 2 ms von der Queue bis zum Treiber. Das Gerät misst diese Zeit
+Ist die Prioritäts-Queue voll, wird die Anforderung als Bit gespeichert (Latch), getrennt
+nach Herkunft API/Display: Es kann nicht überlaufen, zehn STOPs werden zu einem STOP
+zusammengefasst, keine Anforderung geht verloren. In jedem Zyklus werden **alle**
+wartenden Prioritätsbefehle ausgeführt (höchstens 7) – ein STOP wartet also nie hinter
+anderen. Auslegungsziel: ≤ 2 ms von der Queue bis zum Treiber, unabhängig von der Anzahl
+wartender Befehle (gilt unter den gemessenen Zeitbedingungen Jitter < 1,5 ms, Rechenzeit
+< 0,5 ms; der Not-Aus wirkt unabhängig von jeder Queue). Das Gerät misst diese Zeit
 selbst (`prio_lat_max_us` in `GET_STATE`); erst die Messung bei der Abnahme ist der
 Nachweis. Der schnellste Stopp bleibt der physische Not-Aus.
 
@@ -525,12 +530,12 @@ des Style Guides. **Kein** eigener Top-Level-Block `live_data` – `/proc` wird 
 | `test_motion_seq` | motion_seq | Homing, Timeout, Endschalterfehler, Fahren, Profil, Messen, Stopps |
 | `test_app_logic` | app_logic | **Szenarien mit simulierter Achse**: Profilfahrt, Not-Aus, Temperatur, Watchdog, Kalibrierung, Bedienvorrang LOCAL, STOP-Priorität, Not-Aus + Kühlungsausfall gleichzeitig |
 | `test_display_logic` | display_logic | Bildschirmmodus, „Ursache aktiv“, ACK 1 s halten, Flankenerkennung |
-| `test_command_queue` | app/command_queue.cpp (echter Code, FreeRTOS-Nachbildung mit Threads) | 8 gleichzeitige Aufrufer, Priorität vor Normal, Überlauf-Latch, Mutex belegt, verspätete Antworten |
+| `test_command_queue` | app/command_queue.cpp (echter Code, FreeRTOS-Nachbildung mit Threads) | 8 gleichzeitige Aufrufer, Priorität vor Normal, Überlauf-Latch mit Herkunft, alle Prioritätsbefehle in einem Abruf, Last aus 8 Threads, Mutex belegt, verspätete Antworten |
 | `test_proc_json` | proc_json | exaktes /proc-Format, Worst Case < 512 Byte |
 | `test_api_parse` | api_parse | Parser, Typen, Fehlerfälle |
 
 Alle Tests sind **eingefroren** und gegen eine Referenzimplementierung geprüft
-(224 Testfälle, alle grün, `test_command_queue` zusätzlich mit ThreadSanitizer geprüft; Mutationstests bestätigen die Trennschärfe).
+(227 Testfälle, alle grün, `test_command_queue` zusätzlich mit ThreadSanitizer geprüft; Mutationstests bestätigen die Trennschärfe).
 
 **Regressionsregel (DoD jedes Sprints):** Alle Suiten, die vor dem Sprint grün waren,
 sind danach weiterhin grün (`pio test -e native` vollständig, nicht nur die Sprint-Suite).
