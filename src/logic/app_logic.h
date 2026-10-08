@@ -1,6 +1,6 @@
 /**
  * @file app_logic.h
- * @brief Complete application logic as pure functions (FROZEN CONTRACT §10).
+ * @brief Complete application logic as pure functions (FROZEN CONTRACT V1.1 §10).
  *
  * Implementation: src/logic/app_logic.cpp (Sprint S2.4).
  *
@@ -12,10 +12,12 @@
  * Call order in the control task (1 kHz cycle, Core 1):
  *   1. every 20 ms:  appMeasure(state, cfg, median_mv, now)
  *   2. every cycle:  out = appTick(state, hw, cfg)
- *   3. if out.drv.op == NONE and a command is queued:
+ *   3. peek the queue; if a command is queued and
+ *        (out.drv.op == NONE || appCmdIsPriority(cmd.id)):
  *                    err = appCommand(state, cmd, hw, cfg, out)   (max. ONE per cycle)
  *   4. apply out to hardware in the order: shutter, motor request, HV LED
- *   5. appFillProc(state, cfg, hw, proc) -> publish snapshot
+ *   5. reply to the command (AFTER the outputs: "OK" means accepted AND outputs set)
+ *   6. appFillProc(state, cfg, hw, proc) -> publish snapshot
  */
 #pragma once
 
@@ -30,6 +32,7 @@ struct AppConfig {
     MotionConfig motion;
     SensorCurve  sensor;
     uint32_t     comm_timeout_ms = 5000;
+    uint32_t     local_hold_ms   = 30000;  ///< V1.1: LOCAL priority hold time after the last touch
 };
 
 /// Everything the application remembers between cycles. Owned by the control task.
@@ -49,6 +52,9 @@ struct AppState {
     bool  on_material = false;
 
     bool  comm_armed  = false;  ///< communication watchdog armed
+
+    bool     local         = false;  ///< V1.1: LOCAL operator priority active (CONTRACT §6.6)
+    uint32_t local_last_ms = 0;      ///< time of the last LOCAL command
 };
 
 /// Hardware readings for one cycle (filled by the control task from HAL + driver).
@@ -72,6 +78,21 @@ struct HwOutputs {
     bool       reboot       = false;   ///< restart after the reply was sent
     bool       beep         = false;   ///< one short beep (fault entry, ACK, homing done)
 };
+
+/**
+ * V1.1 – Priority commands (CONTRACT §6.7): STOP, HV_OFF, SHUTTER_CLOSE.
+ * They are queued at the FRONT (cmdQueueSend) and executed even in a cycle
+ * where appTick already produced a driver request.
+ */
+bool appCmdIsPriority(CmdId id);
+
+/**
+ * V1.1 – Commands an API client may NOT send while LOCAL priority is active
+ * (CONTRACT §6.6): INIT, MOVE, START_MEASURE, START_TRAVERSE, HV_ON,
+ * SHUTTER_OPEN, CALIB, ACK, REBOOT.  Always allowed: STOP, HV_OFF,
+ * SHUTTER_CLOSE, SET, GET_STATE, GET_CONFIG.
+ */
+bool appLocalBlocksApi(CmdId id);
 
 /// Defaults: safetyInitialStatus(), MotionSeq{}, paramsDefaults(), SafetyFlags{}, ...
 void appInit(AppState& s);
@@ -103,6 +124,8 @@ void appMeasure(AppState& s, const AppConfig& cfg, float median_mv, uint32_t now
  *  8. e = safetyShutterAutomation(motionAcquiring(seq), ev.acq_ended || acq ended in 5/6, ...)
  *     e != TICK -> safetyStep(e)
  *  9. comm_armed && seq.phase == IDLE && !safety.hv_on -> comm_armed = false
+ *  9b. V1.1: local && seq.phase == IDLE && !safety.hv_on &&
+ *      (now - local_last_ms) >= local_hold_ms  -> local = false   (wrap-around safe)
  * 10. out.hv_on/shutter_open from safety status; out.drv = d;
  *     out.beep = entered FAULT this cycle || ev.homing_done
  */
@@ -111,6 +134,10 @@ HwOutputs appTick(AppState& s, const HwInputs& hw, const AppConfig& cfg);
 /**
  * Executes one command (CONTRACT §6.3, §9). Never blocks.
  *  - GET_STATE, GET_CONFIG: OK, no action (answered by the HTTP task from the snapshot).
+ *  - V1.1 LOCAL priority (checked BEFORE the state gate):
+ *      source LOCAL: local = true, local_last_ms = now, comm_armed = false
+ *                    (also if the command is then rejected by the gate);
+ *      source API && local && appLocalBlocksApi(id) -> LOCAL_CONTROL, no action.
  *  - gate: safetyCmdAllowed(state, id) != OK -> return it.
  *  - INIT/MOVE/START_*: motion_seq start functions. Defaults: MOVE speed =
  *    approach_speed; START_MEASURE pos = params.measure_pos; START_TRAVERSE
@@ -127,7 +154,11 @@ HwOutputs appTick(AppState& s, const HwInputs& hw, const AppConfig& cfg);
  *  - REBOOT: hv_on -> PRECONDITION; else out.reboot.
  *  - Comm watchdog arming on success of INIT, MOVE, START_*, HV_ON:
  *    source API -> comm_armed = true; source LOCAL -> comm_armed = false.
- *  - The command's driver request goes to out.drv (caller guarantees out.drv was NONE).
+ *  - Driver request merge (V1.1): the command's request d replaces out.drv if
+ *    rank(d) >= rank(out.drv), rank: NONE 0 < MOVE_TO/RUN_BACKWARD 1 < STOP 2
+ *    < FORCE_STOP/ZERO_HERE 3 (both stop immediately). An immediate stop is
+ *    never weakened to a decelerated one (e.g. ZERO_HERE at the home switch).
+ *    (Non-priority commands are only called with out.drv == NONE.)
  *  - out.hv_on/shutter_open are updated to the new safety status.
  *  - Motion events raised here (e.g. acq_ended by STOP) stay pending in seq.ev
  *    and are processed by the next appTick (shutter closes one cycle later).
@@ -135,6 +166,6 @@ HwOutputs appTick(AppState& s, const HwInputs& hw, const AppConfig& cfg);
 ApiError appCommand(AppState& s, const Command& cmd, const HwInputs& hw,
                     const AppConfig& cfg, HwOutputs& out);
 
-/// Builds the process image (CONTRACT §5.1). measure.valid = shutter_open;
+/// Builds the process image (CONTRACT §5.1). local = s.local; measure.valid = shutter_open;
 /// safety.hv_ok = safetyHvConditionsOk(current inputs); temp_ok = temp <= warn.
 void appFillProc(const AppState& s, const AppConfig& cfg, const HwInputs& hw, ProcData& out);

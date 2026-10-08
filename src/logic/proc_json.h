@@ -1,6 +1,6 @@
 /**
  * @file proc_json.h
- * @brief Serialisation of /proc and /api responses (FROZEN CONTRACT §5).
+ * @brief Serialisation of /proc and /api responses (FROZEN CONTRACT V1.1 §5).
  *
  * Implementation: src/logic/proc_json.cpp (Sprint S3). snprintf only, no
  * heap, no ArduinoJson. Output is framed with crcFrameAppend().
@@ -18,7 +18,7 @@ constexpr size_t PROC_JSON_MAX = 512;
 
 /**
  * Writes /proc exactly in this member order (one line, no spaces):
- * {"ts":<u32>,"state":"<SafetyState>","err":<ErrorCode int>,
+ * {"ts":<u32>,"state":"<SafetyState>","err":<ErrorCode int>,"local":<b>,
  *  "motion":{"pos":<f>,"vel":<f>,"state":"<motionState>","mode":"<opMode>",
  *            "homed":<b>,"limit_fwd":<b>,"limit_bwd":<b>},
  *  "measure":{"dist":<f>,"thick":<f>,"on_material":<b>,"valid":<b>,
@@ -43,3 +43,12 @@ int procToJson(const ProcData& d, char* buf, size_t cap);
  */
 int responseToJson(CmdId cmd, ApiError err, const char* msg, const char* extra,
                    char* buf, size_t cap);
+
+/**
+ * V1.1 – extra member list of the GET_STATE response (no leading comma, no frame):
+ *   "state":"<SafetyState>","sys_err":<int>,"local":<b>,"cycle_max_us":<u32>,"overruns":<u32>
+ * cycle_max_us: longest control cycle since boot (µs); overruns: cycles > CONTROL_PERIOD_MS.
+ * @return length (without NUL) or -1 if cap is too small (cap >= 128 never fails).
+ */
+int stateExtraToJson(SafetyState state, ErrorCode err, bool local,
+                     uint32_t cycle_max_us, uint32_t overruns, char* buf, size_t cap);

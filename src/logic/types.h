@@ -1,6 +1,6 @@
 /**
  * @file types.h
- * @brief Shared types of the ADD Demo System (FROZEN CONTRACT – Sprint 0b).
+ * @brief Shared types of the ADD Demo System (FROZEN CONTRACT V1.1).
  *
  * Pure C++ header: no Arduino, no ESP-IDF, no FreeRTOS includes.
  * Every module in src/logic/ must compile on the host (native tests).
@@ -47,7 +47,8 @@ enum class ApiError : int8_t {
     PRECONDITION  = -6,  ///< Allowed in this state, but a condition is not met
     BUSY          = -7,  ///< Motion sequence active / queue full
     NOT_STABLE    = -8,  ///< Calibration capture: signal not stable
-    CALIB_INVALID = -9   ///< Calibration points do not form a valid 2-point calibration
+    CALIB_INVALID = -9,  ///< Calibration points do not form a valid 2-point calibration
+    LOCAL_CONTROL = -10  ///< V1.1: operator at the display has priority (CONTRACT §6.6)
 };
 
 enum class CmdId : uint8_t {
@@ -111,6 +112,7 @@ struct ProcData {
     uint32_t    ts_ms = 0;
     SafetyState state = SafetyState::SAFE_START;
     ErrorCode   err   = ErrorCode::NONE;
+    bool        local = false;   ///< V1.1: LOCAL operator priority active (CONTRACT §6.6)
 
     struct {
         float       pos       = 0.0f;   ///< mm

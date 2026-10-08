@@ -8,7 +8,7 @@ agentenbasierte Entwicklung mit code-server + Cline.
 
 | Pfad | Inhalt |
 |---|---|
-| `docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.4.md` | Anforderungen (deutsch) |
+| `docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.5.md` | Anforderungen (deutsch) |
 | `docs/CONTRACT.md` | verbindlicher Schnittstellenvertrag (englisch, für Agenten) |
 | `docs/Sprint_Prompts_Demoanlage_ADD_Slim_V2.md` | Prompts und Review-Checklisten je Sprint |
 | `docs/Smoketest_Protokoll.md` | Sprint 0a an der Hardware |
@@ -18,10 +18,11 @@ agentenbasierte Entwicklung mit code-server + Cline.
 | `src/app/*` | Snapshot, Command-Queue, Control-Task (vorgegeben) |
 | `src/hal/*.h`, `src/system/*.h`, `src/comm/*.h`, `src/display/*.h` | Hardware-Verträge |
 | `src/smoketest/smoketest.cpp` | Sprint 0a |
-| `test/native/*` | eingefrorene Host-Tests (189 Testfälle) |
+| `test/native/*` | eingefrorene Host-Tests (216 Testfälle, 10 Suiten) |
 | `test/embedded/*` | On-Target-Tests (S5) |
 | `scripts/serial_cmd.py` | nicht-interaktiver Serial-Client (auch für Cline) |
 | `scripts/add_client.py` | REST-Client mit CRC-Rahmenregel (Referenz) |
+| `scripts/stress_api.py` | Abnahme V1.1: STOP-Latenz, Queue-Flut, Dauerlauf, Bedienvorrang |
 
 ## Schnellstart
 
@@ -37,12 +38,12 @@ pio device monitor -e smoketest           # "help"
 | Sprint | Dateien | Stand |
 |---|---|---|
 | 0a | smoketest | bereit zum Flashen |
-| 0b | Header, CONTRACT, Tests, app/* | erledigt – Review offen |
+| 0b | Header, CONTRACT V1.1, Tests, app/* | erledigt (V1.1: LOCAL-Vorrang, STOP-Priorität, Fehlerbild) |
 | S1 | system, nvs_config, wifi_manager, log_buffer, main | offen |
 | S2.1–S2.4 | logic/*.cpp | offen (Tests rot bis Implementierung) |
 | S2.5 | hal_io, motion_drv | offen |
 | S3 | proc_json, api_parse, http_server | offen |
-| S4 | data/www, display | offen |
+| S4a / S4b | data/www / display_logic, display | offen |
 | S6 | data/add.json, data/doc.md, Demo-Skripte | offen |
 
 Bis zur Implementierung der Logik schlagen die nativen Test-Suiten beim Linken

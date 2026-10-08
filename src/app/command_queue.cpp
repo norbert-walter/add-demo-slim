@@ -1,17 +1,20 @@
-// FROZEN – Sprint 0b (complete implementation). See command_queue.h.
+// FROZEN – Contract V1.1 (complete implementation). See command_queue.h.
 #include "command_queue.h"
 #include "config.h"
+#include "logic/app_logic.h"   // appCmdIsPriority
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 
 static QueueHandle_t s_cmd = nullptr;
+static QueueHandle_t s_prio = nullptr;
 static QueueHandle_t s_reply = nullptr;
 static portMUX_TYPE  s_seq_mux = portMUX_INITIALIZER_UNLOCKED;
 static uint32_t      s_seq = 0;
 
 void cmdQueueInit() {
     s_cmd = xQueueCreate(CMD_QUEUE_LEN, sizeof(Command));
+    s_prio = xQueueCreate(CMD_PRIO_QUEUE_LEN, sizeof(Command));
     s_reply = xQueueCreate(2, sizeof(CommandResult));
 }
 
@@ -24,7 +27,8 @@ static uint32_t nextSeq() {
 
 bool cmdQueueSend(Command& cmd) {
     cmd.seq = nextSeq();
-    return xQueueSend(s_cmd, &cmd, 0) == pdTRUE;
+    QueueHandle_t q = appCmdIsPriority(cmd.id) ? s_prio : s_cmd;
+    return xQueueSend(q, &cmd, 0) == pdTRUE;
 }
 
 ApiError cmdQueueSendAndWait(Command& cmd, uint32_t timeout_ms) {
@@ -42,7 +46,10 @@ ApiError cmdQueueSendAndWait(Command& cmd, uint32_t timeout_ms) {
     }
 }
 
-bool cmdQueueReceive(Command& out) { return xQueueReceive(s_cmd, &out, 0) == pdTRUE; }
+bool cmdQueueReceive(Command& out, bool allow_normal) {
+    if (xQueueReceive(s_prio, &out, 0) == pdTRUE) return true;
+    return allow_normal && xQueueReceive(s_cmd, &out, 0) == pdTRUE;
+}
 
 void cmdQueueReply(const Command& cmd, ApiError err) {
     if (!cmd.want_reply) return;

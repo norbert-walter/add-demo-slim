@@ -3,7 +3,7 @@
 ## Project
 Firmware for the ADD Demo System: ESP32 (MKS DLC32 V2.1), PlatformIO,
 **pioarduino = Arduino Core 3.x on ESP-IDF 5.x**. Contract: docs/CONTRACT.md.
-Requirements (German): docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.4.md.
+Requirements (German): docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.5.md.
 
 ## Hard rules
 1. FROZEN files – never modify, rename or delete:
@@ -35,6 +35,8 @@ Requirements (German): docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.4.md.
 ## Definition of done (every sprint)
 1. pio test -e native  -> all suites listed in the sprint are green (others may still fail
    only if their module belongs to a later sprint)
+   REGRESSION RULE: every suite that was green before the sprint must still be green.
+   Run the full native suite, not only the sprint suite.
 2. pio run -e firmware-partial -s (S1..S2.5) or pio run -e firmware -s (from S2.6)
    -> no compile errors, no new warnings in your files
 3. Frozen check passes (no diff).

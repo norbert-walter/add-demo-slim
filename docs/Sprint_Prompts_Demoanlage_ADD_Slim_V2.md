@@ -1,7 +1,7 @@
-# Sprint-Prompts – Demoanlage ADD (Slim) · V2
+# Sprint-Prompts – Demoanlage ADD (Slim) · V2.1
 
 **Stand:** 2026-10-08 · **Autor:** Norbert Walter
-**Basis:** Pflichtenheft V1.4, `docs/CONTRACT.md` V1.0
+**Basis:** Pflichtenheft V1.5, `docs/CONTRACT.md` V1.1
 **Werkzeuge:** code-server + Cline, Modell Qwen3.6-35B-A3B (64k Kontext), Review mit Claude
 
 ---
@@ -25,6 +25,8 @@ und die genannten Header/Tests mit in den Prompt kopieren.
    Cline liest die Dateien und legt einen Plan vor → prüfen.
 2. Modus **Act**: Cline implementiert, baut, testet, iteriert.
 3. Cline berichtet. Du prüfst mit der **Review-Checkliste** des Sprints.
+   **Regressionsregel:** `pio test -e native` komplett laufen lassen – jede Suite, die vor
+   dem Sprint grün war, muss danach noch grün sein (steht auch in `.clinerules`).
 4. Frozen-Check und Commit:
    ```bash
    git diff --exit-code -- src/config.h ':(glob)src/**/*.h' test docs/CONTRACT.md
@@ -83,6 +85,7 @@ Bereits erledigt in diesem Paket. **Review-Checkliste:**
 - [ ] Szenarien in `test_app_logic.cpp` spiegeln die gewünschten Abläufe
 - [ ] Parameterbereiche (`params.h`) sinnvoll
 - [ ] `/proc`-Format (CONTRACT §5.1) passt zu Display, Web und ADD
+- [ ] V1.1: Bedienvorrang LOCAL (CONTRACT §6.6), STOP-Priorität (§6.7), Fehlerbild am Display (§13)
 - [ ] Nach 0a: `config.h` aktualisiert
 - [ ] Commit „Sprint 0b: contract frozen“
 
@@ -288,6 +291,14 @@ Pay attention to:
   consumed in the SAME appTick before the shutter automation (step 8).
 - appCommand: STOP leaves seq.ev.acq_ended pending for the next appTick.
 - Comm watchdog: arm only on SUCCESS of INIT, MOVE, START_*, HV_ON (API -> true, LOCAL -> false).
+- V1.1 LOCAL priority (CONTRACT §6.6): at the start of appCommand, after GET_STATE/GET_CONFIG:
+  source LOCAL -> local = true, local_last_ms = now, comm_armed = false (even if the gate
+  rejects the command afterwards); source API && local && appLocalBlocksApi(id) -> return
+  LOCAL_CONTROL before the state gate. Release in appTick step 9b (wrap-around safe).
+- V1.1 driver request merge: replace out.drv only if rank(d) >= rank(out.drv);
+  rank NONE 0, MOVE_TO/RUN_BACKWARD 1, STOP 2, FORCE_STOP/ZERO_HERE 3.
+- appCmdIsPriority / appLocalBlocksApi are simple switch tables (header lists them).
+- appFillProc: p.local = s.local.
 
 Definition of done:
   pio test -e native   -> ALL suites up to test_app_logic green
@@ -298,6 +309,8 @@ Definition of done:
 - [ ] Not-Halt überschreibt jede andere Fahranforderung
 - [ ] Modus endet, sobald RUNNING verlassen wird
 - [ ] Watchdog-Ent-/Bewaffnung wie CONTRACT §6.5
+- [ ] LOCAL-Prüfung vor dem Zustandsgate; LOCAL-Befehl setzt `local` auch bei Ablehnung
+- [ ] STOP schwächt FORCE_STOP / ZERO_HERE nie ab
 
 ---
 
@@ -348,7 +361,10 @@ Task:
 1. Build the complete firmware: pio run -e firmware -s
 2. Fix compile/link errors. control_task.cpp may only be changed to fix compile errors;
    list every change with the reason. No behavioural changes.
-3. Review control_task.cpp against CONTRACT §10 and report deviations (do not fix them).
+3. Review control_task.cpp against CONTRACT §10 and §6.7 and report deviations (do not fix
+   them). Check in particular: cmdQueueReceive(cmd, out.drv.op == NONE) (priority commands
+   always), reply AFTER applyOutputs, cycle time measured with esp_timer_get_time and
+   published with snapshotSetCycleStats every cycle.
 Definition of done: firmware builds; native tests still green; report with changes.
 Do NOT flash.
 ```
@@ -356,6 +372,7 @@ Do NOT flash.
 **Hardware-Prüfung S2.6 (du)** – über `scripts/add_client.py` erst ab S3; bis dahin Display/Serial:
 - [ ] Boot, Watchdog läuft, kein Reset in 5 min
 - [ ] Nach S3: `INIT`, `MOVE`, Not-Aus → FAULT → ACK → SAFE_START
+- [ ] Nach S3: `GET_STATE` zeigt `cycle_max_us` < 500 und `overruns` 0
 
 ---
 
@@ -380,6 +397,10 @@ Implement exactly:
    concatenation for JSON. /add.html: HTML page with the add.json content in
    <script type="application/ld+json"> and in <pre> (HTML-escape < > &), headers
    Cache-Control: no-store, no-cache, must-revalidate and Pragma: no-cache.
+   GET_STATE extra: stateExtraToJson(snapshot.state, snapshot.err, snapshot.local,
+   cycle stats from snapshotGetCycleStats()) – V1.1, implemented in proc_json.cpp.
+   LOCAL_CONTROL (-10) is answered with HTTP 200 like every other command error.
+   Only this (network) task may call cmdQueueSendAndWait().
 
 Definition of done:
   pio test -e native  -> all suites green
@@ -398,6 +419,12 @@ python scripts/add_client.py cmd INIT
 python scripts/add_client.py cmd HV_ON
 python scripts/add_client.py cmd START_TRAVERSE start=10 end=230 speed=600
 # innerhalb von 5 s: GET_STATE als Heartbeat, sonst COMM_TIMEOUT (gewollt!)
+
+# V1.1 – Last und Zykluszeit (keine Bewegung):
+python scripts/stress_api.py --host 192.168.4.1 flood
+python scripts/stress_api.py --host 192.168.4.1 soak --minutes 10
+# STOP-Latenz – BEWEGT DIE ACHSE, nur in RUNNING, Not-Aus in Reichweite:
+python scripts/stress_api.py --host 192.168.4.1 latency
 ```
 
 ---
@@ -410,7 +437,7 @@ python scripts/add_client.py cmd START_TRAVERSE start=10 end=230 speed=600
 Sprint S4a. Web UI (vanilla HTML/CSS/JS, no framework, no CDN). Read first:
 - .clinerules, docs/CONTRACT.md §4 (JavaScript crc32/frame/verify – copy them verbatim),
   §5 (all JSON formats), §6.5 (heartbeat), §9 (parameters)
-- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.4.md §5.7 (content of both pages)
+- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.5.md §5.7 (content of both pages)
 - docs/reference/style_guide_excerpt_S4.md (CSS variables, themes, components – use them exactly)
 
 Deliver:
@@ -425,6 +452,11 @@ Behaviour (index.html):
 - values: THICK shows "---" if !measure.valid or !measure.on_material
 - buttons: INIT, HV ON/OFF (toggle by safety.hv_on), MEASURE, TRAVERSE (no params ->
   device defaults), STOP, ACK (enabled only if state == "WAIT_ACK")
+- V1.1: if /proc "local" is true: show a "LOCAL" pill with the text "Operator at display
+  has priority" and disable INIT, HV ON, MEASURE, TRAVERSE, ACK (STOP and HV OFF stay
+  enabled). err -10 (LOCAL_CONTROL) -> toast "Operator at display has priority".
+- V1.1: interlock, cooling and temp are labelled "SIM" (simulated) next to their values.
+- V1.1: on err -7 (BUSY) never resend automatically; the next /proc decides.
 - confirmation dialog (style guide 7.8) for HV ON and ACK
 - while safety.comm_armed: send GET_STATE every 2 s
 - every /api response: show toast with msg if err != 0
@@ -444,6 +476,7 @@ relative paths), frozen check clean.
 - [ ] CRC-Prüfung von `/proc` und Antworten
 - [ ] Heartbeat aktiv, solange `comm_armed`
 - [ ] B&W-Theme: alle Zustände ohne Farbe unterscheidbar (Text/Symbol)
+- [ ] LOCAL-Pill, Start-Tasten gesperrt solange `local`; SIM-Kennzeichnung
 
 ---
 
@@ -452,31 +485,58 @@ relative paths), frozen check clean.
 ### PROMPT S4b
 
 ```
-Sprint S4b. Local display. Read first:
+Sprint S4b. Local display. Two parts: pure logic first (tested), then drawing.
+Read first:
 - .clinerules, docs/CONTRACT.md §13, src/display/display.h, src/display/lgfx_config.h
-- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.4.md §5.8 (layout, colours, sizes – binding)
+- src/logic/display_logic.h and test/native/test_display_logic/test_display_logic.cpp
+- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.5.md §5.8 (layout, fault screen, colours – binding)
 - src/app/snapshot.h, src/app/command_queue.h, src/logic/types.h
 - .pio/libdeps/firmware/LovyanGFX/src/ (real API; examples/ for getTouch)
 
-Implement exactly: src/display/display.cpp
+Part 1 – src/logic/display_logic.cpp (pure C++17, like all of src/logic):
+  screenModeOf, ackCauseActive, ackPressUpdate exactly as documented in the header.
+  DoD part 1: pio test -e native -f native/test_display_logic green.
+
+Part 2 – src/display/display.cpp
 - displayStart(): lcd.init(), setRotation(1), draw static frame, create task
-  (core 1, priority 1, stack 6144) with period DISPLAY_PERIOD_MS.
-- Task: snapshotGet(); redraw only zones whose content changed (cache last values);
-  draw text with setTextDatum + fillRect background (no full-screen clear, no flicker).
-- Touch: lcd.getTouch(); a button press = touch down inside the button and not pressed
-  in the previous cycle; brighten 50 ms; send Command{source = LOCAL, want_reply = false}
-  via cmdQueueSend(). HV button: HV_OFF if snapshot.safety.hv_on else HV_ON.
-  STOP is always active.
-- IP line: show the IP via wifiGetIp() (comm/wifi_manager.h).
-No calls into logic/ or hal/. No Serial in the task loop.
-Definition of done: pio run -e firmware -s clean; frozen check clean. Do NOT flash.
+  (core 1, priority 1, stack 6144). Loop every DISPLAY_TOUCH_POLL_MS (20 ms):
+  read touch; every DISPLAY_PERIOD_MS (200 ms) also snapshotGet() and redraw.
+- Redraw only zones whose content changed (cache last values); setTextDatum + fillRect
+  background (no full-screen clear, no flicker). A change of ScreenMode redraws the
+  lower part of the screen completely once.
+- ScreenMode NORMAL: layout of §5.8, 5 buttons. Button press = touch-down edge inside the
+  button; brighten 50 ms; send Command{source = LOCAL, want_reply = false} via
+  cmdQueueSend(). HV button: HV_OFF if snapshot.safety.hv_on else HV_ON. STOP always active.
+  "LOCAL" badge in the header while snapshot.local. Flags labelled "(SIM)".
+- ScreenMode FAULT and ACK: hide all 5 buttons; big fault banner
+  "FAULT: <errorCodeName(err)>" in red with the remedy text of §5.8.
+  ACK mode: one area x 0..479, y 260..319.
+    cause = ackCauseActive(snapshot, SafetyConfig{})
+    fire  = ackPressUpdate(state, mode, cause, touch inside area, millis(), ACK_HOLD_MS, &progress)
+    cause -> grey area "CAUSE ACTIVE: <name> - RELEASE FIRST"
+    else  -> yellow area "ACK - HOLD 1 s" + progress bar (redraw progress every poll)
+    fire  -> send ACK with source LOCAL (exactly once).
+  Call ackPressUpdate on EVERY poll in every mode (it needs the touch history).
+- A touch on a hidden button never sends anything.
+- IP line: wifiGetIp() (comm/wifi_manager.h).
+No calls into hal/ or app/safety logic (display_logic.h is the only logic). No Serial in the loop.
+Definition of done: all native suites green (regression rule); pio run -e firmware -s clean;
+frozen check clean. Do NOT flash.
 ```
+
+**Hardware-Prüfung S4b (du)**
+- [ ] Alle 5 Tasten wirken; `LOCAL`-Badge erscheint nach Tastendruck, verschwindet nach 30 s Ruhe
+- [ ] Not-Aus drücken: Tasten verschwinden, Banner `FAULT: ESTOP`, ACK-Fläche grau
+- [ ] Not-Aus lösen: Fläche gelb; kurzer Tipp quittiert nicht; 1 s halten quittiert genau einmal
+- [ ] STOP gedrückt halten, dabei Not-Aus auslösen und wieder lösen: Finger bleibt liegen → **keine** Quittierung
 
 ---
 
 ## Sprint 5 – Integration und Abnahme (du)
 
 - Abnahme nach Pflichtenheft Kapitel 10, in der dort genannten Reihenfolge.
+- V1.1-Messungen mit `scripts/stress_api.py`: `flood`, `soak` (10 min), `local`,
+  `latency` (bewegt die Achse – nur mit Not-Aus in Reichweite).
 - `pio test -e esp32-test` nach Freigabe.
 - Fehleranalyse mit Claude: Log (`/log`), `/proc`-Mitschnitt und betroffene Datei übergeben.
 
@@ -493,15 +553,16 @@ Read completely before writing anything:
 - docs/reference/ADD_Developer_Guide_v1_0.md
 - docs/reference/style_guide_excerpt_S4.md (only for the optional "ui" block)
 - docs/CONTRACT.md (the device behaviour – every statement in add.json must match it)
-- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.4.md §1, §6, §7
+- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.5.md §1, §6, §7
 
 Task 1 – data/add.json (served at /add, max. 32 KB, valid JSON):
 - Exactly the header fields schema, version, spec_url, spec_license and the seven blocks
   autonomy, device, security, interfaces, actions, rules, validation – plus the optional
   "ui" block of the style guide. No other top-level keys (no "live_data").
 - autonomy: compute the three scores honestly for THIS demo device and propose the level.
-  Before writing, ask me: should the document describe the demo hardware as it is, or
-  deliberately model the real radiometric M50 risk profile? Wait for my answer.
+  Pflichtenheft §7 states the concept: Level 2 (the demo models a radiation source; the AI
+  shall behave as it would at the real gauge; under-declaration is not allowed).
+  Before writing, show me the scores and the reasoning and wait for my confirmation.
 - device: include "ip" (ask me), firmware "1.0.0", hardware "ESP32 (MKS DLC32 V2.1)",
   doc_url "/doc" with doc_url_note.
 - security: network_scope "local", authentication "none", remote_access false, and an
@@ -518,6 +579,11 @@ Task 1 – data/add.json (served at /add, max. 32 KB, valid JSON):
   <= 4 s during remote operation, verify /proc after each command, stop and report if
   err != 0, ACK only after the user confirmed the situation is safe, never retry HV_ON
   automatically, "/add describes capabilities only, live data via /proc".
+  V1.1 rules: "OK means accepted and outputs set; the end of a motion is only visible in
+  /proc"; "BUSY: read /proc before resending"; "if /proc local is true or a command returns
+  -10 LOCAL_CONTROL, a person operates the device locally: do not retry, wait and inform
+  the user; STOP and HV_OFF remain available"; "interlock, cooling_flow and temp are
+  simulated demo signals". Error codes 0..-10 in the action descriptions.
 - validation: add_version "1.0", validated_by [] (draft).
 - ui: style_guide_url, style_guide_version "1.0", theme_default "dark".
 
@@ -536,6 +602,18 @@ Then run the ADD validation (spec §13) against the live device together with me
 ```
 
 ---
+
+## Anhang: Änderungen V2 → V2.1 (Contract V1.1)
+
+| Sprint | Neu |
+|---|---|
+| alle | Regressionsregel in DoD und `.clinerules` |
+| S2.4 | LOCAL-Vorrang, Prioritätstabellen, Fahrauftrags-Rang; 13 neue Szenariotests |
+| S2.6 | Prioritäts-Queue, Antwort nach den Ausgängen, Zykluszeitmessung (Review-Punkte) |
+| S3 | `stateExtraToJson` für GET_STATE; `stress_api.py` flood/soak/latency |
+| S4a | LOCAL-Pill, SIM-Kennzeichnung, keine automatische BUSY-Wiederholung |
+| S4b | `display_logic.cpp` (getestet) + Fehlerbild mit einer ACK-Fläche, 1 s halten |
+| S6 | Level 2 als Konzept, Regeln zu LOCAL/BUSY/OK, Fehlercode −10 |
 
 ## Anhang: Was sich gegenüber V1 geändert hat
 

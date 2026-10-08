@@ -1,4 +1,4 @@
-// FROZEN TESTS (Sprint 0b) – Sprint S2.1 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.1) – Sprint S2.1 must make these pass. Do not modify.
 // Covers: src/logic/safety_logic.cpp (CONTRACT §6). Rules R1..R7 refer to safety_logic.h.
 #include <unity.h>
 #include "logic/safety_logic.h"
@@ -371,6 +371,21 @@ void test_invariants_random_sequences() {
     }
 }
 
+// V1.1: concurrent E-stop and HV-condition loss -> fault (R1) wins over the HV drop (R7)
+void test_estop_and_cooling_loss_simultaneous() {
+    SafetyInputs in = good(); in.estop = true; in.cooling_flow = false; in.interlock = false;
+    SafetyResult r = step(st(SafetyState::RUNNING, true, true), SafetyEvent::TICK, in);
+    ASSERT_STATE(SafetyState::FAULT, r.next.state);
+    ASSERT_STATE(ErrorCode::ESTOP, r.next.err);
+    TEST_ASSERT_TRUE(r.motor_stop);
+    TEST_ASSERT_FALSE(r.next.hv_on); TEST_ASSERT_FALSE(r.next.shutter_open);
+    checkInvariants(r.next, in);
+    in.temp_c = 40.0f;                                    // ESTOP also wins over TEMP_HIGH
+    r = step(st(SafetyState::RUNNING, true, false), SafetyEvent::HV_ON, in);
+    ASSERT_STATE(ErrorCode::ESTOP, r.next.err);
+    ASSERT_API(ApiError::STATE, r.api);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_initial_status);
@@ -418,5 +433,6 @@ int main(int, char**) {
     RUN_TEST(test_comm_timeout);
     RUN_TEST(test_comm_timeout_wraparound);
     RUN_TEST(test_invariants_random_sequences);
+    RUN_TEST(test_estop_and_cooling_loss_simultaneous);
     return UNITY_END();
 }

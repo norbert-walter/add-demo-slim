@@ -1,4 +1,4 @@
-// FROZEN – Sprint 0b (complete implementation). See snapshot.h.
+// FROZEN – Contract V1.1 (complete implementation). See snapshot.h.
 #include "snapshot.h"
 #include <Arduino.h>
 
@@ -48,4 +48,17 @@ bool snapshotTakeRebootRequest() {
     bool r = s_reboot; s_reboot = false;
     taskEXIT_CRITICAL(&s_mux);
     return r;
+}
+
+static uint32_t s_cycle_max_us = 0;
+static uint32_t s_overruns = 0;
+void snapshotSetCycleStats(uint32_t max_us, uint32_t overruns) {
+    taskENTER_CRITICAL(&s_mux);
+    s_cycle_max_us = max_us; s_overruns = overruns;
+    taskEXIT_CRITICAL(&s_mux);
+}
+void snapshotGetCycleStats(uint32_t& max_us, uint32_t& overruns) {
+    taskENTER_CRITICAL(&s_mux);
+    max_us = s_cycle_max_us; overruns = s_overruns;
+    taskEXIT_CRITICAL(&s_mux);
 }

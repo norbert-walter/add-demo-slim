@@ -1,4 +1,4 @@
-// FROZEN TESTS (Sprint 0b) – Sprint S3 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.1) – Sprint S3 must make these pass. Do not modify.
 // Covers: src/logic/proc_json.cpp (CONTRACT §5)
 #include <unity.h>
 #include <string.h>
@@ -25,7 +25,7 @@ void test_proc_default_exact() {
     TEST_ASSERT_TRUE(crcFrameVerify(B, (size_t)n));
     stripCrc(B);
     TEST_ASSERT_EQUAL_STRING(
-        "{\"ts\":0,\"state\":\"SAFE_START\",\"err\":0,"
+        "{\"ts\":0,\"state\":\"SAFE_START\",\"err\":0,\"local\":false,"
         "\"motion\":{\"pos\":0.0,\"vel\":0.0,\"state\":\"idle\",\"mode\":\"none\","
         "\"homed\":false,\"limit_fwd\":false,\"limit_bwd\":false},"
         "\"measure\":{\"dist\":0.0,\"thick\":0.0,\"on_material\":false,\"valid\":false,"
@@ -43,12 +43,12 @@ void test_proc_typical_values() {
     d.measure.valid = true; d.measure.in_range = true; d.measure.avg = 12.26f; d.measure.n = 143;
     d.safety.hv_on = true; d.safety.hv_ok = true; d.safety.shutter_open = true;
     d.safety.interlock = true; d.safety.cooling_flow = true; d.safety.temp = 23.0f;
-    d.safety.comm_armed = true;
+    d.safety.comm_armed = true; d.local = true;
     int n = procToJson(d, B, sizeof(B));
     TEST_ASSERT_TRUE(n > 0);
     stripCrc(B);
     TEST_ASSERT_EQUAL_STRING(
-        "{\"ts\":123456,\"state\":\"RUNNING\",\"err\":0,"
+        "{\"ts\":123456,\"state\":\"RUNNING\",\"err\":0,\"local\":true,"
         "\"motion\":{\"pos\":120.0,\"vel\":200.0,\"state\":\"moving\",\"mode\":\"traverse\","
         "\"homed\":true,\"limit_fwd\":false,\"limit_bwd\":false},"
         "\"measure\":{\"dist\":187.7,\"thick\":12.3,\"on_material\":true,\"valid\":true,"
@@ -60,7 +60,7 @@ void test_proc_typical_values() {
 void test_proc_error_and_fault_state() {
     ProcData d; d.state = SafetyState::WAIT_ACK; d.err = ErrorCode::TEMP_HIGH; d.motion.state = MotionState::ERROR;
     procToJson(d, B, sizeof(B));
-    TEST_ASSERT_NOT_NULL(strstr(B, "\"state\":\"WAIT_ACK\",\"err\":2,"));
+    TEST_ASSERT_NOT_NULL(strstr(B, "\"state\":\"WAIT_ACK\",\"err\":2,\"local\":false,"));
     TEST_ASSERT_NOT_NULL(strstr(B, "\"state\":\"error\""));
 }
 void test_proc_no_negative_zero_and_nonfinite() {
@@ -83,7 +83,8 @@ void test_proc_worst_case_fits_512() {
     d.ts_ms = 4294967295u; d.state = SafetyState::SAFE_START; d.err = (ErrorCode)255;
     d.motion.pos = -1e9f; d.motion.vel = -1e9f; d.motion.state = MotionState::HOMING; d.motion.mode = OpMode::TRAVERSE;
     d.measure.dist = -1e9f; d.measure.thick = -1e9f; d.measure.avg = -1e9f; d.measure.n = 4294967295u;
-    d.safety.temp = -1e9f; d.safety.temp_ok = false;
+    d.safety.temp = -1e9f; d.safety.temp_ok = false; d.local = true;
+    d.motion.homed = d.motion.limit_fwd = d.motion.limit_bwd = false;   // "false" is longer than "true"
     int n = procToJson(d, B, sizeof(B));
     TEST_ASSERT_TRUE(n > 0);
     TEST_ASSERT_TRUE(n < (int)PROC_JSON_MAX);
@@ -122,6 +123,30 @@ void test_response_cap_too_small() {
     TEST_ASSERT_EQUAL_INT(-1, responseToJson(CmdId::HV_ON, ApiError::OK, nullptr, nullptr, small, sizeof(small)));
 }
 
+// V1.1: GET_STATE extra
+void test_state_extra_exact() {
+    char e[128];
+    int n = stateExtraToJson(SafetyState::READY, ErrorCode::NONE, true, 312, 0, e, sizeof(e));
+    TEST_ASSERT_EQUAL_INT((int)strlen(e), n);
+    TEST_ASSERT_EQUAL_STRING(
+        "\"state\":\"READY\",\"sys_err\":0,\"local\":true,\"cycle_max_us\":312,\"overruns\":0", e);
+}
+void test_state_extra_worst_case_and_in_response() {
+    char e[128];
+    int n = stateExtraToJson(SafetyState::SAFE_START, (ErrorCode)255, false, 4294967295u, 4294967295u, e, sizeof(e));
+    TEST_ASSERT_TRUE(n > 0 && n < 128);
+    TEST_ASSERT_EQUAL_INT(-1, stateExtraToJson(SafetyState::READY, ErrorCode::NONE, false, 1, 1, e, 20));
+    int m = responseToJson(CmdId::GET_STATE, ApiError::OK, nullptr, e, B, sizeof(B));
+    TEST_ASSERT_TRUE(m > 0);
+    TEST_ASSERT_TRUE(crcFrameVerify(B, (size_t)m));
+}
+void test_response_local_control() {
+    responseToJson(CmdId::HV_ON, ApiError::LOCAL_CONTROL, nullptr, nullptr, B, sizeof(B));
+    stripCrc(B);
+    TEST_ASSERT_EQUAL_STRING(
+        "{\"status\":\"error\",\"err\":-10,\"cmd\":\"HV_ON\",\"msg\":\"local control active\"}", B);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_proc_default_exact);
@@ -136,5 +161,8 @@ int main(int, char**) {
     RUN_TEST(test_response_error_custom_msg_and_unknown_cmd);
     RUN_TEST(test_response_with_extra);
     RUN_TEST(test_response_cap_too_small);
+    RUN_TEST(test_state_extra_exact);
+    RUN_TEST(test_state_extra_worst_case_and_in_response);
+    RUN_TEST(test_response_local_control);
     return UNITY_END();
 }

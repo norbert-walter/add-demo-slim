@@ -1,4 +1,4 @@
-// FROZEN TESTS (Sprint 0b) – Sprint S2.4 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.1) – Sprint S2.4 must make these pass. Do not modify.
 // Covers: src/logic/app_logic.cpp (CONTRACT §10) – complete scenarios with a
 // simulated axis (fake_axis.h) and a simulated distance sensor.
 #include <unity.h>
@@ -35,6 +35,12 @@ static HwInputs hw() {
     return h;
 }
 
+// Control task rule (CONTRACT §10 step 3): priority commands always, others only
+// if appTick produced no driver request in this cycle.
+static bool mayExecute(const HwOutputs& out, CmdId id) {
+    return out.drv.op == DrvOp::NONE || appCmdIsPriority(id);
+}
+
 // One 1 ms control cycle; optionally executes `cmd` (returns its result via *res).
 static bool cycle(const Command* cmd = nullptr, ApiError* res = nullptr) {
     now++;
@@ -43,7 +49,7 @@ static bool cycle(const Command* cmd = nullptr, ApiError* res = nullptr) {
     if (now % 20 == 0) appMeasure(S, C, sensorMv(), now);
     HwOutputs out = appTick(S, hw(), C);
     bool executed = false;
-    if (cmd && out.drv.op == DrvOp::NONE) {
+    if (cmd && mayExecute(out, cmd->id)) {
         *res = appCommand(S, *cmd, hw(), C, out);
         if (cmd->source == CmdSource::API) last_rx = now;
         executed = true;
@@ -417,6 +423,216 @@ void test_proc_reflects_flags() {
     TEST_ASSERT_TRUE(proc().safety.interlock);
 }
 
+
+// ---- V1.1: LOCAL operator priority (CONTRACT §6.6) ----------------------------------------
+static Command moveCmd(float pos, float speed, CmdSource src) {
+    Command c = mk(CmdId::MOVE, src); c.has_pos = c.has_speed = true; c.pos = pos; c.speed = speed; return c;
+}
+void test_v11_priority_and_block_tables() {
+    TEST_ASSERT_TRUE(appCmdIsPriority(CmdId::STOP));
+    TEST_ASSERT_TRUE(appCmdIsPriority(CmdId::HV_OFF));
+    TEST_ASSERT_TRUE(appCmdIsPriority(CmdId::SHUTTER_CLOSE));
+    TEST_ASSERT_FALSE(appCmdIsPriority(CmdId::ACK));
+    TEST_ASSERT_FALSE(appCmdIsPriority(CmdId::INIT));
+    const CmdId blocked[] = {CmdId::INIT, CmdId::MOVE, CmdId::START_MEASURE, CmdId::START_TRAVERSE,
+                             CmdId::HV_ON, CmdId::SHUTTER_OPEN, CmdId::CALIB, CmdId::ACK, CmdId::REBOOT};
+    for (CmdId c : blocked) TEST_ASSERT_TRUE_MESSAGE(appLocalBlocksApi(c), cmdName(c));
+    const CmdId free_[] = {CmdId::STOP, CmdId::HV_OFF, CmdId::SHUTTER_CLOSE, CmdId::SET,
+                           CmdId::GET_STATE, CmdId::GET_CONFIG};
+    for (CmdId c : free_) TEST_ASSERT_FALSE_MESSAGE(appLocalBlocksApi(c), cmdName(c));
+}
+void test_local_command_blocks_api_start_commands() {
+    homeAndReady();
+    API(ApiError::OK, setBool("interlock", true));
+    API(ApiError::OK, setBool("cooling_flow", true));
+    TEST_ASSERT_FALSE(proc().local);
+    API(ApiError::OK, send(CmdId::HV_ON, CmdSource::LOCAL));
+    TEST_ASSERT_TRUE(proc().local);
+    API(ApiError::LOCAL_CONTROL, send(CmdId::HV_ON));
+    API(ApiError::LOCAL_CONTROL, send(CmdId::INIT));
+    API(ApiError::LOCAL_CONTROL, send(moveCmd(50, 600, CmdSource::API)));
+    API(ApiError::LOCAL_CONTROL, send(CmdId::START_MEASURE));
+    API(ApiError::LOCAL_CONTROL, traverse(10, 230, 600));
+    API(ApiError::LOCAL_CONTROL, send(CmdId::SHUTTER_OPEN));
+    API(ApiError::LOCAL_CONTROL, calib(CalibAction::RESET));
+    API(ApiError::LOCAL_CONTROL, send(CmdId::REBOOT));
+    API(ApiError::LOCAL_CONTROL, send(CmdId::ACK));          // LOCAL check comes before the state gate
+    STATE(SafetyState::RUNNING);
+    TEST_ASSERT_FALSE(S.comm_armed);
+    API(ApiError::OK, setNum("temp", 20.0));                 // SET stays allowed (fault simulation)
+    API(ApiError::OK, send(CmdId::GET_STATE));
+    API(ApiError::OK, send(CmdId::SHUTTER_CLOSE));
+    API(ApiError::OK, send(CmdId::HV_OFF));                  // remote safe-direction always allowed
+    STATE(SafetyState::READY);
+    TEST_ASSERT_FALSE(last_out.hv_on);
+}
+void test_local_released_30s_after_last_touch_when_idle() {
+    API(ApiError::OK, send(CmdId::INIT, CmdSource::LOCAL));
+    uint32_t t0 = now;
+    API(ApiError::LOCAL_CONTROL, send(CmdId::INIT));
+    run(20000);                                              // homing done, idle
+    STATE(SafetyState::READY);
+    while (now < t0 + C.local_hold_ms - 20) cycle();
+    TEST_ASSERT_TRUE(S.local);
+    run(40);
+    TEST_ASSERT_FALSE(S.local);
+    TEST_ASSERT_FALSE(proc().local);
+    API(ApiError::OK, send(CmdId::INIT));                    // remote control possible again
+}
+void test_local_rejected_command_still_takes_priority() {
+    homeAndReady();
+    API(ApiError::STATE, send(CmdId::ACK, CmdSource::LOCAL)); // gate rejects, but operator is present
+    TEST_ASSERT_TRUE(S.local);
+    API(ApiError::LOCAL_CONTROL, send(CmdId::INIT));
+}
+void test_local_held_while_hv_on() {
+    homeAndReady();
+    API(ApiError::OK, setBool("interlock", true));
+    API(ApiError::OK, setBool("cooling_flow", true));
+    API(ApiError::OK, send(CmdId::HV_ON, CmdSource::LOCAL));
+    run(C.local_hold_ms + 10000);
+    TEST_ASSERT_TRUE(S.local);                               // HV still on -> operator keeps priority
+    STATE(SafetyState::RUNNING);                             // and no comm watchdog fault
+    API(ApiError::OK, send(CmdId::HV_OFF));
+    run(2);
+    TEST_ASSERT_FALSE(S.local);                              // idle, HV off, hold time long over
+}
+void test_local_held_until_local_motion_ends() {
+    homeAndReady();
+    API(ApiError::OK, send(moveCmd(230, 300, CmdSource::LOCAL)));   // ~46 s
+    run(C.local_hold_ms + 5000);
+    TEST_ASSERT_TRUE(proc().motion.state == MotionState::MOVING);
+    TEST_ASSERT_TRUE(S.local);
+    run(20000);
+    TEST_ASSERT_TRUE(proc().motion.state == MotionState::IDLE);
+    TEST_ASSERT_FALSE(S.local);
+}
+void test_local_takes_over_remote_operation() {
+    running();
+    API(ApiError::OK, traverse(10, 230, 300));
+    TEST_ASSERT_TRUE(S.comm_armed);
+    run(1000);
+    API(ApiError::OK, send(CmdId::STOP, CmdSource::LOCAL));
+    TEST_ASSERT_TRUE(S.local);
+    TEST_ASSERT_FALSE(S.comm_armed);                         // operator present: remote watchdog off
+    heartbeat = false;
+    run(6000);
+    TEST_ASSERT_EQUAL_INT(0, (int)proc().err);
+    API(ApiError::LOCAL_CONTROL, traverse(10, 230, 300));
+}
+void test_api_stop_allowed_during_local_operation() {
+    running();
+    Command t = mk(CmdId::START_TRAVERSE, CmdSource::LOCAL);
+    API(ApiError::OK, send(t));
+    run(2000);
+    TEST_ASSERT_TRUE(proc().motion.mode == OpMode::TRAVERSE);
+    API(ApiError::OK, send(CmdId::STOP));
+    run(2);
+    TEST_ASSERT_TRUE(proc().motion.mode == OpMode::NONE);
+    TEST_ASSERT_FALSE(last_out.shutter_open);
+}
+void test_local_ack_in_fault() {
+    running();
+    API(ApiError::OK, send(CmdId::HV_OFF, CmdSource::LOCAL));
+    estop = true; run(2); estop = false; run(5);
+    STATE(SafetyState::WAIT_ACK);
+    API(ApiError::LOCAL_CONTROL, send(CmdId::ACK));
+    API(ApiError::OK, send(CmdId::ACK, CmdSource::LOCAL));
+    run(2);
+    STATE(SafetyState::READY);
+}
+
+// ---- V1.1: STOP priority (CONTRACT §6.7) ----------------------------------------------
+void test_stop_executes_in_first_cycle_during_traverse() {
+    running();
+    for (int k = 0; k < 25; ++k) {                           // STOP at many different sequencer phases
+        API(ApiError::OK, traverse(10, 230, 3000));
+        run((uint32_t)(k * 211));
+        Command c = mk(CmdId::STOP); ApiError r = ApiError::UNKNOWN_CMD;
+        TEST_ASSERT_TRUE_MESSAGE(cycle(&c, &r), "STOP deferred");   // never waits for a free cycle
+        API(ApiError::OK, r);
+        TEST_ASSERT_TRUE(proc().motion.mode == OpMode::NONE);
+        run(300);
+        TEST_ASSERT_FALSE(A.running);
+        STATE(SafetyState::RUNNING);
+    }
+}
+// Cycle in which STOP arrives exactly when appTick emits a driver request.
+// Returns true if that situation occurred (and the STOP was handled per the rule).
+static bool cycleStopOnRequest(bool& executed, ApiError& res, DrvOp& tick_op, DrvOp& final_op) {
+    now++;
+    A.step(1);
+    if (heartbeat && now % 1000 == 0) last_rx = now;
+    if (now % 20 == 0) appMeasure(S, C, sensorMv(), now);
+    HwOutputs out = appTick(S, hw(), C);
+    bool hit = out.drv.op != DrvOp::NONE;
+    tick_op = out.drv.op;
+    executed = false;
+    if (hit) {
+        Command c = mk(CmdId::STOP);
+        if (mayExecute(out, c.id)) { res = appCommand(S, c, hw(), C, out); executed = true; }
+    }
+    final_op = out.drv.op;
+    A.apply(out.drv);
+    last_out = out;
+    return hit;
+}
+void test_stop_executed_in_cycle_with_driver_request() {
+    running();
+    API(ApiError::OK, traverse(10, 230, 3000));
+    bool executed = false; ApiError r = ApiError::UNKNOWN_CMD; DrvOp t = DrvOp::NONE, f = DrvOp::NONE;
+    bool hit = false;
+    for (int i = 0; i < 20000 && !hit; ++i) hit = cycleStopOnRequest(executed, r, t, f);
+    TEST_ASSERT_TRUE_MESSAGE(hit, "traverse never produced a driver request");
+    TEST_ASSERT_TRUE(t == DrvOp::MOVE_TO);                   // approach -> run segment
+    TEST_ASSERT_TRUE_MESSAGE(executed, "STOP deferred although a driver request was pending");
+    API(ApiError::OK, r);
+    TEST_ASSERT_TRUE(f == DrvOp::STOP);                      // STOP replaced the MOVE_TO
+    TEST_ASSERT_TRUE(proc().motion.mode == OpMode::NONE);
+    run(500);
+    TEST_ASSERT_FALSE(A.running);
+    TEST_ASSERT_FALSE(last_out.shutter_open);
+}
+void test_stop_overrides_pending_move_request() {
+    running();
+    API(ApiError::OK, traverse(10, 230, 600));
+    run(500);
+    HwOutputs out; out.drv.op = DrvOp::MOVE_TO; out.drv.target_steps = 12345;
+    API(ApiError::OK, appCommand(S, mk(CmdId::STOP), hw(), C, out));
+    TEST_ASSERT_TRUE(out.drv.op == DrvOp::STOP);
+}
+void test_stop_never_weakens_immediate_stop() {
+    running();
+    Command t = mk(CmdId::START_TRAVERSE);
+    API(ApiError::OK, send(t));
+    run(500);
+    HwOutputs out; out.drv.op = DrvOp::FORCE_STOP;
+    appCommand(S, mk(CmdId::STOP), hw(), C, out);
+    TEST_ASSERT_TRUE(out.drv.op == DrvOp::FORCE_STOP);
+    API(ApiError::OK, send(CmdId::HV_OFF));
+    run(500);
+    API(ApiError::OK, send(CmdId::INIT));                    // homing seek (axis not at switch)
+    run(10);
+    HwOutputs out2; out2.drv.op = DrvOp::ZERO_HERE;
+    appCommand(S, mk(CmdId::STOP), hw(), C, out2);
+    TEST_ASSERT_TRUE(out2.drv.op == DrvOp::ZERO_HERE);
+}
+
+// ---- V1.1: concurrent faults -------------------------------------------------------------
+void test_estop_and_cooling_loss_simultaneous() {
+    running();
+    API(ApiError::OK, traverse(10, 230, 600));
+    run(2000);
+    estop = true;
+    S.flags.cooling_flow = false;                            // same cycle (only the test may do this)
+    run(1);
+    STATE(SafetyState::FAULT);
+    TEST_ASSERT_EQUAL_INT((int)ErrorCode::ESTOP, (int)proc().err);   // fault wins over HV drop
+    TEST_ASSERT_FALSE(last_out.hv_on); TEST_ASSERT_FALSE(last_out.shutter_open);
+    TEST_ASSERT_FALSE(A.running);
+    TEST_ASSERT_FALSE(S.seq.homed);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_boot_state);
@@ -448,5 +664,19 @@ int main(int, char**) {
     RUN_TEST(test_reboot_rules);
     RUN_TEST(test_get_commands_always_ok_without_effect);
     RUN_TEST(test_proc_reflects_flags);
+    RUN_TEST(test_v11_priority_and_block_tables);
+    RUN_TEST(test_local_command_blocks_api_start_commands);
+    RUN_TEST(test_local_released_30s_after_last_touch_when_idle);
+    RUN_TEST(test_local_rejected_command_still_takes_priority);
+    RUN_TEST(test_local_held_while_hv_on);
+    RUN_TEST(test_local_held_until_local_motion_ends);
+    RUN_TEST(test_local_takes_over_remote_operation);
+    RUN_TEST(test_api_stop_allowed_during_local_operation);
+    RUN_TEST(test_local_ack_in_fault);
+    RUN_TEST(test_stop_executes_in_first_cycle_during_traverse);
+    RUN_TEST(test_stop_executed_in_cycle_with_driver_request);
+    RUN_TEST(test_stop_overrides_pending_move_request);
+    RUN_TEST(test_stop_never_weakens_immediate_stop);
+    RUN_TEST(test_estop_and_cooling_loss_simultaneous);
     return UNITY_END();
 }

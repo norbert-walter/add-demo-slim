@@ -1,6 +1,6 @@
 /**
  * @file http_server.h
- * @brief HTTP endpoints (FROZEN CONTRACT §5, Sprint S3). Runs in the network task (Core 0).
+ * @brief HTTP endpoints (FROZEN CONTRACT V1.1 §5, Sprint S3). Runs in the network task (Core 0).
  *
  * Library: WebServer (Arduino core). All handlers return quickly.
  *   GET  /            -> SPIFFS /www/index.html
@@ -14,10 +14,12 @@
  *   POST /api         -> body max API_BODY_MAX bytes, then:
  *        1. apiParseRequest(); error -> response with that error (HTTP 400 for BAD_CRC/BAD_JSON, else 200)
  *        2. valid packet (CRC ok, known cmd) -> snapshotSetLastApiRx(millis())
- *        3. GET_STATE  -> reply locally: extra = "state":"<SafetyState>","sys_err":<int>
+ *        3. GET_STATE  -> reply locally: extra = stateExtraToJson(snapshot.state, snapshot.err,
+ *                          snapshot.local, snapshotGetCycleStats())   (V1.1)
  *           GET_CONFIG -> reply locally: extra = paramsToJsonMember(snapshotGetConfig())
  *           others     -> cmdQueueSendAndWait(cmd, API_REPLY_TIMEOUT_MS)
  *        4. responseToJson(); Content-Type application/json; HTTP 200
+ *           (also for LOCAL_CONTROL = -10: the device is fine, the operator has priority)
  *   Every response: Access-Control-Allow-Origin: *  (dashboards on other hosts)
  *   Unknown path -> 404 {"error":"not found"}
  */

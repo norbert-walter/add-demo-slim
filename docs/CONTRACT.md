@@ -1,7 +1,18 @@
-# ADD Demo System – Interface Contract (Sprint 0b)
+# ADD Demo System – Interface Contract
 
-**Version:** 1.0 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-08
-**Basis:** Pflichtenheft Demoanlage ADD Slim V1.4
+**Version:** 1.1 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-08
+**Basis:** Pflichtenheft Demoanlage ADD Slim V1.5
+
+### Changes 1.0 → 1.1
+
+| # | Change | Where |
+|---|---|---|
+| 1 | LOCAL operator priority: display commands block remote start commands (`LOCAL_CONTROL = -10`), `/proc` field `local` | §3.3, §5.1, §6.6 |
+| 2 | Priority queue for STOP / HV_OFF / SHUTTER_CLOSE; executed even in a cycle with a pending driver request; STOP latency ≤ 2 cycles | §1, §6.7, §10 |
+| 3 | `/api` reply is sent **after** the outputs were applied | §5.2, §10 |
+| 4 | Cycle time monitoring: `cycle_max_us`, `overruns` in the GET_STATE reply | §5.2, §10 |
+| 5 | Fault screen: all buttons hidden, one full-width ACK area, 1 s hold, touch-down edge required (`display_logic.h`) | §13 |
+| 6 | BUSY retry rule, simulated-flag marking, safety disclaimer | §5.2, §6.8, §6.9 |
 
 This document is the single source of truth for every agent and every sprint.
 The headers in `src/**/*.h` are the machine-readable part of this contract; this
@@ -33,7 +44,7 @@ Every other task communicates through exactly two channels:
 
 | Channel | Direction | Implementation (frozen, complete) |
 |---|---|---|
-| Command queue | HTTP / display → control | `src/app/command_queue.*` (FreeRTOS queue, max. 1 command per cycle) |
+| Command queues | HTTP / display → control | `src/app/command_queue.*` (FreeRTOS priority queue + normal queue, max. 1 command per cycle, §6.7) |
 | Snapshot | control → HTTP / display | `src/app/snapshot.*` (copy of `ProcData` under one spinlock) |
 
 No other shared mutable globals exist. Nobody but snapshot/command_queue uses
@@ -100,6 +111,7 @@ C++17 functions without Arduino/ESP-IDF/FreeRTOS. It is tested on the host
 | -7 | `BUSY` | motion sequence active, queue full or reply timeout |
 | -8 | `NOT_STABLE` | calibration capture: signal not stable for 500 ms |
 | -9 | `CALIB_INVALID` | calibration points invalid |
+| -10 | `LOCAL_CONTROL` | V1.1: the operator at the display has priority (§6.6); the device is fine |
 
 ---
 
@@ -151,7 +163,7 @@ number formatting (`35` vs `35.0`) is harmless.
 Exact member order, one line, floats with one decimal:
 
 ```json
-{"ts":123456,"state":"RUNNING","err":0,
+{"ts":123456,"state":"RUNNING","err":0,"local":false,
  "motion":{"pos":120.0,"vel":200.0,"state":"moving","mode":"traverse","homed":true,"limit_fwd":false,"limit_bwd":false},
  "measure":{"dist":187.7,"thick":12.3,"on_material":true,"valid":true,"in_range":true,"avg":12.3,"n":143},
  "safety":{"estop":false,"hv_on":true,"hv_ok":true,"shutter":"open","interlock":true,"cooling_flow":true,"temp":23.0,"temp_ok":true,"comm_armed":true},
@@ -162,6 +174,7 @@ Exact member order, one line, floats with one decimal:
 |---|---|
 | `state` | safety state (§3.1) |
 | `err` | system error code (§3.2) |
+| `local` | V1.1: LOCAL operator priority active (§6.6) – remote start commands are rejected |
 | `motion.state` | `idle` / `moving` / `homing` / `error` (error = last sequence ended with fault) |
 | `motion.mode` | `none` / `measure` / `traverse` |
 | `motion.homed` | axis has a valid reference |
@@ -185,10 +198,19 @@ Response (HTTP 200; 400 only for `BAD_CRC`/`BAD_JSON`):
 {"status":"error","err":-6,"cmd":"HV_ON","msg":"precondition not met","crc":"XXXXXXXX"}
 ```
 
-The response comes after the control task executed (accepted) the command,
-typically within 2 ms. Long operations (homing, traverse) continue
-asynchronously – watch `/proc`. On reply timeout (100 ms) the answer is `BUSY`
-and the command may still be executed: check `/proc`.
+**Meaning of `OK` (V1.1):** the control task accepted the command **and the
+outputs of that cycle are already set** (HV LED, shutter, driver request). The
+reply is sent after `applyOutputs()`, typically within 2 ms. Long operations
+(homing, traverse) continue asynchronously – their **end is only visible in
+`/proc`** (`motion.state`, `state`).
+
+**BUSY retry rule (V1.1).** `BUSY` means queue full or no reply within 100 ms.
+The command **may still be executed later**. A client must therefore read
+`/proc` first and only resend if the intended effect is not visible. Resending
+is harmless anyway: every command is either idempotent (HV_ON in RUNNING, STOP,
+SHUTTER_CLOSE, SET) or rejected by the state gate the second time (INIT while
+homing → `BUSY`, ACK outside WAIT_ACK → `STATE`). STOP is never answered `BUSY`
+because of a full normal queue (§6.7).
 
 | Command | Params | Allowed in | Effect |
 |---|---|---|---|
@@ -197,7 +219,7 @@ and the command may still be executed: check `/proc`.
 | `START_MEASURE` | `pos` (opt., default `measure_pos`) | RUNNING | move to pos (5 < pos ≤ 240), then stationary measurement until `STOP`; shutter opens automatically |
 | `START_TRAVERSE` | `start`, `end`, `speed` (opt., defaults `traverse_*`) | RUNNING | approach start, traverse to end at speed; shutter opens during the run, closes at the end; HV stays on |
 | `STOP` | – | all | controlled stop; acquisition ends, shutter closes |
-| `GET_STATE` | – | all | heartbeat; reply extra `"state":"READY","sys_err":0` |
+| `GET_STATE` | – | all | heartbeat; reply extra `"state":"READY","sys_err":0,"local":false,"cycle_max_us":312,"overruns":0` (`stateExtraToJson`) |
 | `GET_CONFIG` | – | all | reply extra `"config":{...}` (§5.3) |
 | `SET` | `key`, `value` | all | §9 |
 | `CALIB` | `action`: `near` `far` `base` `save` `reset` | SAFE_START, READY, RUNNING | §7.3 |
@@ -275,6 +297,52 @@ ends (finished, STOP, fault) it closes the shutter.
 - Disarmed automatically when the axis is idle and HV is off.
 - Armed and no valid `/api` packet for > 5 s → fault `COMM_TIMEOUT`.
 - Clients keep it alive with `GET_STATE` at least every 4 s (`GET /proc` does not count).
+
+### 6.6 LOCAL operator priority (V1.1)
+
+The person at the machine is faster than any remote client, so the display has
+priority.
+
+- **Enter:** every command from the display (`source = LOCAL`), also one that
+  the state gate rejects, sets `local = true`, restarts the 30 s hold timer and
+  disarms the communication watchdog (the operator is present).
+- **While local:** API commands `INIT, MOVE, START_MEASURE, START_TRAVERSE,
+  HV_ON, SHUTTER_OPEN, CALIB, ACK, REBOOT` → `LOCAL_CONTROL (-10)`, checked
+  before the state gate. Always allowed from the API: `STOP, HV_OFF,
+  SHUTTER_CLOSE` (safe direction), `SET` (fault simulation), `GET_STATE`,
+  `GET_CONFIG`.
+- **Leave:** axis idle **and** HV off **and** ≥ 30 s (`local_hold_ms`) since the
+  last display command. So a locally started operation keeps priority until it
+  has ended; a remote `HV_OFF` ends it after the hold time.
+- Shown as `"local":true` in `/proc` and GET_STATE, as a badge on the display
+  and in the web UI.
+
+### 6.7 Priority commands and STOP latency (V1.1)
+
+`STOP`, `HV_OFF`, `SHUTTER_CLOSE` (`appCmdIsPriority`) go into a separate
+priority queue (length 4). The control task serves it first and **even in a
+cycle where `appTick` already produced a driver request**. The driver requests
+are merged by rank (NONE < MOVE_TO/RUN_BACKWARD < STOP < FORCE_STOP/ZERO_HERE);
+an immediate stop is never weakened.
+
+Guaranteed bound: from entering the queue to the driver request **≤ 2 control
+cycles (2 ms)**. End-to-end over WLAN the HTTP round trip dominates
+(acceptance: reply < 150 ms, measured with `scripts/stress_api.py latency`).
+The fastest stop is still the physical E-stop (≤ 2 ms, independent of software
+queues) and the STOP button on the display.
+
+### 6.8 Simulated signals (V1.1)
+
+`interlock`, `cooling_flow` and `temp` are **simulated** demo signals set via
+`SET`. Every UI (web, display) and the ADD document mark them as `SIM`
+(ADD: `"simulated": true` / description text "simulated").
+
+### 6.9 Safety disclaimer
+
+This is a **demonstration system**. The software E-stop evaluation and the
+safety logic are **not** a safety function in the sense of EN ISO 13849 /
+IEC 62061 and do not replace a hardware safety circuit. There is no real
+radiation source; HV and shutter are LEDs.
 
 ---
 
@@ -354,10 +422,15 @@ Order inside one control cycle:
 
 1. every 20 ms `appMeasure()`
 2. `appTick()` – motion tick, events, safety TICK, emergency stop, mode stop,
-   statistics, shutter automation, watchdog disarm
-3. if no driver request yet and a command is queued: `appCommand()` (max. one)
+   statistics, shutter automation, watchdog disarm, LOCAL release
+3. `cmdQueueReceive(cmd, allow_normal = no driver request yet)` → `appCommand()`
+   (max. one; priority commands always, §6.7)
 4. outputs: **shutter → motor → HV LED**
-5. `appFillProc()` → `snapshotPublish()`
+5. reply to the command (`cmdQueueReply`) – **after** the outputs
+6. `appFillProc()` → `snapshotPublish()`
+7. cycle time: work time of steps 1–6 with `esp_timer_get_time()`;
+   `cycle_max_us` = maximum since boot, `overruns` = cycles > 1000 µs.
+   Acceptance: `cycle_max_us < 500`, `overruns == 0` over 10 min.
 
 ---
 
@@ -384,10 +457,24 @@ Order inside one control cycle:
 
 ## 13. Display (`src/display/display.h`)
 
-480 × 320 landscape, one fixed view, refreshed every 200 ms from the snapshot.
-Five touch buttons à 96 × 60 px at y = 260: `INIT` · `HV` (toggles HV_ON/HV_OFF)
-· `MEAS` · `TRAV` · `STOP` (always active). Commands go to the queue with
-`source = LOCAL`. Layout details: Pflichtenheft §5.8.
+480 × 320 landscape, redrawn every 200 ms from the snapshot, touch polled every
+20 ms. Commands go to the queue with `source = LOCAL`. All decisions come from
+the pure `src/logic/display_logic.h` (tested by `test_display_logic`).
+Layout details: Pflichtenheft §5.8.
+
+| Screen mode | State | Content |
+|---|---|---|
+| NORMAL | SAFE_START, READY, RUNNING, RECOVER | status, 5 buttons à 96 × 60 px at y = 260: `INIT` · `HV` (toggle) · `MEAS` · `TRAV` · `STOP`; `LOCAL` badge; flags marked `SIM` |
+| FAULT | FAULT (1 cycle) | fault banner, **no buttons** |
+| ACK | WAIT_ACK | fault banner `FEHLER: <name>` + remedy; **all normal buttons hidden**; one ACK area 480 × 60 px at y = 260 |
+
+ACK area (`ackCauseActive`, `ackPressUpdate`):
+- cause still active (E-stop pressed, temp > 32 °C) → grey, "Ursache aktiv: … – erst beheben", no command;
+- otherwise yellow "ACK – 1 s halten" with progress bar; ACK is sent once after
+  1000 ms continuous press; the press must **start** on the ACK screen
+  (touch-down edge), so a finger still lying on STOP from before the fault never
+  acknowledges. Nothing else can be operated in WAIT_ACK – nothing can move
+  anyway (motor emergency-stopped every cycle, HV and shutter forced off).
 
 ---
 

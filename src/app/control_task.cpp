@@ -1,6 +1,6 @@
 /**
  * @file control_task.cpp
- * @brief Control task – glue between hardware and pure logic (Sprint 0b, complete).
+ * @brief Control task – glue between hardware and pure logic (Contract V1.1, complete).
  *
  * RULES (do not break):
  *  - This task is the ONLY writer of AppState. Other tasks talk to it through
@@ -8,10 +8,16 @@
  *  - No blocking calls, no Serial output, no NVS access, no heap allocation
  *    inside the loop. Persist/reboot are delegated to the network task.
  *  - Output order every cycle: shutter -> motor request -> HV LED.
+ *  - V1.1: priority commands (STOP, HV_OFF, SHUTTER_CLOSE) are executed even
+ *    if the cycle already has a driver request. The reply is sent AFTER the
+ *    outputs were applied ("OK" = accepted and outputs set; the end of a
+ *    motion is only visible in /proc).
+ *  - V1.1: the work time of every cycle is measured (cycle_max_us, overruns).
  */
 #include "control_task.h"
 #include <Arduino.h>
 #include <esp_task_wdt.h>
+#include <esp_timer.h>
 #include "config.h"
 #include "logic/app_logic.h"
 #include "hal/hal_io.h"
@@ -61,8 +67,10 @@ static void controlLoop(void*) {
     TickType_t last = xTaskGetTickCount();
     uint32_t next_measure = 0;
     uint16_t samples[ADC_SAMPLES];
+    uint32_t cycle_max_us = 0, overruns = 0;
     for (;;) {
         vTaskDelayUntil(&last, pdMS_TO_TICKS(CONTROL_PERIOD_MS));
+        const int64_t t_start = esp_timer_get_time();
         const uint32_t now = millis();
 
         // 1. measurement at 50 Hz
@@ -76,24 +84,33 @@ static void controlLoop(void*) {
         HwInputs hw = readInputs(now);
         HwOutputs out = appTick(s_app, hw, s_cfg);
 
-        // 3. at most one command per cycle, only if the cycle has no driver request yet
-        if (out.drv.op == DrvOp::NONE) {
-            Command cmd;
-            if (cmdQueueReceive(cmd)) {
-                ApiError err = appCommand(s_app, cmd, hw, s_cfg, out);
-                if (cmd.id == CmdId::SET && err == ApiError::OK)
-                    snapshotPublishConfig(s_app.params, s_app.flags);   // GET_CONFIG sees flags too
-                cmdQueueReply(cmd, err);
-            }
+        // 3. at most one command per cycle. Priority commands always; normal
+        //    commands only if the cycle has no driver request yet.
+        Command cmd;
+        bool have_cmd = cmdQueueReceive(cmd, out.drv.op == DrvOp::NONE);
+        ApiError cmd_err = ApiError::OK;
+        if (have_cmd) {
+            cmd_err = appCommand(s_app, cmd, hw, s_cfg, out);
+            if (cmd.id == CmdId::SET && cmd_err == ApiError::OK)
+                snapshotPublishConfig(s_app.params, s_app.flags);   // GET_CONFIG sees flags too
         }
 
         // 4. outputs
         applyOutputs(out, now);
 
-        // 5. publish process image
+        // 5. reply only now: "OK" means accepted AND outputs set
+        if (have_cmd) cmdQueueReply(cmd, cmd_err);
+
+        // 6. publish process image
         ProcData pd;
         appFillProc(s_app, s_cfg, hw, pd);
         snapshotPublish(pd);
+
+        // 7. cycle time monitoring
+        const uint32_t dt_us = (uint32_t)(esp_timer_get_time() - t_start);
+        if (dt_us > cycle_max_us) cycle_max_us = dt_us;
+        if (dt_us > CONTROL_PERIOD_MS * 1000u) overruns++;
+        snapshotSetCycleStats(cycle_max_us, overruns);
 
         esp_task_wdt_reset();
     }

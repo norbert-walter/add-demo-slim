@@ -1,4 +1,4 @@
-// FROZEN TESTS (Sprint 0b) – Sprint S2.1 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.1) – Sprint S2.1 must make these pass. Do not modify.
 // Covers: src/logic/types.cpp, src/logic/crc32.cpp  (CONTRACT §3, §4)
 #include <unity.h>
 #include <string.h>
@@ -29,6 +29,7 @@ void test_error_code_names_and_values() {
     TEST_ASSERT_EQUAL_STRING("HOMING_FAILED", errorCodeName(ErrorCode::HOMING_FAILED));
     TEST_ASSERT_EQUAL_INT(5, (int)ErrorCode::HOMING_FAILED);
     TEST_ASSERT_EQUAL_INT(-9, (int)ApiError::CALIB_INVALID);
+    TEST_ASSERT_EQUAL_INT(-10, (int)ApiError::LOCAL_CONTROL);   // V1.1
 }
 void test_motion_and_mode_names() {
     TEST_ASSERT_EQUAL_STRING("idle", motionStateName(MotionState::IDLE));
@@ -68,7 +69,8 @@ void test_calib_action_names() {
 }
 void test_api_error_messages_non_null() {
     TEST_ASSERT_EQUAL_STRING("ok", apiErrorMessage(ApiError::OK));
-    for (int e = -9; e <= -1; ++e) {
+    TEST_ASSERT_EQUAL_STRING("local control active", apiErrorMessage(ApiError::LOCAL_CONTROL));
+    for (int e = -10; e <= -1; ++e) {
         const char* m = apiErrorMessage((ApiError)e);
         TEST_ASSERT_NOT_NULL(m);
         TEST_ASSERT_TRUE(strlen(m) > 0);

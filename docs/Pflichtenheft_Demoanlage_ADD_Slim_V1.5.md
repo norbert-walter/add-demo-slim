@@ -2,12 +2,30 @@
 
 **Stand:** 2026-10-08
 **Autor:** Norbert Walter
-**Version:** 1.4
+**Version:** 1.5
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
-## 0. Änderungen gegenüber V1.3
+## 0. Änderungen
+
+### V1.4 → V1.5 (Contract V1.1, nach Review)
+
+| Bereich | V1.4 | V1.5 |
+|---|---|---|
+| Bedienvorrang | nicht geregelt (Display und API gleichrangig) | **Display hat Vorrang (LOCAL)**: nach jedem Display-Befehl lehnt die Anlage Start-Befehle von der API mit `LOCAL_CONTROL (−10)` ab; STOP/HV_OFF/SHUTTER_CLOSE/SET bleiben erlaubt. Ende 30 s nach dem letzten Display-Befehl, sobald Achse steht und HV aus ist |
+| STOP-Latenz | STOP wartete u. U. auf einen Zyklus ohne Fahrauftrag, volle Queue → BUSY | **Prioritäts-Queue** für STOP/HV_OFF/SHUTTER_CLOSE, Ausführung auch bei laufendem Fahrauftrag; ≤ 2 ms bis zum Treiber |
+| API-Antwort | vor dem Setzen der Ausgänge | **nach** dem Setzen der Ausgänge: `OK` = angenommen und Ausgänge gesetzt; Bewegungsende nur über `/proc` |
+| Zykluszeit | nicht überwacht | `cycle_max_us`, `overruns` in `GET_STATE`; Abnahme < 500 µs, 0 Überläufe in 10 min |
+| Display im Fehlerfall | 5 Tasten bleiben sichtbar | **alle Tasten ausgeblendet**, Fehlertext groß, **eine** ACK-Fläche über die volle Breite, 1 s halten; grau solange die Ursache anliegt |
+| Display-Logik | im Display-Code | reine Funktionen `display_logic.h`, nativ getestet |
+| BUSY | Wiederholregel offen | erst `/proc` prüfen, dann wiederholen (CONTRACT §5.2) |
+| Simulierte Signale | nicht gekennzeichnet | Interlock, Cooling, Temp überall als **SIM** markiert |
+| Sicherheitshinweis | fehlte | Demo-Not-Aus ersetzt keinen Hardware-Sicherheitskreis (§6) |
+| Tests | 189 | + LOCAL, STOP-Priorität, gleichzeitiger Not-Aus + Kühlungsausfall, Display-Logik |
+| DoD | Sprint-Tests grün | zusätzlich **Regressionsregel**: alle bisher grünen Suiten bleiben grün |
+
+### V1.3 → V1.4
 
 | Bereich | V1.3 | V1.4 |
 |---|---|---|
@@ -237,7 +255,14 @@ Vollständige Definition: **CONTRACT §5**. Kurzfassung:
 | `SHUTTER_OPEN` | – | RUNNING, Position > 5 mm |
 | `REBOOT` | – | SAFE_START, READY, WAIT_ACK |
 
-Fehlercodes: Anlage `err` 0–5, API `err` 0 … −9 (CONTRACT §3).
+Fehlercodes: Anlage `err` 0–5, API `err` 0 … −10 (CONTRACT §3).
+
+**Bedeutung von `OK`:** Befehl angenommen und die Ausgänge des Zyklus sind gesetzt.
+Lange Vorgänge (Referenzfahrt, Profilfahrt) laufen weiter; ihr Ende steht nur in `/proc`.
+**`BUSY`:** Der Befehl kann trotzdem noch ausgeführt werden – Client prüft erst
+`/proc`, dann ggf. erneut senden (CONTRACT §5.2).
+**`LOCAL_CONTROL (−10)`:** Am Display wird gerade bedient; Start-Befehle von der API
+sind gesperrt (§6 Bedienvorrang).
 
 **Prüfsumme:** CRC32 (zlib) über den gesendeten JSON-Text ohne crc-Feld; das Feld
 `,"crc":"XXXXXXXX"` wird vor der letzten `}` eingefügt (CONTRACT §4).
@@ -269,9 +294,11 @@ Schriften Ubuntu / Ubuntu Mono **lokal auf SPIFFS** (`/www/fonts/*.woff2`, kein 
 im AP-Modus gibt es kein Internet), Fallback `sans-serif` / `monospace`.
 
 **Seite 1 – Process View (`/`)**
-- Statuszeile: Sicherheitszustand (READY/RUNNING/FAULT…), HV, Shutter, E-Stop, Fehlertext
+- Statuszeile: Sicherheitszustand (READY/RUNNING/FAULT…), HV, Shutter, E-Stop, Fehlertext,
+  Badge **LOCAL** solange `local = true` (Start-Tasten dann deaktiviert, Hinweis „Operator at display has priority“)
 - Datenpanels: POS, SPEED, DIST, THICK (`---` wenn `!valid` oder nicht auf Messgut), AVG/n
-- Sicherheitsflags: INTERLOCK, COOLING, TEMP mit Farbcode `--ok/--warn/--danger`
+- Sicherheitsflags: INTERLOCK, COOLING, TEMP mit Farbcode `--ok/--warn/--danger`,
+  jeweils mit Kennzeichnung **SIM** (simuliert)
 - Zeitreihe DIST/THICK (Canvas, max. 100 Punkte, clientseitig)
 - Tasten: INIT, HV ON/OFF, MEASURE, TRAVERSE, STOP, ACK (ACK nur in WAIT_ACK aktiv)
   – START-Befehle ohne Parameter → Werte aus der Konfiguration
@@ -279,6 +306,7 @@ im AP-Modus gibt es kein Internet), Fallback `sans-serif` / `monospace`.
 - **Heartbeat:** solange `safety.comm_armed`, alle 2 s `GET_STATE`
 - Validation-Strip (Style Guide 6.10) aus `/add` → `validation.validated_by`
 - `/proc`-Polling alle 500 ms, CRC wird geprüft (bei Fehler: Statuspill „CRC error“)
+- Bei `BUSY`: keine automatische Wiederholung; nächster `/proc`-Stand entscheidet
 
 **Seite 2 – Settings (`/settings`)**
 - Werte beim Laden per `GET_CONFIG`
@@ -316,7 +344,41 @@ Neuzeichnen nur geänderter Zonen. **Sprache: Englisch.**
 - Tasten 96×60 px, Beschriftung `setTextSize(3)` (max. 5 Zeichen = 90 px)
 - `HV` schaltet je nach Zustand `HV_ON`/`HV_OFF`, Farbe zeigt Zustand
 - `STOP` immer aktiv; Tap-Feedback 50 ms aufhellen
-- Befehle mit `source = LOCAL` (kein Kommunikations-Watchdog)
+- Befehle mit `source = LOCAL` (kein Kommunikations-Watchdog, setzt Bedienvorrang LOCAL)
+- Badge `LOCAL` in der Kopfzeile, solange der Bedienvorrang aktiv ist
+- Sicherheitsflags mit Zusatz `SIM`, z. B. `INTERLOCK(SIM) ●`
+- Touch-Abfrage alle 20 ms, Neuzeichnen alle 200 ms
+
+**Fehlerbild (FAULT / WAIT_ACK)** – alle Bedientasten werden ausgeblendet, es gibt
+nur noch eine mögliche Handlung:
+
+```
+┌──────────────────────────────────────────────────────────────────┐ y=0
+│ ADD DEMO           [ WAIT_ACK ]         ○ HV      ▯ SHUTTER      │ h=32
+├──────────────────────────────────────────────────────────────────┤ y=34
+│                                                                  │
+│          FAULT: MOTOR_FAULT                    (rot, Größe 4)    │
+│          Check axis and end switches, then acknowledge           │
+│                                                                  │
+│ POS 231.4 mm   ESTOP ○   TEMP(SIM) 23.0°C                        │
+├──────────────────────────────────────────────────────────────────┤ y=260
+│                  ACK – HOLD 1 s   ▓▓▓▓▓▓▓░░░░░░░                 │ h=60, 480 px
+└──────────────────────────────────────────────────────────────────┘ y=320
+```
+
+- FAULT (ein Zyklus): Banner, noch keine Taste
+- WAIT_ACK, Ursache liegt noch an (Not-Aus gedrückt, Temperatur > 32 °C):
+  Fläche grau, Text `CAUSE ACTIVE: ESTOP – RELEASE FIRST`, keine Wirkung
+- WAIT_ACK, Ursache beseitigt: Fläche gelb `#f5a623`, `ACK – HOLD 1 s`, Fortschrittsbalken;
+  ACK wird **einmal** nach 1 s ununterbrochenem Drücken gesendet
+- Der Druck muss **auf dem Fehlerbild beginnen**: Ein Finger, der beim Fehlereintritt
+  noch auf STOP lag, quittiert nie (Schutz gegen reflexhaftes Quittieren)
+- Abhilfetexte: ESTOP „Release E-stop, then acknowledge“, TEMP_HIGH „Lower temp ≤ 32 °C“,
+  MOTOR_FAULT „Check axis and end switches“, COMM_TIMEOUT „Remote client lost“,
+  HOMING_FAILED „Check home switch, then INIT“
+- In WAIT_ACK kann sich nichts bewegen (Motor jeden Zyklus notgestoppt, HV und Shutter
+  zwangsweise aus); der physische Not-Aus bleibt jederzeit wirksam
+- Logik: `src/logic/display_logic.h` (`screenModeOf`, `ackCauseActive`, `ackPressUpdate`)
 - Farben aus dem Style Guide (Dark): Hintergrund `#202020`, Panel `#1e1e1e`,
   Rahmen `#2e2e2e`, Text `#ffffff`, Labels `#8ab2d0`, DIST `--accent #00c8a0`,
   THICK `--accent2 #0084ff`, OK `#00c8a0`, Warnung `#f5a623`, Fehler `#e84040`
@@ -347,6 +409,12 @@ lib_deps =
 ## 6. Sicherheitskonzept
 
 Vollständig: **CONTRACT §6** und `src/logic/safety_logic.h` (Regeln R1–R7, Invarianten I1–I6).
+
+> **Sicherheitshinweis.** Dies ist eine Demonstrationsanlage. Die Auswertung des
+> Not-Aus in Software und die Sicherheitslogik sind **keine Sicherheitsfunktion**
+> im Sinne von EN ISO 13849 / IEC 62061 und ersetzen keinen Hardware-Sicherheitskreis.
+> Es gibt keine echte Strahlenquelle; HV und Shutter sind LEDs. Interlock, Kühlung
+> und Temperatur sind simuliert.
 
 ### Zustände
 
@@ -382,7 +450,23 @@ SAFE_START → neue Referenzfahrt.
 Watchdog nur aktiv, solange eine **per API** gestartete Operation läuft (Bewegung
 oder HV an). Ohne gültiges `/api`-Paket für > 5 s → Fehler `COMM_TIMEOUT`.
 Clients senden `GET_STATE` mindestens alle 4 s. Bedienung am Display aktiviert
-den Watchdog nicht.
+den Watchdog nicht; ein Display-Befehl während einer Fernoperation schaltet ihn ab
+(der Bediener ist anwesend und übernimmt).
+
+### Bedienvorrang (LOCAL)
+Der Mensch an der Anlage ist schneller als jeder Fernzugriff, daher hat das Display
+Vorrang. Jeder Display-Befehl setzt `local = true`. Solange `local` aktiv ist, werden
+von der API abgelehnt (`LOCAL_CONTROL`): INIT, MOVE, START_MEASURE, START_TRAVERSE,
+HV_ON, SHUTTER_OPEN, CALIB, ACK, REBOOT. Erlaubt bleiben STOP, HV_OFF, SHUTTER_CLOSE
+(sichere Richtung), SET (Fehlersimulation) und Abfragen. `local` endet, wenn die Achse
+steht, HV aus ist und seit dem letzten Display-Befehl 30 s vergangen sind.
+
+### STOP-Priorität
+STOP, HV_OFF und SHUTTER_CLOSE laufen über eine eigene Prioritäts-Queue und werden auch
+in einem Zyklus ausgeführt, der schon einen Fahrauftrag hat. Ein Sofort-Stopp
+(Not-Halt, Nullsetzen am Endschalter) wird nie zu einem gebremsten Stopp abgeschwächt.
+Garantie: ≤ 2 ms von der Queue bis zum Treiber. Der schnellste Stopp bleibt der
+physische Not-Aus.
 
 ### Fail-Safe-Grundsätze
 - Sicherheitsflags werden nie gespeichert (nach Boot gesperrt)
@@ -401,7 +485,13 @@ des Style Guides. **Kein** eigener Top-Level-Block `live_data` – `/proc` wird 
 über /proc“ steht in `rules`.
 
 - Ablage: SPIFFS `/add.json`, Endpunkte `/add`, `/add.html`, `/llms.txt`
-- `autonomy`: Einstufung über die drei Scores (bewusste Entscheidung, siehe Sprint 6)
+- `autonomy`: Einstufung über die drei Scores (bewusste Entscheidung, siehe Sprint 6).
+  Konzeptionell **Level 2**: Die Demo selbst ist harmlos, modelliert aber eine
+  Strahlenquelle – die KI soll sich so verhalten, wie sie es an der echten Anlage müsste.
+  Eine Unterdeklaration ist nicht zulässig.
+- `rules`: Bedienvorrang (bei `local = true` bzw. `LOCAL_CONTROL` nicht wiederholen,
+  sondern auf den Bediener warten), BUSY-Regel, „OK heißt angenommen, Ende über /proc“
+- Simulierte Signale werden im ADD als simuliert beschrieben
 - `security.enforcement`: alle Prüfungen, die das Gerät selbst durchsetzt (Zustandsgate, Bereichsgrenzen, Shutter/Parkzone, Watchdog)
 - `actions`: alle Befehle mit Parametern, Bereichen, `safe`, `reversible`, `requires_confirmation`
 - `validation`: Validierungsprotokoll nach Spec §10.7 (zunächst `validated_by: []`)
@@ -428,12 +518,19 @@ des Style Guides. **Kein** eigener Top-Level-Block `live_data` – `/proc` wird 
 | `test_measure_logic` | measure_logic | Kurve (mm!), Median, IIR, Kalibrierung, Stabilität, Statistik |
 | `test_params` | params | alle SET-Schlüssel, Bereiche, Persistenz, Config-JSON |
 | `test_motion_seq` | motion_seq | Homing, Timeout, Endschalterfehler, Fahren, Profil, Messen, Stopps |
-| `test_app_logic` | app_logic | **Szenarien mit simulierter Achse**: Profilfahrt, Not-Aus, Temperatur, Watchdog, Kalibrierung |
+| `test_app_logic` | app_logic | **Szenarien mit simulierter Achse**: Profilfahrt, Not-Aus, Temperatur, Watchdog, Kalibrierung, Bedienvorrang LOCAL, STOP-Priorität, Not-Aus + Kühlungsausfall gleichzeitig |
+| `test_display_logic` | display_logic | Bildschirmmodus, „Ursache aktiv“, ACK 1 s halten, Flankenerkennung |
 | `test_proc_json` | proc_json | exaktes /proc-Format, Worst Case < 512 Byte |
 | `test_api_parse` | api_parse | Parser, Typen, Fehlerfälle |
 
 Alle Tests sind **eingefroren** und gegen eine Referenzimplementierung geprüft
-(189 Testfälle, alle grün; Mutationstests bestätigen die Trennschärfe).
+(216 Testfälle, alle grün; Mutationstests bestätigen die Trennschärfe).
+
+**Regressionsregel (DoD jedes Sprints):** Alle Suiten, die vor dem Sprint grün waren,
+sind danach weiterhin grün (`pio test -e native` vollständig, nicht nur die Sprint-Suite).
+
+Zusätzlich am Gerät: `scripts/stress_api.py` (STOP-Latenz, Queue-Flut, 10-min-Dauerlauf,
+Bedienvorrang).
 
 ### On-Target – `pio test -e esp32-test` (nur nach Freigabe)
 `test/embedded/test_hardware`: CRC, Eingänge, Sensor, Ausgänge, NVS, 2-mm-Fahrt.
@@ -470,7 +567,7 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 | S2.5 | hal_io, motion_drv | Smoketest-Funktionen über HAL | 👤 + 🤖 | 2 h |
 | S2.6 | control_task + main zusammenführen | firmware baut; INIT/MOVE/Not-Aus per Serial | 👤 + 🤖 | 2 h |
 | S3 | proc_json, api_parse, log_buffer, http_server | test_proc_json, test_api_parse; curl-Tests | 🤖 Qwen | 2–3 h |
-| S4 | index.html, settings.html, display.cpp | Sichtprüfung, Bedienung | 🤖 Qwen | 3–4 h |
+| S4a/b | index.html, settings.html (4a); display_logic.cpp, display.cpp (4b) | test_display_logic; Sichtprüfung, Bedienung | 🤖 Qwen | 3–4 h |
 | S5 | Integration, Abnahme | Kapitel 10 | 👤 | 3–4 h |
 | S6 | add.json, doc.md, Python-Demos | KI-Validierung | 👤 + Claude | 2–3 h |
 
@@ -505,6 +602,10 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 - [ ] Kommunikations-Watchdog: Python-Skript während Profilfahrt abbrechen → `COMM_TIMEOUT` nach 5 s
 - [ ] Nach ACK kein automatischer Wiederanlauf; nach Not-Aus in Fahrt erneutes INIT nötig
 - [ ] Shutter öffnet nie in der Parkzone
+- [ ] Not-Aus und `cooling_flow = false` gleichzeitig → `FAULT ESTOP`
+- [ ] STOP per API während Profilfahrt: Antwort < 150 ms, Achse steht < 1 s (`stress_api.py latency`)
+- [ ] Zykluszeit: `cycle_max_us` < 500, `overruns` = 0 nach 10 min (`stress_api.py soak`)
+- [ ] Queue-Flut (200 SET): nur OK/BUSY, alle CRC gültig (`stress_api.py flood`)
 
 **5. REST-API + /proc**
 - [ ] Alle Endpunkte < 1 s
@@ -516,6 +617,10 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 - [ ] Werte, Zustand, Indikatoren korrekt, kein Flackern
 - [ ] Positionsbalken synchron
 - [ ] Alle 5 Tasten wirken (lokal, ohne WLAN)
+- [ ] Fehlerfall: alle Tasten ausgeblendet, nur ACK-Fläche; grau solange Not-Aus gedrückt
+- [ ] ACK erst nach 1 s Halten; Finger, der beim Fehler schon auf STOP lag, quittiert nicht
+- [ ] Bedienvorrang: nach Display-Befehl API `HV_ON` → `−10`, API `STOP` → OK;
+      30 s nach letztem Display-Befehl (Achse steht, HV aus) wieder frei (`stress_api.py local`)
 
 **7. Weboberfläche**
 - [ ] Live-Daten ≤ 500 ms, Zeitreihe 100 Punkte
@@ -544,9 +649,11 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 | Toolchain | pioarduino | ✅ |
 | Mikroschritt | 1/16 | ✅ |
 | Architektur | Single-Writer, reine Logik | ✅ |
-| /proc-Schema, API, CRC, Fehlercodes | CONTRACT V1.0 | ✅ (Review) |
+| /proc-Schema, API, CRC, Fehlercodes | CONTRACT V1.1 | ✅ |
+| Bedienvorrang Display, Haltezeit | LOCAL, 30 s | ✅ |
+| Quittierung am Display | eine ACK-Fläche, 1 s halten | ✅ |
 | i2so → Slot-Zuordnung | Smoketest `scan` | Offen (0a) |
 | Display-/Touch-Pins, Farbreihenfolge | Smoketest | Offen (0a) |
 | ADC am Z--Eingang (Pull-up?) | Smoketest 3.2 | Offen (0a) |
-| Autonomy-Level im ADD | bewusste Wahl in S6 | Offen |
+| Autonomy-Level im ADD | konzeptionell Level 2, Scores in S6 | Offen (S6) |
 | Python-Demo-Skripte | S6 | Offen |

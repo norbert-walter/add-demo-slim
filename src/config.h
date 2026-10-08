@@ -91,6 +91,8 @@
 #define ADC_SAMPLES          16     // per measurement, median-mean discards 4 + 4
 #define ADC_DISCARD          4
 #define DISPLAY_PERIOD_MS    200
+#define DISPLAY_TOUCH_POLL_MS 20    // V1.1: touch polling (ACK long press, edge detection)
+#define ACK_HOLD_MS          1000   // V1.1: ACK area must be held this long
 #define WDT_TIMEOUT_S        10
 #define COMM_TIMEOUT_MS      5000
 #define BEEP_MS              80
@@ -106,6 +108,7 @@
 #define NET_TASK_STACK       8192
 #define STEPPER_TASK_CORE    1      // FastAccelStepper engine.init(core)
 #define CMD_QUEUE_LEN        8
+#define CMD_PRIO_QUEUE_LEN   4      // V1.1: STOP / HV_OFF / SHUTTER_CLOSE
 
 // =========================================================================
 // Communication / storage
