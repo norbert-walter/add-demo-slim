@@ -26,8 +26,9 @@
 
 struct MotionConfig {
     float    steps_per_mm      = 3200.0f / 42.0f;  ///< 200 steps * 16 microsteps / 42 mm
-    float    axis_max_mm       = 240.0f;
-    float    park_pos_mm       = 5.0f;    ///< measuring positions must be > park
+    float    axis_max_mm       = 248.0f;  ///< V1.2: forward end switch at 250 mm, 2 mm margin
+    float    park_pos_mm       = 20.0f;   ///< V1.2: park zone limit; measuring positions must be > park
+    float    park_target_mm    = 2.0f;    ///< V1.2: destination of the PARK command
     float    homing_speed      = 600.0f;  ///< mm/min
     float    pulloff_mm        = 2.0f;
     uint32_t homing_timeout_ms = 40000;   ///< whole homing sequence

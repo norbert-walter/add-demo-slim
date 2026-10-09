@@ -1,6 +1,6 @@
 /**
  * @file display.h
- * @brief Local status display + touch operation (CONTRACT V1.1 §13, Sprint S4).
+ * @brief Local status display + touch operation (CONTRACT V1.2 §13, Sprint S4).
  *
  * Runs in its own low-priority task on Core 1 (DISPLAY_PERIOD_MS), reads only
  * snapshotGet() (and wifiGetIp() for the IP line), sends commands only via
@@ -13,7 +13,10 @@
  *
  * Screen modes (screenModeOf(snapshot.state)):
  *  NORMAL  (SAFE_START, READY, RUNNING, RECOVER):
- *          status area + 5 buttons INIT · HV · MEAS · TRAV · STOP (y = 260, 96x60 each).
+ *          status area + 7 buttons at y = 260, h = 60 (V1.2):
+ *          INIT · HV · MEAS · TRAV · PARK · SERV  (64 px each, text size 2)
+ *          and STOP (x 384..479, 96 px, text size 3 – the largest target).
+ *          PARK -> Command PARK, SERV -> Command SERVICE (API names).
  *          A "LOCAL" badge is shown while snapshot.local is true.
  *          Flags interlock / cooling_flow / temp are labelled "SIM" (simulated).
  *  FAULT   (state FAULT, one cycle): button row hidden, fault banner only.

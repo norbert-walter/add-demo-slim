@@ -7,6 +7,10 @@
 > Sicherheit: `scan`, `move`, `home` können die Achse bewegen. Not-Aus in Reichweite,
 > Achse mechanisch frei, Messgut entfernt. Jeder Fahrbefehl stoppt bei Not-Aus oder Endschalter.
 
+**Vorab (09.10.2026):** Die komplette Hardware ist mit der CNC-Firmware des DLC32 vorgetestet
+(Motor, Endschalter, Not-Aus, Sensor, LEDs, Buzzer, Display, Touch). Der Smoketest bestätigt
+jetzt die Werte für **unsere** Firmware (Pegel, Slots, Kurve) – Hardwarefehler sind nicht zu erwarten.
+
 Ergebnis jeder Prüfung eintragen. Werte mit **→ config.h** werden danach in
 `src/config.h` übernommen; erst dann wird `config.h` eingefroren (Sprint 0b).
 
@@ -30,25 +34,27 @@ Ergebnis jeder Prüfung eintragen. Werte mit **→ config.h** werden danach in
 |---|---|---|---|
 | 2.1 | `watch 20`, Endschalter vorn betätigen | `limit_fwd` wechselt true/false | Pegel betätigt: ___ **→ LIMIT_ACTIVE_LEVEL** |
 | 2.2 | dito hinten | `limit_bwd` wechselt | |
-| 2.3 | Not-Aus drücken / lösen | `estop` true / false | Pegel gedrückt: ___ |
-| 2.4 | **Drahtbruch-Test:** Not-Aus-Leitung abziehen | `estop: true` (fail-safe!) | ✅/❌ – bei ❌ Öffner verdrahten |
+| 2.3 | Not-Aus drücken / lösen | `estop` true / false | Pegel gedrückt: ___ (Vortest: LOW) |
+| 2.4 | **Drahtbruch-Test:** Not-Aus-Leitung am PROBE-Stecker abziehen | Pegel wie „gedrückt“ → `estop: true` (fail-safe!) | Pegel abgezogen: ___ ✅/❌ – bei ❌ Verdrahtung ändern (Öffner), **nicht** weitermachen |
+| 2.5 | Aus 2.3/2.4 Pegel festlegen | gedrückt = abgezogen | **→ `ESTOP_ACTIVE_LEVEL`** = ___ |
 
 ## 3. Abstandssensor
 
 | # | Aktion | Erwartung | Ergebnis |
 |---|---|---|---|
-| 3.1 | Zielfläche in 40 / 100 / 200 / 300 mm, je `adc 10` | `mm` ≈ Sollwert (±10 %) | 40: ___ 100: ___ 200: ___ 300: ___ |
-| 3.2 | Multimeter direkt am Sensorausgang vs. `mv` | Abweichung < 50 mV (sonst Pull-up/Filter am Z--Eingang prüfen) | |
-| 3.3 | Rauschen: `adc 20` bei fester Distanz | Streuung < ±1 mm | |
-| 3.4 | Abstand Sensor → leere Auflage | – | ___ mm **→ Default `base_dist`** |
+| 3.1 | Nach `home` mit relativen `move` auf die Kalibrierpositionen (Achse 105 … 205 mm = 107 … 207 mm ab hinterem Schalter), je `adc 10` | `mv` ≈ Vortest (1,72 … 2,63 V); `mm` mit Kurve 121,5·V^-1,142 ≈ 65 … 40 mm (±1 mm) | 105: ___ 125: ___ 145: ___ 165: ___ 185: ___ 205: ___ |
+| 3.2 | Multimeter direkt am Sensorausgang vs. `mv` (R20 entfernt) | Abweichung < 50 mV, auch bei 2,63 V (ADC-Rand) | |
+| 3.3 | Rauschen: `adc 20` bei 145 mm | Streuung < ±0,5 mm | |
+| 3.4 | Neben dem Messgut (z. B. 40 mm) | ≈ 0,68 V (unterer Ausleger) | ___ V |
 
 ## 4. I2S-Schieberegister (wichtigster Teil)
 
 | # | Aktion | Erwartung | Ergebnis |
 |---|---|---|---|
-| 4.1 | `scan 800` – beobachten, bei welchem Slot was passiert | HV-LED (i2so.3), Buzzer (i2so.7), Motor-Enable (Motor wird fest, i2so.0), Step (ein Schritt hörbar, i2so.1), Dir (i2so.2) | HV-LED Slot: ___ Buzzer Slot: ___ Enable Slot: ___ |
+| 4.1 | `scan 800` – beobachten, bei welchem Slot was passiert | Buzzer (i2so.7), Motor-Enable (Motor wird fest, i2so.0), Step (ein Schritt hörbar, i2so.1), Dir (i2so.2). HV-LED ist jetzt GPIO 4 (nicht im Scan) | Buzzer Slot: ___ Enable Slot: ___ Step Slot: ___ |
 | 4.2 | Formel ableiten | Slot = f(i2so) | **→ `I2SO_TO_SLOT(n)`** = ___ |
-| 4.3 | Nach Anpassung neu flashen: `hv 1`, `hv 0`, `beep 300` | LED / Buzzer reagieren | |
+| 4.3 | Nach Anpassung neu flashen: `beep 300` | Buzzer piept | |
+| 4.4 | `hv 1`, `hv 0`, `shutter 1`, `shutter 0` | grüne LED (GPIO 4) / rote LED (GPIO 32) folgen; nach Reset beide aus | |
 
 ## 5. Antrieb
 
@@ -60,6 +66,7 @@ Ergebnis jeder Prüfung eintragen. Werte mit **→ config.h** werden danach in
 | 5.4 | `move 50 3000`, `move -50 3000` | läuft ruhig, kein Schrittverlust (Position danach wie vorher) | |
 | 5.5 | Beschleunigung: ggf. `ACCEL_MM_S2` anpassen | kein Ruckeln | **→ `ACCEL_MM_S2`** = ___ |
 | 5.6 | `home` | stoppt am hinteren Endschalter (`reason: home_switch`) | Dauer: ___ ms |
+| 5.6a | Nach `home` (steht am hinteren Schalter): `move 250 1500` (`move` ist relativ; 250 mm ab Schalter = Achse 248 mm) | vorderer Endschalter löst **nicht** aus; Abstand zum Schalter ≈ 2 mm | ✅/❌ |
 | 5.7 | Not-Aus während `move 100 300` | sofortiger Stopp, `reason: estop` | |
 
 ## 6. Display und Touch

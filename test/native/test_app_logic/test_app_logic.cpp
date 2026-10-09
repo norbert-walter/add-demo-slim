@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.1) – Sprint S2.4 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.2) – Sprint S2.4 must make these pass. Do not modify.
 // Covers: src/logic/app_logic.cpp (CONTRACT §10) – complete scenarios with a
 // simulated axis (fake_axis.h) and a simulated distance sensor.
 #include <unity.h>
@@ -17,13 +17,17 @@ static bool      heartbeat;      // simulated API client sends a packet every se
 static HwOutputs last_out;
 static int       beeps, persists;
 
-// ---- simulated sensor: base 200 mm, staircase material 40..200 mm ---------------
-static float thickAt(float pos_mm) {
-    if (pos_mm < 40.0f || pos_mm >= 200.0f) return 0.0f;
-    return 5.0f * (1 + (int)((pos_mm - 40.0f) / 40.0f));   // 5,10,15,20 mm
+// ---- simulated sensor = demo geometry (Vortest 2026-10-09, axis coordinates) -------------
+// Stair body 95..215 mm, six 20 mm steps centred at 105, 125 ... 205 mm with sensor
+// distances 65, 60 ... 40 mm. Beside the material the sensor sees the lower boom at 135 mm.
+// Thickness with base_dist 70: 5, 10 ... 30 mm.
+static float distAt(float axis_mm) {
+    if (axis_mm < 95.0f || axis_mm >= 215.0f) return 135.0f;
+    return 65.0f - 5.0f * (float)(int)((axis_mm - 95.0f) / 20.0f);
 }
-static float mvForDist(float d) { return 1000.0f * powf(d / 120.8f, 1.0f / -1.058f); }
-static float sensorMv() { return mvForDist(200.0f - thickAt((float)(A.phys_steps / C.motion.steps_per_mm))); }
+static float mvForDist(float d) { return 1000.0f * powf(d / C.sensor.k_mm, 1.0f / C.sensor.exponent); }
+// axis 0 = phys 2 mm (home pull-off); the sensor moves with the carriage
+static float sensorMv() { return mvForDist(distAt((float)(A.phys_steps / C.motion.steps_per_mm) - 2.0f)); }
 
 static HwInputs hw() {
     HwInputs h;
@@ -118,7 +122,8 @@ void test_boot_state() {
     TEST_ASSERT_FALSE(p.motion.homed);
     TEST_ASSERT_TRUE(p.motion.state == MotionState::IDLE);
     TEST_ASSERT_TRUE(p.measure.in_range);
-    TEST_ASSERT_FLOAT_WITHIN(1.0f, 190.0f, p.measure.dist);   // axis at 100 mm: 10 mm step
+    TEST_ASSERT_FLOAT_WITHIN(1.0f, 65.0f, p.measure.dist);    // axis at ~98 mm: first step (65 mm)
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 5.0f, p.measure.thick);
     TEST_ASSERT_FALSE(p.measure.valid);
     TEST_ASSERT_FALSE(p.safety.comm_armed);
 }
@@ -172,21 +177,71 @@ void test_flags_not_persisted_params_persisted() {
 }
 void test_shutter_manual_open_close() {
     running();
-    API(ApiError::PRECONDITION, send(CmdId::SHUTTER_OPEN));   // park position 0 mm
-    Command m = mk(CmdId::MOVE); m.has_pos = true; m.pos = 50; m.has_speed = true; m.speed = 3000;
+    API(ApiError::PRECONDITION, send(CmdId::SHUTTER_OPEN));   // park zone (0 mm)
+    Command m = mk(CmdId::MOVE); m.has_pos = true; m.pos = 145; m.has_speed = true; m.speed = 3000;
     API(ApiError::OK, send(m));
-    run(2000);
-    API(ApiError::OK, send(CmdId::SHUTTER_OPEN));
+    run(4000);
+    API(ApiError::PRECONDITION, send(CmdId::SHUTTER_OPEN));   // V1.2: material zone, manual open not allowed
+    m.pos = 50;
+    API(ApiError::OK, send(m));
+    run(3000);
+    API(ApiError::OK, send(CmdId::SHUTTER_OPEN));             // service zone
     TEST_ASSERT_TRUE(last_out.shutter_open);
     TEST_ASSERT_TRUE(proc().measure.valid);
     API(ApiError::OK, send(CmdId::SHUTTER_CLOSE));
     TEST_ASSERT_FALSE(last_out.shutter_open);
 }
 
+// ---- V1.2: PARK and SERVICE -----------------------------------------------------------------
+void test_service_moves_to_maint_pos_and_allows_manual_shutter() {
+    running();
+    API(ApiError::OK, send(CmdId::SERVICE));
+    TEST_ASSERT_TRUE(S.comm_armed);                           // motion started from the API
+    run(4000);
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 40.0f, proc().motion.pos);
+    API(ApiError::OK, send(CmdId::SHUTTER_OPEN));
+    TEST_ASSERT_TRUE(last_out.shutter_open);
+    API(ApiError::OK, setNum("maint_pos", 55));               // customer-defined position
+    API(ApiError::OK, send(CmdId::SERVICE));
+    run(2000);
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 55.0f, proc().motion.pos);
+    API(ApiError::BAD_PARAM, setNum("maint_pos", 61));        // limited to the service zone
+    API(ApiError::BAD_PARAM, setNum("maint_pos", 20));
+}
+void test_park_moves_to_2mm_and_closes_shutter() {
+    running();
+    API(ApiError::OK, send(CmdId::SERVICE));
+    run(4000);
+    API(ApiError::OK, send(CmdId::SHUTTER_OPEN));
+    TEST_ASSERT_TRUE(last_out.shutter_open);
+    API(ApiError::OK, send(CmdId::PARK));
+    bool closed_before_park_zone_left = true;
+    for (int i = 0; i < 4000; ++i) {
+        cycle();
+        if (last_out.shutter_open && proc().motion.pos <= C.safety.park_pos_mm) closed_before_park_zone_left = false;
+    }
+    TEST_ASSERT_TRUE(closed_before_park_zone_left);           // never open inside the park zone
+    TEST_ASSERT_FALSE(last_out.shutter_open);
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 2.0f, proc().motion.pos);
+    TEST_ASSERT_TRUE(last_out.hv_on);                         // parking alone does not switch HV off
+    STATE(SafetyState::RUNNING);
+}
+void test_park_and_service_gate_and_local() {
+    API(ApiError::STATE, send(CmdId::PARK));                  // SAFE_START: not homed
+    API(ApiError::STATE, send(CmdId::SERVICE));
+    homeAndReady();
+    API(ApiError::OK, send(CmdId::SERVICE, CmdSource::LOCAL));
+    TEST_ASSERT_FALSE(S.comm_armed);
+    API(ApiError::LOCAL_CONTROL, send(CmdId::PARK));          // remote motion blocked while LOCAL
+    API(ApiError::LOCAL_CONTROL, send(CmdId::SERVICE));
+    TEST_ASSERT_TRUE(appLocalBlocksApi(CmdId::PARK));
+    TEST_ASSERT_TRUE(appLocalBlocksApi(CmdId::SERVICE));
+}
+
 // ---- traverse scenario --------------------------------------------------------------------
 void test_traverse_auto_shutter_and_statistics() {
     running();
-    API(ApiError::OK, traverse(10, 230, 3000));
+    API(ApiError::OK, traverse(60, 240, 3000));               // default profile of the demo
     TEST_ASSERT_TRUE(proc().motion.mode == OpMode::TRAVERSE);
     bool sawOpen = false, sawOpenInPark = false;
     for (int i = 0; i < 8000; ++i) {
@@ -204,27 +259,27 @@ void test_traverse_auto_shutter_and_statistics() {
     TEST_ASSERT_TRUE(last_out.hv_on);            // HV stays on
     ProcData p = proc();
     TEST_ASSERT_TRUE(p.motion.mode == OpMode::NONE);
-    TEST_ASSERT_FLOAT_WITHIN(0.1f, 230.0f, p.motion.pos);
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 240.0f, p.motion.pos);
     TEST_ASSERT_TRUE(p.measure.n > 50);          // samples only on material
-    TEST_ASSERT_FLOAT_WITHIN(1.5f, 12.5f, p.measure.avg);   // mean of 5/10/15/20 mm steps
+    TEST_ASSERT_FLOAT_WITHIN(1.5f, 17.5f, p.measure.avg);   // mean of the 5 ... 30 mm steps
     STATE(SafetyState::RUNNING);
 }
 void test_traverse_uses_param_defaults() {
     running();
-    API(ApiError::OK, setNum("traverse_start", 20));
-    API(ApiError::OK, setNum("traverse_end", 30));
+    API(ApiError::OK, setNum("traverse_start", 30));
+    API(ApiError::OK, setNum("traverse_end", 40));
     API(ApiError::OK, setNum("traverse_speed", 3000));
     API(ApiError::OK, send(CmdId::START_TRAVERSE));
     run(3000);
-    TEST_ASSERT_FLOAT_WITHIN(0.1f, 30.0f, proc().motion.pos);
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 40.0f, proc().motion.pos);
 }
 void test_traverse_rejected_in_ready() {
     homeAndReady();
-    API(ApiError::STATE, traverse(10, 230, 200));
+    API(ApiError::STATE, traverse(30, 240, 200));
 }
 void test_stop_during_traverse_closes_shutter() {
     running();
-    API(ApiError::OK, traverse(10, 230, 600));
+    API(ApiError::OK, traverse(30, 240, 600));
     run(2000);
     TEST_ASSERT_TRUE(last_out.shutter_open);
     API(ApiError::OK, send(CmdId::STOP));
@@ -235,7 +290,7 @@ void test_stop_during_traverse_closes_shutter() {
 }
 void test_measure_mode_holds_and_averages() {
     running();
-    Command m = mk(CmdId::START_MEASURE); m.has_pos = true; m.pos = 130;   // 15 mm step
+    Command m = mk(CmdId::START_MEASURE); m.has_pos = true; m.pos = 145;   // normal position: 55 mm -> 15 mm
     API(ApiError::OK, send(m));
     run(10000);
     ProcData p = proc();
@@ -249,7 +304,7 @@ void test_measure_mode_holds_and_averages() {
 // ---- safety scenarios ------------------------------------------------------------------------
 void test_estop_during_traverse() {
     running();
-    API(ApiError::OK, traverse(10, 230, 600));
+    API(ApiError::OK, traverse(30, 240, 600));
     run(2000);
     int fs = A.force_stops;
     estop = true;
@@ -285,7 +340,7 @@ void test_temp_fault_while_idle_keeps_reference() {
 }
 void test_temp_warning_band_drops_hv_and_stops_traverse() {
     running();
-    API(ApiError::OK, traverse(10, 230, 600));
+    API(ApiError::OK, traverse(30, 240, 600));
     run(2000);
     API(ApiError::OK, setNum("temp", 31.0));
     run(3);
@@ -297,7 +352,7 @@ void test_temp_warning_band_drops_hv_and_stops_traverse() {
 }
 void test_hv_off_during_traverse_stops_motion() {
     running();
-    API(ApiError::OK, traverse(10, 230, 600));
+    API(ApiError::OK, traverse(30, 240, 600));
     run(2000);
     API(ApiError::OK, send(CmdId::HV_OFF));
     run(3);
@@ -307,7 +362,7 @@ void test_hv_off_during_traverse_stops_motion() {
 }
 void test_comm_timeout_without_heartbeat() {
     running();
-    API(ApiError::OK, traverse(10, 230, 300));
+    API(ApiError::OK, traverse(30, 240, 300));
     heartbeat = false;
     run(5100);
     TEST_ASSERT_TRUE(S.safety.state == SafetyState::FAULT || S.safety.state == SafetyState::WAIT_ACK);
@@ -320,7 +375,7 @@ void test_comm_timeout_without_heartbeat() {
 }
 void test_heartbeat_keeps_traverse_alive() {
     running();
-    API(ApiError::OK, traverse(10, 230, 600));
+    API(ApiError::OK, traverse(30, 240, 600));
     run(15000);                                      // heartbeat every second
     STATE(SafetyState::RUNNING);
     TEST_ASSERT_EQUAL_INT(0, (int)proc().err);
@@ -360,7 +415,7 @@ void test_calib_capture_requires_stability() {
     API(ApiError::NOT_STABLE, calib(CalibAction::NEAR));
     run(700);
     API(ApiError::OK, calib(CalibAction::NEAR));
-    TEST_ASSERT_FLOAT_WITHIN(0.5f, 200.0f, S.params.calib.near_raw);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 135.0f, S.params.calib.near_raw);   // at 0 mm: lower boom
 }
 void test_calib_save_validation_and_reset() {
     homeAndReady();
@@ -379,7 +434,7 @@ void test_calib_base_sets_base_dist() {
     run(700);
     API(ApiError::OK, setNum("base_dist", 250));
     API(ApiError::OK, calib(CalibAction::BASE));
-    TEST_ASSERT_FLOAT_WITHIN(0.5f, 200.0f, S.params.base_dist);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 135.0f, S.params.base_dist);       // at 0 mm: lower boom
 }
 void test_calib_busy_during_motion() {
     homeAndReady();
@@ -452,7 +507,7 @@ void test_local_command_blocks_api_start_commands() {
     API(ApiError::LOCAL_CONTROL, send(CmdId::INIT));
     API(ApiError::LOCAL_CONTROL, send(moveCmd(50, 600, CmdSource::API)));
     API(ApiError::LOCAL_CONTROL, send(CmdId::START_MEASURE));
-    API(ApiError::LOCAL_CONTROL, traverse(10, 230, 600));
+    API(ApiError::LOCAL_CONTROL, traverse(30, 240, 600));
     API(ApiError::LOCAL_CONTROL, send(CmdId::SHUTTER_OPEN));
     API(ApiError::LOCAL_CONTROL, calib(CalibAction::RESET));
     API(ApiError::LOCAL_CONTROL, send(CmdId::REBOOT));
@@ -509,7 +564,7 @@ void test_local_held_until_local_motion_ends() {
 }
 void test_local_takes_over_remote_operation() {
     running();
-    API(ApiError::OK, traverse(10, 230, 300));
+    API(ApiError::OK, traverse(30, 240, 300));
     TEST_ASSERT_TRUE(S.comm_armed);
     run(1000);
     API(ApiError::OK, send(CmdId::STOP, CmdSource::LOCAL));
@@ -518,7 +573,7 @@ void test_local_takes_over_remote_operation() {
     heartbeat = false;
     run(6000);
     TEST_ASSERT_EQUAL_INT(0, (int)proc().err);
-    API(ApiError::LOCAL_CONTROL, traverse(10, 230, 300));
+    API(ApiError::LOCAL_CONTROL, traverse(30, 240, 300));
 }
 void test_api_stop_allowed_during_local_operation() {
     running();
@@ -546,7 +601,7 @@ void test_local_ack_in_fault() {
 void test_stop_executes_in_first_cycle_during_traverse() {
     running();
     for (int k = 0; k < 25; ++k) {                           // STOP at many different sequencer phases
-        API(ApiError::OK, traverse(10, 230, 3000));
+        API(ApiError::OK, traverse(30, 240, 3000));
         run((uint32_t)(k * 211));
         Command c = mk(CmdId::STOP); ApiError r = ApiError::UNKNOWN_CMD;
         TEST_ASSERT_TRUE_MESSAGE(cycle(&c, &r), "STOP deferred");   // never waits for a free cycle
@@ -579,7 +634,7 @@ static bool cycleStopOnRequest(bool& executed, ApiError& res, DrvOp& tick_op, Dr
 }
 void test_stop_executed_in_cycle_with_driver_request() {
     running();
-    API(ApiError::OK, traverse(10, 230, 3000));
+    API(ApiError::OK, traverse(30, 240, 3000));
     bool executed = false; ApiError r = ApiError::UNKNOWN_CMD; DrvOp t = DrvOp::NONE, f = DrvOp::NONE;
     bool hit = false;
     for (int i = 0; i < 20000 && !hit; ++i) hit = cycleStopOnRequest(executed, r, t, f);
@@ -595,7 +650,7 @@ void test_stop_executed_in_cycle_with_driver_request() {
 }
 void test_stop_overrides_pending_move_request() {
     running();
-    API(ApiError::OK, traverse(10, 230, 600));
+    API(ApiError::OK, traverse(30, 240, 600));
     run(500);
     HwOutputs out; out.drv.op = DrvOp::MOVE_TO; out.drv.target_steps = 12345;
     API(ApiError::OK, appCommand(S, mk(CmdId::STOP), hw(), C, out));
@@ -651,7 +706,7 @@ void test_prio_latch_order_coalesce_and_source() {
 // All pending priority commands in ONE cycle (control task step 3a).
 void test_all_priority_commands_in_one_cycle() {
     running();
-    API(ApiError::OK, traverse(10, 230, 600));
+    API(ApiError::OK, traverse(30, 240, 600));
     run(2000);
     TEST_ASSERT_TRUE(last_out.shutter_open);
     now++; A.step(1);
@@ -672,7 +727,7 @@ void test_all_priority_commands_in_one_cycle() {
 // ---- V1.1: concurrent faults -------------------------------------------------------------
 void test_estop_and_cooling_loss_simultaneous() {
     running();
-    API(ApiError::OK, traverse(10, 230, 600));
+    API(ApiError::OK, traverse(30, 240, 600));
     run(2000);
     estop = true;
     S.flags.cooling_flow = false;                            // same cycle (only the test may do this)
@@ -693,6 +748,9 @@ int main(int, char**) {
     RUN_TEST(test_hv_on_needs_flags);
     RUN_TEST(test_flags_not_persisted_params_persisted);
     RUN_TEST(test_shutter_manual_open_close);
+    RUN_TEST(test_service_moves_to_maint_pos_and_allows_manual_shutter);
+    RUN_TEST(test_park_moves_to_2mm_and_closes_shutter);
+    RUN_TEST(test_park_and_service_gate_and_local);
     RUN_TEST(test_traverse_auto_shutter_and_statistics);
     RUN_TEST(test_traverse_uses_param_defaults);
     RUN_TEST(test_traverse_rejected_in_ready);

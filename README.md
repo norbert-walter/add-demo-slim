@@ -8,7 +8,7 @@ agentenbasierte Entwicklung mit code-server + Cline.
 
 | Pfad | Inhalt |
 |---|---|
-| `docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.5.md` | Anforderungen (deutsch) |
+| `docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.6.md` | Anforderungen (deutsch) |
 | `docs/CONTRACT.md` | verbindlicher Schnittstellenvertrag (englisch, für Agenten) |
 | `docs/Sprint_Prompts_Demoanlage_ADD_Slim_V2.md` | Prompts und Review-Checklisten je Sprint |
 | `docs/Smoketest_Protokoll.md` | Sprint 0a an der Hardware |
@@ -18,7 +18,7 @@ agentenbasierte Entwicklung mit code-server + Cline.
 | `src/app/*` | Snapshot, Command-Queue, Control-Task (vorgegeben) |
 | `src/hal/*.h`, `src/system/*.h`, `src/comm/*.h`, `src/display/*.h` | Hardware-Verträge |
 | `src/smoketest/smoketest.cpp` | Sprint 0a |
-| `test/native/*` | eingefrorene Host-Tests (227 Testfälle, 11 Suiten; `test_command_queue` braucht einen Linux/macOS-Host mit pthreads) |
+| `test/native/*` | eingefrorene Host-Tests (235 Testfälle, 11 Suiten; `test_command_queue` braucht einen Linux/macOS-Host mit pthreads) |
 | `test/embedded/*` | On-Target-Tests (S5) |
 | `scripts/serial_cmd.py` | nicht-interaktiver Serial-Client (auch für Cline) |
 | `scripts/add_client.py` | REST-Client mit CRC-Rahmenregel (Referenz) |
@@ -38,7 +38,7 @@ pio device monitor -e smoketest           # "help"
 | Sprint | Dateien | Stand |
 |---|---|---|
 | 0a | smoketest | bereit zum Flashen |
-| 0b | Header, CONTRACT V1.1, Tests, app/* | erledigt (V1.1: LOCAL-Vorrang, STOP-Priorität, Fehlerbild) |
+| 0b | Header, CONTRACT V1.2, Tests, app/* | erledigt (V1.2: Geometrie aus dem Hardware-Vortest, PARK/SERVICE, Wartungszone) |
 | S1 | system, nvs_config, wifi_manager, log_buffer, main | offen |
 | S2.1–S2.4 | logic/*.cpp | offen (Tests rot bis Implementierung) |
 | S2.5 | hal_io, motion_drv | offen |

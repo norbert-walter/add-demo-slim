@@ -15,10 +15,12 @@
 #include "types.h"
 
 /// Sharp GP2Y0A41SK0F: dist_mm = k_mm * V^exponent with V in volt.
-/// (The datasheet-derived fit 12.08 * V^-1.058 yields CENTIMETRES; k_mm = 120.8.)
+/// V1.2: fitted to the six measured points of the demo (40..65 mm at 2.63..1.72 V,
+/// max. error 0.6 mm). Datasheet fit 120.8 * V^-1.058 was ~3 mm too high there.
+/// Outside 40..65 mm the curve is only indicative (135 mm reads ~189 mm).
 struct SensorCurve {
-    float k_mm     = 120.8f;
-    float exponent = -1.058f;
+    float k_mm     = 121.5f;
+    float exponent = -1.142f;
     float min_mm   = 40.0f;   ///< valid range of the sensor
     float max_mm   = 300.0f;
 };
@@ -50,11 +52,11 @@ float iirUpdate(Iir& f, float x);  ///< returns the new y
 void  iirReset(Iir& f);            ///< next update re-initialises
 
 /// 2-point calibration. raw = uncalibrated reading, ref = true distance of the target.
-struct CalibPoints {
-    float near_raw = 50.0f;
-    float near_ref = 50.0f;
-    float far_raw  = 200.0f;
-    float far_ref  = 200.0f;
+struct CalibPoints {             ///< V1.2 defaults: identity at the demo's working range
+    float near_raw = 40.0f;
+    float near_ref = 40.0f;
+    float far_raw  = 65.0f;
+    float far_ref  = 65.0f;
 };
 
 /**

@@ -22,8 +22,12 @@
 
 // Active levels. VERIFY(0a) with the real switches.
 #define LIMIT_ACTIVE_LEVEL   LOW  // end switch pressed -> LOW
-// E-stop must be fail-safe: normally-closed contact to GND.
-// Contact closed (normal operation) -> LOW; pressed OR wire broken -> HIGH.
+// E-stop must be fail-safe: pressed AND wire broken must both read as "active".
+// Variant A: NC contact to GND, board pull-up   -> normal LOW,  active HIGH.
+// Variant B: NC contact from 3.3 V, pull-down   -> normal HIGH, active LOW.
+// Pre-test (CNC firmware) reported "LOW = E-stop active" -> variant B only if the
+// wire-break test (Smoketest 2.4) shows "active" with the cable unplugged.
+// VERIFY(0a) – never set this without the wire-break test.
 #define ESTOP_ACTIVE_LEVEL   HIGH
 
 #define INPUT_DEBOUNCE_MS    5    // limit switches and E-stop
@@ -31,7 +35,8 @@
 // =========================================================================
 // Direct GPIO outputs
 // =========================================================================
-#define PIN_SHUTTER          32   // SPINDLE/TTL connector: shutter LED red (HIGH = open)
+#define PIN_SHUTTER          32   // SPINDLE/TTL connector: shutter LED red (HIGH = open), 20 mA
+#define PIN_HV_LED            4   // V1.2: HV LED green (HIGH = on), 20 mA – moved from i2so.3 (verified)
 
 // =========================================================================
 // I2S shift register (74HC595 chain) – driven by FastAccelStepper I2S_MUX
@@ -45,11 +50,10 @@
 #define I2SO_SHARED_EN        0   // stepper enable, active LOW
 #define I2SO_X_STEP           1
 #define I2SO_X_DIR            2
-#define I2SO_HV_LED           3   // Z_STEP header -> HV LED green
 #define I2SO_BUZZER           7   // BEEPER
 
 // Mapping FluidNC i2so.N -> FastAccelStepper mux slot (0..31).
-// VERIFY(0a): determined with the smoketest command "scan". Candidates:
+// VERIFY(0a): determined with the smoketest command "scan" (buzzer, enable, step). Candidates:
 //   (n)  (31 - (n))  ((n) + 8)  ((n) + 16)  ((n) + 24)
 #define I2SO_TO_SLOT(n)      (n)
 
@@ -57,11 +61,13 @@
 
 // =========================================================================
 // Stepper drive (TMC2209, microstep jumper 1/16, rack 42 mm per revolution)
+// Axis 0..248 mm (0 = 2 mm in front of the backward switch, forward switch at 250 mm)
 // =========================================================================
 #define MOTOR_FULL_STEPS     200
 #define MICROSTEPS           16
 #define MM_PER_REV           42.0f
 #define STEPS_PER_MM         ((MOTOR_FULL_STEPS * MICROSTEPS) / MM_PER_REV)   // 76.19
+// Motor Nanotec ST4118L0804-A (0.8 A), TMC2209 standalone, current set to 0.8 A (verified)
 #define ACCEL_MM_S2          500.0f // VERIFY(0a): smooth, no step loss
 
 // =========================================================================

@@ -3,8 +3,8 @@
  * @brief Persistence of Params in NVS via Preferences (FROZEN CONTRACT §9, Sprint S1).
  *
  * Namespace NVS_NAMESPACE. One key per Params field (short keys, max 15 chars):
- *   mpos, tstart, tend, tspeed, edge, base, cnraw, cnref, cfraw, cfref, ssid, pass,
- *   plus "ver" (uint8, schema version = 1).
+ *   mpos, maint, tstart, tend, tspeed, edge, base, cnraw, cnref, cfraw, cfref, ssid, pass,
+ *   plus "ver" (uint8, schema version = 2; V1.2 geometry – older data -> defaults).
  * Safety flags (interlock, cooling_flow, temp) are NEVER stored.
  * Called only from setup() and from the network task (Core 0) – never from
  * the control task (flash writes take milliseconds).

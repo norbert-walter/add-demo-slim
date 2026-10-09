@@ -3,7 +3,7 @@
 ## Project
 Firmware for the ADD Demo System: ESP32 (MKS DLC32 V2.1), PlatformIO,
 **pioarduino = Arduino Core 3.x on ESP-IDF 5.x**. Contract: docs/CONTRACT.md.
-Requirements (German): docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.5.md.
+Requirements (German): docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.6.md.
 
 ## Hard rules
 1. FROZEN files – never modify, rename or delete:

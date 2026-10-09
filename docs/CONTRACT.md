@@ -1,7 +1,22 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.1 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-08
-**Basis:** Pflichtenheft Demoanlage ADD Slim V1.5
+**Version:** 1.2 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-09
+**Basis:** Pflichtenheft Demoanlage ADD Slim V1.6
+
+### Changes 1.1 → 1.2 (hardware pre-test 2026-10-09, CONTRACT §14)
+
+| # | Change | Where |
+|---|---|---|
+| 1 | Axis 0 … **248 mm** (forward switch at 250 mm) | §2, §5.2, §8 |
+| 2 | Park zone **≤ 20 mm**; park position 2 mm; new command **`PARK`** | §2, §5.2, §6 |
+| 3 | Service zone 20 … 60 mm; service position `maint_pos` (default 40, 21 … 60); new command **`SERVICE`**; manual `SHUTTER_OPEN` **only in the service zone**; automation uses the new event `SHUTTER_AUTO_OPEN` | §2, §5.2, §6.1, §6.4, §9 |
+| 4 | Sensor curve fitted to the demo: `121.5 · V^-1.142` (max. 0.6 mm error at 40 … 65 mm) | §7.1 |
+| 5 | Thickness reference `base_dist` = 70 mm (virtual plane at the material edge); calibration defaults 40/65 mm | §7.2, §7.3, §9 |
+| 6 | Defaults: `measure_pos` 145, `traverse_start/end` 60/240 | §9 |
+| 7 | HV LED on **GPIO 4** (no longer an I2S bit) | §11 |
+| 8 | Display: 7 buttons `INIT · HV · MEAS · TRAV · PARK · SERV · STOP` | §13 |
+| 9 | NVS schema version 2 | §12 |
+
 
 ### Changes 1.0 → 1.1
 
@@ -82,8 +97,18 @@ C++17 functions without Arduino/ESP-IDF/FreeRTOS. It is tested on the host
   `STEPS_PER_MM = 200 · 16 / 42 = 76.19` (TMC2209 jumper 1/16).
 - Speeds: **mm/min** in API; **steps/s (Hz)** towards the driver.
 - Time: `uint32_t` milliseconds (`millis()`), all comparisons wrap-around safe.
-- Position 0 = 2 mm in front of the backward end switch (after homing). Axis 0 … 240 mm.
-- Park zone: position ≤ 5.0 mm. The shutter is never open in the park zone.
+- Position 0 = 2 mm in front of the backward end switch (after homing). Axis 0 … 248 mm
+  (forward end switch at 250 mm).
+
+| Zone (axis mm) | Range | Shutter | Named position |
+|---|---|---|---|
+| Park zone | 0 … 20 | always closed | park position 2 mm (`PARK`) |
+| Service zone | > 20 … 60 | manual `SHUTTER_OPEN` allowed | `maint_pos`, default 40 mm (`SERVICE`), settable 21 … 60 |
+| Material zone | 90 … 220 (stair body, sensor distance 40 … 65 mm) | opened only by the automation during an acquisition | measuring position 145 mm (`measure_pos`) |
+| Forward end | 248 | – | forward switch at 250 mm |
+
+(The zone between 60 and 90 mm and beyond 220 mm belongs to the traverse range;
+the automation may open the shutter anywhere outside the park zone.)
 
 ---
 
@@ -229,8 +254,10 @@ because of a full normal queue (§6.7).
 | Command | Params | Allowed in | Effect |
 |---|---|---|---|
 | `INIT` | – | SAFE_START, READY | homing (run backward to switch, 2 mm pull-off, zero) → READY |
-| `MOVE` | `pos` (req.), `speed` (opt., default 1500) | READY, RUNNING | absolute move 0…240 mm, 10…3000 mm/min; requires homed |
-| `START_MEASURE` | `pos` (opt., default `measure_pos`) | RUNNING | move to pos (5 < pos ≤ 240), then stationary measurement until `STOP`; shutter opens automatically |
+| `MOVE` | `pos` (req.), `speed` (opt., default 1500) | READY, RUNNING | absolute move 0…248 mm, 10…3000 mm/min; requires homed |
+| `PARK` | – | READY, RUNNING | V1.2: move to the park position 2 mm at 1500 mm/min; requires homed; the shutter closes when entering the park zone, HV is not changed |
+| `SERVICE` | – | READY, RUNNING | V1.2: move to `maint_pos` (service zone) at 1500 mm/min; requires homed |
+| `START_MEASURE` | `pos` (opt., default `measure_pos`) | RUNNING | move to pos (20 < pos ≤ 248), then stationary measurement until `STOP`; shutter opens automatically |
 | `START_TRAVERSE` | `start`, `end`, `speed` (opt., defaults `traverse_*`) | RUNNING | approach start, traverse to end at speed; shutter opens during the run, closes at the end; HV stays on |
 | `STOP` | – | all | controlled stop; acquisition ends, shutter closes |
 | `GET_STATE` | – | all | heartbeat; reply extra `"state":"READY","sys_err":0,"local":false,"cycle_max_us":312,"period_max_us":1010,"overruns":0,"prio_lat_max_us":1450` (`stateExtraToJson`, §10) |
@@ -240,16 +267,16 @@ because of a full normal queue (§6.7).
 | `ACK` | – | WAIT_ACK | acknowledge; rejected (`PRECONDITION`) while the cause persists |
 | `HV_ON` | – | READY, RUNNING | READY → RUNNING if interlock ∧ cooling_flow ∧ temp ≤ 30 ∧ ¬E-stop |
 | `HV_OFF` | – | all | RUNNING → READY |
-| `SHUTTER_OPEN` | – | RUNNING | only if position > 5 mm |
+| `SHUTTER_OPEN` | – | RUNNING | V1.2: only in the service zone (20 < pos ≤ 60 mm), else `PRECONDITION` |
 | `SHUTTER_CLOSE` | – | all | – |
 | `REBOOT` | – | SAFE_START, READY, WAIT_ACK | restart after the reply |
 
 ### 5.3 `GET_CONFIG` extra member
 
 ```
-"config":{"measure_pos":120.0,"traverse_start":10.0,"traverse_end":230.0,"traverse_speed":200.0,
-"edge_threshold":3.0,"base_dist":200.0,"calib_near_raw":50.0,"calib_near_ref":50.0,
-"calib_far_raw":200.0,"calib_far_ref":200.0,"calib_valid":true,"interlock":false,
+"config":{"measure_pos":145.0,"maint_pos":40.0,"traverse_start":60.0,"traverse_end":240.0,
+"traverse_speed":200.0,"edge_threshold":3.0,"base_dist":70.0,"calib_near_raw":40.0,
+"calib_near_ref":40.0,"calib_far_raw":65.0,"calib_far_ref":65.0,"calib_valid":true,"interlock":false,
 "cooling_flow":false,"temp":18.0,"wifi_ssid":"","wifi_pass_set":false}
 ```
 
@@ -273,7 +300,10 @@ by `test_safety_logic` (incl. a randomised invariant test over 60 000 steps).
 - **Fault (→ FAULT → WAIT_ACK, ACK required):** E-stop · temp > 32.0 · unexpected end switch ·
   communication timeout · homing failure. Priority of the reported cause:
   ESTOP > TEMP_HIGH > MOTOR_FAULT > COMM_TIMEOUT.
-- **Shutter open (AND):** state RUNNING (implies HV on and no fault) ∧ position > 5 mm.
+- **Shutter open (AND):** state RUNNING (implies HV on and no fault) ∧ position > 20 mm
+  (outside the park zone). **Manual** `SHUTTER_OPEN` additionally requires position ≤ 60 mm
+  (service zone, V1.2); the **automation** (`SHUTTER_AUTO_OPEN`) opens anywhere outside the
+  park zone. A shutter opened in the service zone stays open when the axis leaves it.
   It closes automatically when HV drops, on any fault and when entering the park zone.
 
 ### 6.2 Transitions
@@ -283,7 +313,8 @@ by `test_safety_logic` (incl. a randomised invariant test over 60 000 steps).
 | SAFE_START | INIT done | READY | off |
 | READY | HV_ON, conditions ok | RUNNING | HV on |
 | RUNNING | HV_OFF or condition lost | READY | off |
-| RUNNING | SHUTTER_OPEN, pos > 5 | RUNNING | shutter open |
+| RUNNING | SHUTTER_OPEN, 20 < pos ≤ 60 | RUNNING | shutter open (manual) |
+| RUNNING | SHUTTER_AUTO_OPEN, pos > 20 | RUNNING | shutter open (automation) |
 | any except FAULT/WAIT_ACK | fault condition or INIT failed | FAULT | off, motor emergency stop |
 | FAULT | next cycle | WAIT_ACK | off |
 | WAIT_ACK | ACK, cause cleared | RECOVER | off |
@@ -301,12 +332,12 @@ See table in §5.2 (column "Allowed in"). Violations return `STATE`.
 ### 6.4 Shutter automation
 
 During an acquisition (traverse run or measure hold) the control logic opens the
-shutter as soon as state is RUNNING and position > 5 mm; when the acquisition
+shutter (event `SHUTTER_AUTO_OPEN`) as soon as state is RUNNING and position > 20 mm; when the acquisition
 ends (finished, STOP, fault) it closes the shutter.
 
 ### 6.5 Communication watchdog
 
-- Armed when `INIT`, `MOVE`, `START_*` or `HV_ON` is accepted **from the API**.
+- Armed when `INIT`, `MOVE`, `PARK`, `SERVICE`, `START_*` or `HV_ON` is accepted **from the API**.
   Accepted from the touch display → disarmed (local operation needs no network).
 - Disarmed automatically when the axis is idle and HV is off.
 - Armed and no valid `/api` packet for > 5 s → fault `COMM_TIMEOUT`.
@@ -320,7 +351,7 @@ priority.
 - **Enter:** every command from the display (`source = LOCAL`), also one that
   the state gate rejects, sets `local = true`, restarts the 30 s hold timer and
   disarms the communication watchdog (the operator is present).
-- **While local:** API commands `INIT, MOVE, START_MEASURE, START_TRAVERSE,
+- **While local:** API commands `INIT, MOVE, PARK, SERVICE, START_MEASURE, START_TRAVERSE,
   HV_ON, SHUTTER_OPEN, CALIB, ACK, REBOOT` → `LOCAL_CONTROL (-10)`, checked
   before the state gate. Always allowed from the API: `STOP, HV_OFF,
   SHUTTER_CLOSE` (safe direction), `SET` (fault simulation), `GET_STATE`,
@@ -405,15 +436,23 @@ radiation source; HV and shutter are LEDs.
 ### 7.1 Chain (50 Hz)
 
 16 × `analogReadMilliVolts()` → sort, drop 4 lowest + 4 highest, mean →
-`dist_raw = 120.8 · V^-1.058` (V in volt; **mm**) → IIR (α = 0.8, first value
+`dist_raw = 121.5 · V^-1.142` (V in volt; **mm**; V1.2 fit to the demo's six measured
+points 1.72 V/65 mm … 2.63 V/40 mm, max. error 0.6 mm; far values only indicative –
+the lower boom at 135 mm reads ≈ 189 mm) → IIR (α = 0.8, first value
 initialises) → 2-point calibration → `thick = max(0, base_dist − dist)` →
 `on_material = thick > edge_threshold`.
 Outside 40 … 300 mm: `in_range = false`, IIR reset, thickness 0.
 
 ### 7.2 Geometry
 
-`base_dist` = distance sensor → empty support (no material). Default 200 mm,
-measured with `CALIB base`. `edge_threshold` is a **thickness** threshold (default 3 mm).
+`thick = max(0, base_dist − dist)`. On the demo the sensor sees no support surface
+next to the material (only the lower boom at 135 mm), so `base_dist` is a
+**virtual reference plane at the material edge: 70 mm** (V1.2). The stair steps
+(65, 60 … 40 mm) then read 5, 10 … 30 mm; next to the material the thickness is 0.
+At the edges the reading changes continuously (the sensor spot is partly on the
+material); `edge_threshold` (thickness, default 3 mm) decides `on_material`.
+`CALIB base` still works where a surface is in range; on the demo `base_dist` is
+normally set with `SET`.
 
 ### 7.3 Calibration commands
 
@@ -422,7 +461,10 @@ measured with `CALIB base`. `edge_threshold` is a **thickness** threshold (defau
 | `near` / `far` | axis idle, signal stable 500 ms (±0.5 mm) | `calib_near_raw` / `calib_far_raw` = current uncalibrated value. The true distances are set with `SET calib_near_ref / calib_far_ref` |
 | `base` | idle, in range, stable | `base_dist` = current calibrated distance |
 | `save` | calibration valid (raw span ≥ 5, ref span ≥ 5, refs 40…300) | persist all parameters |
-| `reset` | idle | identity calibration (50/50, 200/200), not persisted until `save` |
+| `reset` | idle | identity calibration (40/40, 65/65), not persisted until `save` |
+
+Typical procedure on the demo: MOVE 205 (40 mm step) → `CALIB near`; MOVE 105
+(65 mm step) → `CALIB far`; `SET calib_near_ref 40`, `calib_far_ref 65` (defaults); `CALIB save`.
 
 ---
 
@@ -453,14 +495,15 @@ switch outside homing) → force stop, reference lost, `MOTOR_FAULT`
 | `interlock` | bool (or 0/1) | false | – | **no** |
 | `cooling_flow` | bool (or 0/1) | false | – | **no** |
 | `temp` | number | 18.0 | −20.0 … 99.9 °C | **no** |
-| `measure_pos` | number | 120.0 | 6 … 240 mm | yes |
-| `traverse_start` | number | 10.0 | 6 … 240 mm | yes |
-| `traverse_end` | number | 230.0 | 6 … 240 mm | yes |
+| `measure_pos` | number | 145.0 | 21 … 248 mm | yes |
+| `maint_pos` | number | 40.0 | 21 … 60 mm (service zone, customer-defined) | yes |
+| `traverse_start` | number | 60.0 | 21 … 248 mm | yes |
+| `traverse_end` | number | 240.0 | 21 … 248 mm | yes |
 | `traverse_speed` | number | 200.0 | 10 … 3000 mm/min | yes |
 | `edge_threshold` | number | 3.0 | 0.5 … 100 mm (thickness) | yes |
-| `base_dist` | number | 200.0 | 40 … 300 mm | yes |
-| `calib_near_ref` | number | 50.0 | 40 … 300 mm | yes |
-| `calib_far_ref` | number | 200.0 | 40 … 300 mm | yes |
+| `base_dist` | number | 70.0 | 40 … 300 mm (virtual reference plane) | yes |
+| `calib_near_ref` | number | 40.0 | 40 … 300 mm | yes |
+| `calib_far_ref` | number | 65.0 | 40 … 300 mm | yes |
 | `wifi_ssid` | string | "" | 0 … 32 chars (empty = AP mode) | yes (effective after REBOOT) |
 | `wifi_pass` | string | "" | 0 or 8 … 63 chars | yes (never reported back) |
 
@@ -501,8 +544,9 @@ The publication of the statistics itself (< 2 µs) is not part of `cycle_max_us`
 
 - Inputs: limit switches debounced 5 ms. **E-stop: activation immediate, release debounced.**
   E-stop wiring must be **normally closed to GND** (pressed or wire broken → HIGH → E-stop).
-- Outputs: shutter GPIO 32; HV LED and buzzer are bits in the 74HC595 chain set via
-  `engine.i2sMuxSetBit(slot, value)` (FastAccelStepper ≥ 2.0).
+- Outputs: shutter LED GPIO 32, **HV LED GPIO 4** (V1.2, both HIGH = on, 20 mA, LOW
+  from the first line of `halInit()`); the buzzer is a bit in the 74HC595 chain
+  (i2so.7) set via `engine.i2sMuxSetBit(slot, value)` (FastAccelStepper ≥ 2.0).
 - Stepper: FastAccelStepper `DRIVER_I2S_MUX`, step/dir/enable as mux slots
   (`slot | PIN_I2S_FLAG`). Slot mapping `I2SO_TO_SLOT(n)` determined in Sprint 0a.
 - Reaction time E-stop → motor stop: ≤ 2 ms (1 ms cycle + driver); outputs off in the same cycle.
@@ -514,7 +558,7 @@ The publication of the statistics itself (< 2 µs) is not part of `cycle_max_us`
 - Task watchdog 10 s (ESP-IDF 5 API), control task registered.
 - WiFi: STA with credentials from NVS, else / on failure AP `ADD-Demo` / `adddemo1`
   (192.168.4.1), mDNS `add-demo.local`.
-- NVS namespace `add_demo`, schema version 1, keys see `nvs_config.h`.
+- NVS namespace `add_demo`, schema version 2 (V1.2; older data → defaults), keys see `nvs_config.h`.
 
 ---
 
@@ -527,7 +571,7 @@ Layout details: Pflichtenheft §5.8.
 
 | Screen mode | State | Content |
 |---|---|---|
-| NORMAL | SAFE_START, READY, RUNNING, RECOVER | status, 5 buttons à 96 × 60 px at y = 260: `INIT` · `HV` (toggle) · `MEAS` · `TRAV` · `STOP`; `LOCAL` badge; flags marked `SIM` |
+| NORMAL | SAFE_START, READY, RUNNING, RECOVER | status, 7 buttons at y = 260, h = 60: `INIT` · `HV` (toggle) · `MEAS` · `TRAV` · `PARK` · `SERV` (64 px each) · `STOP` (96 px); `LOCAL` badge; flags marked `SIM` |
 | FAULT | FAULT (1 cycle) | fault banner, **no buttons** |
 | ACK | WAIT_ACK | fault banner `FEHLER: <name>` + remedy; **all normal buttons hidden**; one ACK area 480 × 60 px at y = 260 |
 

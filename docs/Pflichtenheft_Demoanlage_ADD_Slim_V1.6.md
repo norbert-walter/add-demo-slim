@@ -2,12 +2,31 @@
 
 **Stand:** 2026-10-08
 **Autor:** Norbert Walter
-**Version:** 1.5
+**Version:** 1.6
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.5 → V1.6 (Contract V1.2, Hardware-Vortest vom 09.10.2026)
+
+Die Hardware wurde vollständig aufgebaut und mit der CNC-Firmware des DLC32 vorgetestet
+(Motor beide Richtungen bei 0,8 A, Endschalter, Not-Aus, Sensor 0,68 … 2,63 V nach Entfernen
+von R20 4k7, LEDs je 20 mA, Buzzer, Display und Touch).
+
+| Bereich | V1.5 | V1.6 |
+|---|---|---|
+| Verfahrweg | 0 … 240 mm | **0 … 248 mm** (vorderer Endschalter bei 250 mm) |
+| Parkzone | ≤ 5 mm | **≤ 20 mm**, Parkposition 2 mm, neuer Befehl/Taste **PARK** |
+| Wartungszone | – | **20 … 60 mm**, Wartungsposition `maint_pos` (Standard 40 mm, 21 … 60 mm einstellbar, kundenspezifisch), neuer Befehl `SERVICE` / Taste **SERV** |
+| Shutter manuell | überall außerhalb der Parkzone | **nur in der Wartungszone**; im Messgutbereich öffnet nur die Automatik während einer Messung |
+| Sensorkurve | `120,8·V^-1,058` | **`121,5·V^-1,142`**, angepasst an sechs Messpunkte (max. 0,6 mm Abweichung) |
+| Dickenbezug | `base_dist` 200 mm (leere Auflage) | **70 mm** = virtuelle Bezugsebene an der Messgutkante; Stufen 5 … 30 mm |
+| Standardwerte | Messposition 120, Profil 10 → 230 | Messposition **145**, Profil **60 → 240**, Kalibrierreferenzen 40/65 mm |
+| HV-LED | i2so.3 (I2S) | **GPIO 4** direkt |
+| Display | 5 Tasten | **7 Tasten**: INIT · HV · MEAS · TRAV · PARK · SERV · STOP |
+| Versorgung | 24 V | 15 V DC, 1 A |
 
 ### V1.4 → V1.5 (Contract V1.1, nach Review)
 
@@ -113,28 +132,53 @@ optischen Abstandssensor ersetzt. Die Firmware wird agentenbasiert entwickelt
 
 | Komponente | Spezifikation |
 |---|---|
-| Schrittmotortreiber | TMC2209 (Standalone), **Mikroschritt 1/16** (Jumper) |
+| Schrittmotortreiber | TMC2209 (Standalone), **Mikroschritt 1/16** (Jumper), Strom 0,8 A eingestellt |
 | Ansteuerung | Step/Dir/Enable über 74HC595-Kette am I2S (DATA 21, BCK 16, WS 17) |
 | Schrittmotor | Nanotec ST4118L0804-A, 200 Schritte/U, 0,8 A |
 | Übertragung | Zahnstange, 42 mm/U → **76,19 Schritte/mm**, Auflösung 0,013 mm |
-| Verfahrweg | 0 … 240 mm (0 = 2 mm vor hinterem Endschalter) |
-| Parkzone | 0 … 5 mm (Shutter dort immer geschlossen) |
-| Endlagenschalter | GPIO 36 vorn, GPIO 35 hinten (Referenz) |
+| Verfahrweg | 0 … 248 mm (0 = 2 mm vor hinterem Endschalter, vorderer Endschalter bei 250 mm) |
+| Endlagenschalter | GPIO 36 vorn (250 mm), GPIO 35 hinten (Referenz) |
+
+### Zonen und Positionen der Achse
+
+| Zone / Position | Bereich | Bedeutung |
+|---|---|---|
+| Parkzone | 0 … 20 mm | Shutter immer geschlossen |
+| Parkposition | 2 mm | Ziel von **PARK** |
+| Wartungszone | 20 … 60 mm | Shutter darf manuell geöffnet werden (Prüfung der Quelle); vom Kunden vorgegeben |
+| Wartungsposition | 40 mm (Parameter `maint_pos`, 21 … 60 mm) | Ziel von **SERV** |
+| Messgutbereich | 90 … 220 mm | Stufenkörper, Messwerte 40 … 65 mm; Shutter nur automatisch während einer Messung |
+| Messposition | 145 mm (Messwert 55 mm) | Normalposition, Ziel von **MEAS** |
+| Profilfahrt | 60 → 240 mm | Standard für **TRAV** |
+
+### Kalibrierpunkte (Vortest)
+
+| Position | Messwert | Spannung |
+|---|---|---|
+| 105 mm | 65 mm | 1,72 V |
+| 125 mm | 60 mm | 1,85 V |
+| 145 mm | 55 mm | 2,02 V |
+| 165 mm | 50 mm | 2,18 V |
+| 185 mm | 45 mm | 2,39 V |
+| 205 mm | 40 mm | 2,63 V |
+| neben dem Messgut | 135 mm (unterer Ausleger) | 0,68 V |
+
+An den Messgutkanten springt der Messwert nicht, sondern ändert sich stetig, bis der
+Sensorfleck wieder vollständig auf einer Fläche liegt. 70 mm entspricht etwa der Kante.
 
 ### Sensorik & Signale
 
 | Komponente | Spezifikation |
 |---|---|
 | Abstandssensor | Sharp GP2Y0A41SK0F, 40–300 mm, Versorgung 5 V, Ausgang ca. 0,4–3,1 V |
-| ADC | GPIO 34 (ADC1_CH6, 11 dB), `analogReadMilliVolts()` (eFuse-kalibriert) |
-| LED Grün | HV eingeschaltet (i2so.3) |
-| LED Rot | Shutter offen (GPIO 32) |
-| Buzzer | i2so.7 |
-| Not-Aus | GPIO 22, **Öffner gegen GND** (gedrückt oder Drahtbruch → HIGH → Not-Aus) |
+| ADC | GPIO 34 (ADC1_CH6, 11 dB), `analogReadMilliVolts()` (eFuse-kalibriert), Pull-up R20 4k7 **entfernt**, Serienwiderstand R23 1k |
+| LED Grün | HV eingeschaltet, **GPIO 4**, HIGH aktiv, 20 mA |
+| LED Rot | Shutter offen, GPIO 32, HIGH aktiv, 20 mA |
+| Buzzer | i2so.7 (aktiver Summer, Ein/Aus) |
+| Not-Aus | GPIO 22. Muss ausfallsicher sein: gedrückt **und** Drahtbruch → Not-Aus. Vortest: „LOW = Not-Aus“ – Pegel und Verdrahtung werden mit dem Drahtbruch-Test (Smoketest 2.4) festgelegt |
 
-> **Hinweis Sensor:** Im Nahbereich (40–50 mm, ≈ 2,8–3,1 V) arbeitet der ESP32-ADC
-> am oberen, nichtlinearen Rand. Der Z--Eingang des DLC32 ist eigentlich ein
-> Endschaltereingang – Pull-up/RC-Glied laut Schaltplan prüfen (Smoketest 3.2).
+> **Hinweis Sensor:** Im Arbeitsbereich (40–65 mm, 2,63–1,72 V) liegt der ESP32-ADC
+> am oberen Rand; 2,63 V ist noch gut messbar (Smoketest 3.1/3.2 prüfen).
 > 10 µF direkt am Sensor gegen Versorgungseinbrüche vorsehen.
 
 ### Display
@@ -148,7 +192,7 @@ optischen Abstandssensor ersetzt. Die Firmware wird agentenbasiert entwickelt
 
 ### Stromversorgung
 
-24 V DC extern über Schleppkette. USB-Kabel ebenfalls in der Schleppkette.
+15 V DC, 1 A extern über Schleppkette. USB-Kabel ebenfalls in der Schleppkette.
 
 ---
 
@@ -161,11 +205,11 @@ Verbindlich in `src/config.h`. Werte mit `VERIFY(0a)` werden im Smoketest bestä
 | Endschalter vorn | GPIO 36 (X-) | input only |
 | Endschalter hinten | GPIO 35 (Y-) | Referenzschalter |
 | Abstandssensor | GPIO 34 (Z-) | analog |
-| Not-Aus | GPIO 22 (PROBE) | Öffner |
+| Not-Aus | GPIO 22 (PROBE) | ausfallsicher, Pegel per Drahtbruch-Test |
 | Shutter-LED | GPIO 32 (SPINDLE/TTL) | HIGH = offen |
+| HV-LED | GPIO 4 | HIGH = an |
 | I2S DATA / BCK / WS | GPIO 21 / 16 / 17 | 74HC595-Kette |
 | Enable / Step / Dir | i2so.0 / .1 / .2 | Enable aktiv LOW |
-| HV-LED | i2so.3 | |
 | Buzzer | i2so.7 | |
 
 Die Zuordnung FluidNC-Bit `i2so.N` → FastAccelStepper-Slot ermittelt der Smoketest (`scan`).
@@ -230,9 +274,13 @@ scripts/                     serial_cmd.py, add_client.py
 ### 5.3 Betriebsmodi
 
 **Stehende Messung (`START_MEASURE`)** – nur in RUNNING
-- Fährt mit 1500 mm/min an die Messposition (5 < pos ≤ 240 mm)
+- Fährt mit 1500 mm/min an die Messposition (20 < pos ≤ 248 mm, Standard 145 mm)
 - Shutter öffnet automatisch, Messung bis `STOP`
 - Mittelwert und Anzahl gültiger Werte in `/proc` (`avg`, `n`)
+
+**Parken (`PARK`) und Wartungsposition (`SERVICE`)** – in READY und RUNNING, Referenz nötig
+- PARK fährt auf 2 mm (Parkzone, Shutter schließt beim Einfahren), HV bleibt unverändert
+- SERVICE fährt auf `maint_pos` (Wartungszone); dort darf der Shutter manuell geöffnet werden
 
 **Profilfahrt (`START_TRAVERSE`)** – nur in RUNNING
 - Anfahrt Startposition, dann Fahrt zur Endposition mit konstanter Geschwindigkeit
@@ -249,13 +297,14 @@ Vollständige Definition: **CONTRACT §5**. Kurzfassung:
 |---|---|---|
 | `INIT` | – | SAFE_START, READY |
 | `MOVE` | `pos`, `speed` | READY, RUNNING (homed) |
+| `PARK`, `SERVICE` | – | READY, RUNNING (homed) |
 | `START_MEASURE` | `pos` | RUNNING |
 | `START_TRAVERSE` | `start`, `end`, `speed` | RUNNING |
 | `STOP`, `SET`, `HV_OFF`, `SHUTTER_CLOSE`, `GET_STATE`, `GET_CONFIG` | | immer |
 | `CALIB` | `action` near/far/base/save/reset | SAFE_START, READY, RUNNING |
 | `ACK` | – | WAIT_ACK (Ursache muss beseitigt sein) |
 | `HV_ON` | – | READY, RUNNING |
-| `SHUTTER_OPEN` | – | RUNNING, Position > 5 mm |
+| `SHUTTER_OPEN` | – | RUNNING, nur in der Wartungszone (20 < Position ≤ 60 mm) |
 | `REBOOT` | – | SAFE_START, READY, WAIT_ACK |
 
 Fehlercodes: Anlage `err` 0–5, API `err` 0 … −10 (CONTRACT §3).
@@ -313,7 +362,7 @@ im AP-Modus gibt es kein Internet), Fallback `sans-serif` / `monospace`.
 
 **Seite 2 – Settings (`/settings`)**
 - Werte beim Laden per `GET_CONFIG`
-- Messposition, Profilfahrt (Start/Ende/Geschwindigkeit), Kantenschwelle, `base_dist`
+- Messposition, Wartungsposition `maint_pos` (21 … 60 mm), Profilfahrt (Start/Ende/Geschwindigkeit), Kantenschwelle, `base_dist`
 - Sicherheitsflags (Toggle Interlock, Toggle Cooling, Temperatur)
 - Kalibrierung: Referenzwerte Nah/Fern (`SET calib_near_ref/far_ref`),
   Tasten Capture Near / Capture Far / Capture Base / Save / Reset (`CALIB`)
@@ -330,21 +379,27 @@ Neuzeichnen nur geänderter Zonen. **Sprache: Englisch.**
 │ ADD DEMO           [ READY ]            ● HV      ▮ SHUTTER      │ h=32
 ├───────────┬───────────┬───────────┬──────────────────────────────┤ y=34
 │ POS       │ SPEED     │ DIST      │ THICK                        │
-│ 120.3     │ 200       │ 187.7     │ 12.3                         │ h=72
+│ 145.0     │ 200       │ 55.0      │ 15.0                         │ h=72
 │ mm        │ mm/min    │ mm        │ mm                           │
 ├───────────┴───────────┴───────────┴──────────────────────────────┤ y=110
-│ POS |▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|  240         │ h=24
+│ POS |PP▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|  248         │ h=24
 ├──────────────────────────────────────────────────────────────────┤ y=140
 │ ESTOP ●  INTERLOCK ●  COOLING ●  TEMP 23.0°C ●                   │ h=26
 │ MODE traverse   AVG 12.3 mm (143)   ERR NONE                     │ h=26
 │ IP 192.168.4.1                                                   │ h=26 (bis y=230)
-├────────────┬────────────┬────────────┬────────────┬──────────────┤ y=260
-│   INIT     │    HV      │   MEAS     │   TRAV     │    STOP      │ h=60
-└────────────┴────────────┴────────────┴────────────┴──────────────┘ y=320
+├────────┬────────┬────────┬────────┬────────┬────────┬────────────┤ y=260
+│  INIT  │   HV   │  MEAS  │  TRAV  │  PARK  │  SERV  │    STOP    │ h=60
+└────────┴────────┴────────┴────────┴────────┴────────┴────────────┘ y=320
+   64 px    64       64       64       64       64        96 px
 ```
 
+- 7 Tasten (V1.6): sechs à 64 px mit `setTextSize(2)` (12×16 px, max. 5 Zeichen = 60 px),
+  STOP als größte Fläche 96 px mit `setTextSize(3)`
+- PARK sendet `PARK`, SERV sendet `SERVICE`
+- Positionsbalken: Parkzone (0 … 20 mm) grau hinterlegt, Wartungszone (20 … 60 mm) gelb markiert
+
 - Werte: `setTextSize(3)` (18×24 px/Zeichen) → max. 6 Zeichen je 120-px-Feld
-- Tasten 96×60 px, Beschriftung `setTextSize(3)` (max. 5 Zeichen = 90 px)
+- Tasten siehe oben (V1.6: 7 Tasten)
 - `HV` schaltet je nach Zustand `HV_ON`/`HV_OFF`, Farbe zeigt Zustand
 - `STOP` immer aktiv; Tap-Feedback 50 ms aufhellen
 - Befehle mit `source = LOCAL` (kein Kommunikations-Watchdog, setzt Bedienvorrang LOCAL)
@@ -389,8 +444,9 @@ nur noch eine mögliche Handlung:
 ### 5.9 Messkette
 
 16 × `analogReadMilliVolts()` alle 20 ms → 4 kleinste und 4 größte verwerfen →
-Mittelwert → `dist = 120,8 · V^-1,058` mm → IIR α = 0,8 → 2-Punkt-Kalibrierung →
-`thick = max(0, base_dist − dist)`. Der Sharp-Sensor liefert nur etwa alle 16,5 ms
+Mittelwert → `dist = 121,5 · V^-1,142` mm (angepasst an die Kalibrierpunkte) → IIR α = 0,8 →
+2-Punkt-Kalibrierung → `thick = max(0, base_dist − dist)` mit `base_dist` = 70 mm
+(virtuelle Bezugsebene an der Messgutkante, Stufen 5 … 30 mm). Der Sharp-Sensor liefert nur etwa alle 16,5 ms
 einen neuen Wert; 50 Hz Abtastung genügen.
 
 Kalibrierung (CONTRACT §7.3): Referenzabstände per `SET calib_near_ref/far_ref`,
@@ -441,8 +497,10 @@ Reaktion im selben Zyklus: Shutter zu → Motor Not-Halt → HV aus → FAULT �
 `ACK` wird nur angenommen, wenn die Ursache beseitigt ist.
 
 ### Shutter
-Öffnen nur in RUNNING und außerhalb der Parkzone (> 5 mm). Schließt bei HV-Abfall,
-jedem Fehler, Einfahrt in die Parkzone und Ende der Messung.
+Öffnen nur in RUNNING und außerhalb der Parkzone (> 20 mm). **Manuell** nur in der
+Wartungszone (20 … 60 mm); im Messgutbereich öffnet nur die Automatik während einer
+Messung. Schließt bei HV-Abfall, jedem Fehler, Einfahrt in die Parkzone und Ende der
+Messung. Ein in der Wartungszone geöffneter Shutter bleibt offen, wenn die Achse sie verlässt.
 
 ### Wiederanlauf
 **Kein automatischer Wiederanlauf.** Nach ACK bleiben HV und Shutter aus. Wurde
@@ -535,7 +593,7 @@ des Style Guides. **Kein** eigener Top-Level-Block `live_data` – `/proc` wird 
 | `test_api_parse` | api_parse | Parser, Typen, Fehlerfälle |
 
 Alle Tests sind **eingefroren** und gegen eine Referenzimplementierung geprüft
-(227 Testfälle, alle grün, `test_command_queue` zusätzlich mit ThreadSanitizer geprüft; Mutationstests bestätigen die Trennschärfe).
+(235 Testfälle, alle grün, `test_command_queue` zusätzlich mit ThreadSanitizer geprüft; Mutationstests bestätigen die Trennschärfe).
 
 **Regressionsregel (DoD jedes Sprints):** Alle Suiten, die vor dem Sprint grün waren,
 sind danach weiterhin grün (`pio test -e native` vollständig, nicht nur die Sprint-Suite).
@@ -612,7 +670,9 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 - [ ] `cooling_flow = false` während Profilfahrt → HV aus, Fahrt gestoppt, Shutter zu
 - [ ] Kommunikations-Watchdog: Python-Skript während Profilfahrt abbrechen → `COMM_TIMEOUT` nach 5 s
 - [ ] Nach ACK kein automatischer Wiederanlauf; nach Not-Aus in Fahrt erneutes INIT nötig
-- [ ] Shutter öffnet nie in der Parkzone
+- [ ] Shutter öffnet nie in der Parkzone (≤ 20 mm)
+- [ ] `SHUTTER_OPEN` manuell nur in der Wartungszone; bei 145 mm → `PRECONDITION`
+- [ ] Fahrt auf 248 mm löst den vorderen Endschalter nicht aus
 - [ ] Not-Aus und `cooling_flow = false` gleichzeitig → `FAULT ESTOP`
 - [ ] STOP per API während Profilfahrt: Antwort < 150 ms, Achse steht < 1 s (`stress_api.py latency`)
 - [ ] Zeitverhalten nach 10 min (`stress_api.py soak`): `cycle_max_us` < 500, `overruns` = 0,
@@ -630,7 +690,7 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 **6. Display**
 - [ ] Werte, Zustand, Indikatoren korrekt, kein Flackern
 - [ ] Positionsbalken synchron
-- [ ] Alle 5 Tasten wirken (lokal, ohne WLAN)
+- [ ] Alle 7 Tasten wirken (lokal, ohne WLAN); PARK → 2 mm, SERV → `maint_pos`
 - [ ] Fehlerfall: alle Tasten ausgeblendet, nur ACK-Fläche; grau solange Not-Aus gedrückt
 - [ ] ACK erst nach 1 s Halten; Finger, der beim Fehler schon auf STOP lag, quittiert nicht
 - [ ] Bedienvorrang: nach Display-Befehl API `HV_ON` → `−10`, API `STOP` → OK;
@@ -663,11 +723,13 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 | Toolchain | pioarduino | ✅ |
 | Mikroschritt | 1/16 | ✅ |
 | Architektur | Single-Writer, reine Logik | ✅ |
-| /proc-Schema, API, CRC, Fehlercodes | CONTRACT V1.1 | ✅ |
+| /proc-Schema, API, CRC, Fehlercodes | CONTRACT V1.2 | ✅ |
 | Bedienvorrang Display, Haltezeit | LOCAL, 30 s | ✅ |
 | Quittierung am Display | eine ACK-Fläche, 1 s halten | ✅ |
-| i2so → Slot-Zuordnung | Smoketest `scan` | Offen (0a) |
-| Display-/Touch-Pins, Farbreihenfolge | Smoketest | Offen (0a) |
-| ADC am Z--Eingang (Pull-up?) | Smoketest 3.2 | Offen (0a) |
+| i2so → Slot-Zuordnung (Buzzer, Enable, Step, Dir) | Smoketest `scan` | Offen (0a) |
+| Not-Aus-Pegel und Ausfallsicherheit | Drahtbruch-Test Smoketest 2.4 | Offen (0a) – Vortest meldet „LOW = Not-Aus“ |
+| Geometrie, Zonen, Sensorkurve | Hardware-Vortest 09.10.2026 | ✅ (V1.6) |
+| Display-/Touch-Pins, Farbreihenfolge | Smoketest (mit CNC-Firmware funktionsfähig) | Werte für LovyanGFX offen (0a) |
+| ADC am Z--Eingang (Pull-up?) | R20 4k7 entfernt (Vortest) | ✅, Smoketest 3.2 bestätigt |
 | Autonomy-Level im ADD | konzeptionell Level 2, Scores in S6 | Offen (S6) |
 | Python-Demo-Skripte | S6 | Offen |

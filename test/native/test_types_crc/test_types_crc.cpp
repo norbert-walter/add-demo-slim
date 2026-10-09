@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.1) – Sprint S2.1 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.2) – Sprint S2.1 must make these pass. Do not modify.
 // Covers: src/logic/types.cpp, src/logic/crc32.cpp  (CONTRACT §3, §4)
 #include <unity.h>
 #include <string.h>
@@ -44,7 +44,7 @@ void test_cmd_name_roundtrip_all() {
     const CmdId all[] = {CmdId::INIT, CmdId::START_MEASURE, CmdId::START_TRAVERSE, CmdId::STOP,
                          CmdId::MOVE, CmdId::GET_STATE, CmdId::GET_CONFIG, CmdId::SET, CmdId::CALIB,
                          CmdId::ACK, CmdId::HV_ON, CmdId::HV_OFF, CmdId::SHUTTER_OPEN,
-                         CmdId::SHUTTER_CLOSE, CmdId::REBOOT};
+                         CmdId::SHUTTER_CLOSE, CmdId::REBOOT, CmdId::PARK, CmdId::SERVICE};
     for (CmdId c : all) {
         TEST_ASSERT_TRUE(cmdFromName(cmdName(c)) == c);
     }
@@ -54,6 +54,8 @@ void test_cmd_name_roundtrip_all() {
 void test_cmd_from_name_rejects_unknown_and_case() {
     TEST_ASSERT_TRUE(cmdFromName("hv_on") == CmdId::NONE);
     TEST_ASSERT_TRUE(cmdFromName("FOO") == CmdId::NONE);
+    TEST_ASSERT_EQUAL_STRING("PARK", cmdName(CmdId::PARK));          // V1.2
+    TEST_ASSERT_EQUAL_STRING("SERVICE", cmdName(CmdId::SERVICE));
     TEST_ASSERT_TRUE(cmdFromName("") == CmdId::NONE);
     TEST_ASSERT_TRUE(cmdFromName(nullptr) == CmdId::NONE);
     TEST_ASSERT_TRUE(cmdFromName("NONE") == CmdId::NONE);

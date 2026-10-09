@@ -12,7 +12,7 @@
 #include "safety_logic.h"
 
 enum class ScreenMode : uint8_t {
-    NORMAL = 0,  ///< SAFE_START, READY, RUNNING, RECOVER: status + 5 buttons
+    NORMAL = 0,  ///< SAFE_START, READY, RUNNING, RECOVER: status + 7 buttons (V1.2)
     FAULT  = 1,  ///< FAULT (one cycle): fault banner, NO buttons
     ACK    = 2   ///< WAIT_ACK: fault banner + ONE full-width ACK area, no other buttons
 };

@@ -1,4 +1,4 @@
-// FROZEN TESTS (Sprint 0b) – Sprint S2.2 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.2) – Sprint S2.2 must make these pass. Do not modify.
 // Covers: src/logic/params.cpp (CONTRACT §9)
 #include <unity.h>
 #include <string.h>
@@ -19,14 +19,15 @@ static ApiError setStr(const char* k, const char* v) { persist = false; return p
 
 void test_defaults() {
     Params p; p.measure_pos = 1; paramsDefaults(p);
-    TEST_ASSERT_EQUAL_FLOAT(120.0f, p.measure_pos);
-    TEST_ASSERT_EQUAL_FLOAT(10.0f, p.traverse_start);
-    TEST_ASSERT_EQUAL_FLOAT(230.0f, p.traverse_end);
+    TEST_ASSERT_EQUAL_FLOAT(145.0f, p.measure_pos);
+    TEST_ASSERT_EQUAL_FLOAT(40.0f, p.maint_pos);
+    TEST_ASSERT_EQUAL_FLOAT(60.0f, p.traverse_start);
+    TEST_ASSERT_EQUAL_FLOAT(240.0f, p.traverse_end);
     TEST_ASSERT_EQUAL_FLOAT(200.0f, p.traverse_speed);
     TEST_ASSERT_EQUAL_FLOAT(3.0f, p.edge_threshold);
-    TEST_ASSERT_EQUAL_FLOAT(200.0f, p.base_dist);
-    TEST_ASSERT_EQUAL_FLOAT(50.0f, p.calib.near_ref);
-    TEST_ASSERT_EQUAL_FLOAT(200.0f, p.calib.far_raw);
+    TEST_ASSERT_EQUAL_FLOAT(70.0f, p.base_dist);
+    TEST_ASSERT_EQUAL_FLOAT(40.0f, p.calib.near_ref);
+    TEST_ASSERT_EQUAL_FLOAT(65.0f, p.calib.far_raw);
     TEST_ASSERT_EQUAL_STRING("", p.wifi_ssid);
     SafetyFlags f;
     TEST_ASSERT_FALSE(f.interlock); TEST_ASSERT_FALSE(f.cooling_flow);
@@ -55,7 +56,8 @@ void test_temp() {
 }
 void test_numeric_params_ranges_and_persist() {
     struct R { const char* k; double lo, hi; } rs[] = {
-        {"measure_pos", 6, 240}, {"traverse_start", 6, 240}, {"traverse_end", 6, 240},
+        {"measure_pos", 21, 248}, {"maint_pos", 21, 60},
+        {"traverse_start", 21, 248}, {"traverse_end", 21, 248},
         {"traverse_speed", 10, 3000}, {"edge_threshold", 0.5, 100}, {"base_dist", 40, 300},
         {"calib_near_ref", 40, 300}, {"calib_far_ref", 40, 300},
     };
@@ -70,6 +72,7 @@ void test_numeric_params_ranges_and_persist() {
 }
 void test_values_land_in_right_fields() {
     OK(setNum("measure_pos", 111)); TEST_ASSERT_EQUAL_FLOAT(111.0f, P.measure_pos);
+    OK(setNum("maint_pos", 33)); TEST_ASSERT_EQUAL_FLOAT(33.0f, P.maint_pos);
     OK(setNum("traverse_start", 22)); TEST_ASSERT_EQUAL_FLOAT(22.0f, P.traverse_start);
     OK(setNum("traverse_end", 222)); TEST_ASSERT_EQUAL_FLOAT(222.0f, P.traverse_end);
     OK(setNum("traverse_speed", 333)); TEST_ASSERT_EQUAL_FLOAT(333.0f, P.traverse_speed);
@@ -127,10 +130,10 @@ void test_config_json_exact_defaults() {
     char buf[600];
     int n = paramsToJsonMember(P, F, buf, sizeof(buf));
     TEST_ASSERT_EQUAL_STRING(
-        "\"config\":{\"measure_pos\":120.0,\"traverse_start\":10.0,\"traverse_end\":230.0,"
-        "\"traverse_speed\":200.0,\"edge_threshold\":3.0,\"base_dist\":200.0,"
-        "\"calib_near_raw\":50.0,\"calib_near_ref\":50.0,\"calib_far_raw\":200.0,"
-        "\"calib_far_ref\":200.0,\"calib_valid\":true,\"interlock\":false,"
+        "\"config\":{\"measure_pos\":145.0,\"maint_pos\":40.0,\"traverse_start\":60.0,"
+        "\"traverse_end\":240.0,\"traverse_speed\":200.0,\"edge_threshold\":3.0,\"base_dist\":70.0,"
+        "\"calib_near_raw\":40.0,\"calib_near_ref\":40.0,\"calib_far_raw\":65.0,"
+        "\"calib_far_ref\":65.0,\"calib_valid\":true,\"interlock\":false,"
         "\"cooling_flow\":false,\"temp\":18.0,\"wifi_ssid\":\"\",\"wifi_pass_set\":false}", buf);
     TEST_ASSERT_EQUAL_INT((int)strlen(buf), n);
 }

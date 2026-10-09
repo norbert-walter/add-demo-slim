@@ -67,7 +67,9 @@ enum class CmdId : uint8_t {
     HV_OFF,
     SHUTTER_OPEN,
     SHUTTER_CLOSE,
-    REBOOT
+    REBOOT,
+    PARK,            ///< V1.2: move to the park position (MotionConfig.park_target_mm)
+    SERVICE          ///< V1.2: move to the service/maintenance position (params.maint_pos)
 };
 
 enum class CmdSource : uint8_t { API = 0, LOCAL = 1 };  ///< LOCAL = touch display
@@ -157,7 +159,7 @@ const char* safetyStateName(SafetyState s);   ///< "SAFE_START", "READY", ...
 const char* errorCodeName(ErrorCode e);       ///< "NONE", "ESTOP", "TEMP_HIGH", ...
 const char* motionStateName(MotionState m);   ///< "idle", "moving", "homing", "error"
 const char* opModeName(OpMode m);             ///< "none", "measure", "traverse"
-const char* cmdName(CmdId c);                 ///< "INIT", "START_MEASURE", ... ; NONE -> "NONE"
+const char* cmdName(CmdId c);                 ///< "INIT", "START_MEASURE", ..., "PARK", "SERVICE"; NONE -> "NONE"
 CmdId       cmdFromName(const char* name);    ///< exact, case-sensitive; unknown/NULL -> NONE
 CalibAction calibActionFromName(const char* name);  ///< "near","far","base","save","reset"; else NONE
 const char* apiErrorMessage(ApiError e);      ///< short English text, OK -> "ok"

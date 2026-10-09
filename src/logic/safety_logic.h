@@ -1,6 +1,6 @@
 /**
  * @file safety_logic.h
- * @brief Pure safety state machine (FROZEN CONTRACT §6). No hardware access.
+ * @brief Pure safety state machine (FROZEN CONTRACT V1.2 §6). No hardware access.
  *
  * Implementation: src/logic/safety_logic.cpp (Sprint S2.1).
  * The machine is a pure function: given the current status, one event and the
@@ -23,7 +23,8 @@
 struct SafetyConfig {
     float temp_warn_c  = 30.0f;  ///< HV allowed only if temp <= temp_warn_c
     float temp_fault_c = 32.0f;  ///< temp > temp_fault_c -> FAULT (TEMP_HIGH)
-    float park_pos_mm  = 5.0f;   ///< shutter may only be open if pos > park_pos_mm
+    float park_pos_mm  = 20.0f;  ///< V1.2: park zone 0..20 mm: shutter only open if pos > park_pos_mm
+    float maint_max_mm = 60.0f;  ///< V1.2: service zone (park_pos_mm, maint_max_mm]: manual SHUTTER_OPEN only here
 };
 
 /// Snapshot of all safety-relevant inputs for one evaluation.
@@ -46,7 +47,8 @@ enum class SafetyEvent : uint8_t {
     HV_OFF,
     SHUTTER_OPEN,
     SHUTTER_CLOSE,
-    ACK
+    ACK,
+    SHUTTER_AUTO_OPEN   ///< V1.2: opening by the shutter automation during an acquisition
 };
 
 /// Persistent status of the machine (owned by the control task).
@@ -79,6 +81,10 @@ ErrorCode safetyFaultCause(const SafetyInputs& in, const SafetyConfig& cfg);
 /**
  * One step of the state machine. Rules, evaluated in this order:
  *
+ * SHUTTER_AUTO_OPEN is treated like SHUTTER_OPEN in every rule, except for the
+ * position check in R7 (automation: anywhere outside the park zone; manual: only
+ * in the service zone).
+ *
  * R1 Fault entry: if cur.state is not FAULT or WAIT_ACK and
  *    safetyFaultCause(in) != NONE  ->  FAULT, err = cause, hv off, shutter closed,
  *    motor_stop = true. Same for event INIT_FAILED (err = HOMING_FAILED) in any
@@ -99,12 +105,15 @@ ErrorCode safetyFaultCause(const SafetyInputs& in, const SafetyConfig& cfg);
  *              INIT_DONE, TICK, HV_OFF, SHUTTER_CLOSE -> OK, no change.
  *              SHUTTER_OPEN, ACK -> STATE.
  * R7 RUNNING:  first, on EVERY event: if !safetyHvConditionsOk(in) -> READY,
- *              hv off, shutter closed; api = PRECONDITION for HV_ON and
- *              SHUTTER_OPEN, OK for all others except ACK (STATE).
+ *              hv off, shutter closed; api = PRECONDITION for HV_ON,
+ *              SHUTTER_OPEN and SHUTTER_AUTO_OPEN, OK for all others except ACK (STATE).
  *              Then (conditions ok):
  *              - if shutter open and pos_mm <= park_pos_mm -> shutter closed.
  *              - HV_ON -> OK (idempotent). HV_OFF -> READY, hv off, shutter closed.
- *              - SHUTTER_OPEN: pos_mm > park_pos_mm -> open, OK; else PRECONDITION.
+ *              - SHUTTER_OPEN (manual, V1.2): park_pos_mm < pos_mm <= maint_max_mm
+ *                -> open, OK; else PRECONDITION. Once open, the shutter stays open
+ *                when the axis leaves the service zone (closing rules above apply).
+ *              - SHUTTER_AUTO_OPEN: pos_mm > park_pos_mm -> open, OK; else PRECONDITION.
  *              - SHUTTER_CLOSE -> closed, OK. INIT_DONE, TICK -> OK. ACK -> STATE.
  */
 SafetyResult safetyStep(const SafetyStatus& cur, SafetyEvent ev,
@@ -113,7 +122,7 @@ SafetyResult safetyStep(const SafetyStatus& cur, SafetyEvent ev,
 /**
  * State gate for commands (CONTRACT §6.3). Returns OK or STATE.
  *   INIT                     : SAFE_START, READY
- *   MOVE                     : READY, RUNNING
+ *   MOVE, PARK, SERVICE      : READY, RUNNING
  *   START_MEASURE/TRAVERSE   : RUNNING
  *   CALIB                    : SAFE_START, READY, RUNNING
  *   ACK                      : WAIT_ACK
@@ -130,7 +139,7 @@ ApiError safetyCmdAllowed(SafetyState s, CmdId cmd);
  * control task must feed into safetyStep, or TICK if nothing is to be done.
  * Evaluated in this order (first match wins):
  *   1. acquisition_ended && shutter_open                                 -> SHUTTER_CLOSE
- *   2. acquiring && state RUNNING && !shutter_open && pos_mm > park_pos_mm -> SHUTTER_OPEN
+ *   2. acquiring && state RUNNING && !shutter_open && pos_mm > park_pos_mm -> SHUTTER_AUTO_OPEN
  * acquiring        : motion sequencer is in a measuring phase (TRAV_RUN, MEAS_HOLD)
  * acquisition_ended: one-shot, a measuring mode ended this cycle
  */

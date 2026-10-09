@@ -1,7 +1,7 @@
-# Sprint-Prompts – Demoanlage ADD (Slim) · V2.1
+# Sprint-Prompts – Demoanlage ADD (Slim) · V2.2
 
 **Stand:** 2026-10-08 · **Autor:** Norbert Walter
-**Basis:** Pflichtenheft V1.5, `docs/CONTRACT.md` V1.1
+**Basis:** Pflichtenheft V1.6, `docs/CONTRACT.md` V1.2
 **Werkzeuge:** code-server + Cline, Modell Qwen3.6-35B-A3B (64k Kontext), Review mit Claude
 
 ---
@@ -290,7 +290,9 @@ Pay attention to:
 - Events raised inside appTick by motionStop / motionEmergencyStop (seq.ev.acq_ended) must be
   consumed in the SAME appTick before the shutter automation (step 8).
 - appCommand: STOP leaves seq.ev.acq_ended pending for the next appTick.
-- Comm watchdog: arm only on SUCCESS of INIT, MOVE, START_*, HV_ON (API -> true, LOCAL -> false).
+- Comm watchdog: arm only on SUCCESS of INIT, MOVE, PARK, SERVICE, START_*, HV_ON (API -> true, LOCAL -> false).
+- V1.2: PARK -> motionStartMove(cfg.motion.park_target_mm, approach_speed);
+  SERVICE -> motionStartMove(params.maint_pos, approach_speed).
 - V1.1 LOCAL priority (CONTRACT §6.6): at the start of appCommand, after GET_STATE/GET_CONFIG:
   source LOCAL -> local = true, local_last_ms = now, comm_armed = false (even if the gate
   rejects the command afterwards); source API && local && appLocalBlocksApi(id) -> return
@@ -334,7 +336,8 @@ Implement exactly:
   mapping exactly as documented, speed conversion |getCurrentSpeedInMilliHz()| / 1000 / STEPS_PER_MM * 60.
 - src/hal/hal_io.cpp     – inputs with debounce (limit switches both directions,
   E-stop: activation immediate, release after INPUT_DEBOUNCE_MS), outputs, non-blocking
-  buzzer via engine->i2sMuxSetBit(I2SO_TO_SLOT(I2SO_BUZZER), ...).
+  buzzer via engine->i2sMuxSetBit(I2SO_TO_SLOT(I2SO_BUZZER), ...). HV LED (PIN_HV_LED,
+  GPIO 4) and shutter LED (PIN_SHUTTER) are plain digitalWrite outputs, set LOW first in halInit().
 
 No delay(), no Serial, no heap in any of these functions.
 Definition of done:
@@ -441,7 +444,7 @@ python scripts/stress_api.py --host 192.168.4.1 latency
 Sprint S4a. Web UI (vanilla HTML/CSS/JS, no framework, no CDN). Read first:
 - .clinerules, docs/CONTRACT.md §4 (JavaScript crc32/frame/verify – copy them verbatim),
   §5 (all JSON formats), §6.5 (heartbeat), §9 (parameters)
-- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.5.md §5.7 (content of both pages)
+- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.6.md §5.7 (content of both pages)
 - docs/reference/style_guide_excerpt_S4.md (CSS variables, themes, components – use them exactly)
 
 Deliver:
@@ -493,7 +496,7 @@ Sprint S4b. Local display. Two parts: pure logic first (tested), then drawing.
 Read first:
 - .clinerules, docs/CONTRACT.md §13, src/display/display.h, src/display/lgfx_config.h
 - src/logic/display_logic.h and test/native/test_display_logic/test_display_logic.cpp
-- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.5.md §5.8 (layout, fault screen, colours – binding)
+- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.6.md §5.8 (layout, fault screen, colours – binding)
 - src/app/snapshot.h, src/app/command_queue.h, src/logic/types.h
 - .pio/libdeps/firmware/LovyanGFX/src/ (real API; examples/ for getTouch)
 
@@ -508,11 +511,12 @@ Part 2 – src/display/display.cpp
 - Redraw only zones whose content changed (cache last values); setTextDatum + fillRect
   background (no full-screen clear, no flicker). A change of ScreenMode redraws the
   lower part of the screen completely once.
-- ScreenMode NORMAL: layout of §5.8, 5 buttons. Button press = touch-down edge inside the
+- ScreenMode NORMAL: layout of §5.8, 7 buttons (INIT HV MEAS TRAV PARK SERV: 64 px, text
+  size 2; STOP: 96 px, text size 3). Label SERV sends CmdId::SERVICE. Button press = touch-down edge inside the
   button; brighten 50 ms; send Command{source = LOCAL, want_reply = false} via
   cmdQueueSend(). HV button: HV_OFF if snapshot.safety.hv_on else HV_ON. STOP always active.
   "LOCAL" badge in the header while snapshot.local. Flags labelled "(SIM)".
-- ScreenMode FAULT and ACK: hide all 5 buttons; big fault banner
+- ScreenMode FAULT and ACK: hide all 7 buttons; big fault banner
   "FAULT: <errorCodeName(err)>" in red with the remedy text of §5.8.
   ACK mode: one area x 0..479, y 260..319.
     cause = ackCauseActive(snapshot, SafetyConfig{})
@@ -529,7 +533,7 @@ frozen check clean. Do NOT flash.
 ```
 
 **Hardware-Prüfung S4b (du)**
-- [ ] Alle 5 Tasten wirken; `LOCAL`-Badge erscheint nach Tastendruck, verschwindet nach 30 s Ruhe
+- [ ] Alle 7 Tasten wirken (PARK fährt auf 2 mm, SERV auf `maint_pos`); `LOCAL`-Badge erscheint nach Tastendruck, verschwindet nach 30 s Ruhe
 - [ ] Not-Aus drücken: Tasten verschwinden, Banner `FAULT: ESTOP`, ACK-Fläche grau
 - [ ] Not-Aus lösen: Fläche gelb; kurzer Tipp quittiert nicht; 1 s halten quittiert genau einmal
 - [ ] STOP gedrückt halten, dabei Not-Aus auslösen und wieder lösen: Finger bleibt liegen → **keine** Quittierung
@@ -557,7 +561,7 @@ Read completely before writing anything:
 - docs/reference/ADD_Developer_Guide_v1_0.md
 - docs/reference/style_guide_excerpt_S4.md (only for the optional "ui" block)
 - docs/CONTRACT.md (the device behaviour – every statement in add.json must match it)
-- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.5.md §1, §6, §7
+- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.6.md §1, §6, §7
 
 Task 1 – data/add.json (served at /add, max. 32 KB, valid JSON):
 - Exactly the header fields schema, version, spec_url, spec_license and the seven blocks
@@ -606,6 +610,18 @@ Then run the ADD validation (spec §13) against the live device together with me
 ```
 
 ---
+
+## Anhang: Änderungen V2.1 → V2.2 (Contract V1.2, Hardware-Vortest)
+
+| Sprint | Neu |
+|---|---|
+| S0a | HV-LED an GPIO 4 (`hv`-Befehl schaltet GPIO); `scan` identifiziert nur noch Buzzer, Enable, Step, Dir |
+| S2.1 | Ereignis `SHUTTER_AUTO_OPEN`; manuelles Öffnen nur in der Wartungszone; Befehle PARK/SERVICE im Gate |
+| S2.2 | Sensorkurve 121,5·V^-1,142; `maint_pos`; neue Defaults und Bereiche |
+| S2.3 | Achse 0 … 248 mm, Parkzone ≤ 20 mm |
+| S2.4 | PARK/SERVICE in `appCommand`, LOCAL-Sperre, Watchdog |
+| S2.5 | `halSetHvLed` über GPIO 4 |
+| S4b | 7 Tasten |
 
 ## Anhang: Änderungen V2 → V2.1 (Contract V1.1)
 

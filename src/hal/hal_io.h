@@ -1,13 +1,14 @@
 /**
  * @file hal_io.h
- * @brief Thin hardware layer for digital/analog I/O (FROZEN CONTRACT §11).
+ * @brief Thin hardware layer for digital/analog I/O (FROZEN CONTRACT V1.2 §11).
  *
  * Implementation: src/hal/hal_io.cpp (Sprint S2.5, taken over from the
  * smoketest code). Only the control task (Core 1) calls these functions.
  *
- * The i2s outputs (HV LED, buzzer) are written through the FastAccelStepper
- * engine (engine.i2sMuxSetBit), therefore halInit() needs the engine pointer
- * from motion_drv (call motionDrvInit() first).
+ * The i2s output (buzzer) is written through the FastAccelStepper engine
+ * (engine.i2sMuxSetBit), therefore halInit() needs the engine pointer from
+ * motion_drv (call motionDrvInit() first). HV LED and shutter LED are plain
+ * GPIOs (V1.2), driven LOW in halInit() before anything else.
  */
 #pragma once
 
@@ -28,6 +29,6 @@ bool halLimitBwd();   ///< true = backward switch pressed
 void halReadSensorSamples(uint16_t* buf, uint8_t n);
 
 void halSetShutter(bool open);   ///< GPIO32 HIGH = open
-void halSetHvLed(bool on);       ///< i2s slot I2SO_TO_SLOT(I2SO_HV_LED)
+void halSetHvLed(bool on);       ///< V1.2: GPIO PIN_HV_LED (digitalWrite, HIGH = on)
 void halBeep(uint32_t now_ms, uint32_t duration_ms);   ///< non-blocking start
 void halUpdateBuzzer(uint32_t now_ms);                  ///< switches buzzer off after duration

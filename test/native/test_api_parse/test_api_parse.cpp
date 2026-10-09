@@ -1,4 +1,4 @@
-// FROZEN TESTS (Sprint 0b) – Sprint S3 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.2) – Sprint S3 must make these pass. Do not modify.
 // Covers: src/logic/api_parse.cpp (CONTRACT §4, §5.2)
 #include <unity.h>
 #include <string.h>
@@ -55,6 +55,13 @@ void test_extra_params_ignored_for_simple_commands() {
 }
 
 // ---- motion commands --------------------------------------------------------------------
+void test_park_and_service_without_params() {   // V1.2
+    API(ApiError::OK, parse("{\"cmd\":\"PARK\"}"));
+    TEST_ASSERT_TRUE(Cm.id == CmdId::PARK);
+    API(ApiError::OK, parse("{\"cmd\":\"SERVICE\",\"params\":{}}"));
+    TEST_ASSERT_TRUE(Cm.id == CmdId::SERVICE);
+    API(ApiError::UNKNOWN_CMD, parse("{\"cmd\":\"SERV\"}"));   // display label is not the API name
+}
 void test_move() {
     API(ApiError::OK, parse("{\"cmd\":\"MOVE\",\"params\":{\"pos\":120,\"speed\":300.5}}"));
     TEST_ASSERT_TRUE(Cm.id == CmdId::MOVE);
@@ -153,6 +160,7 @@ int main(int, char**) {
     RUN_TEST(test_unknown_or_missing_cmd);
     RUN_TEST(test_params_must_be_object);
     RUN_TEST(test_extra_params_ignored_for_simple_commands);
+    RUN_TEST(test_park_and_service_without_params);
     RUN_TEST(test_move);
     RUN_TEST(test_move_pos_required_and_typed);
     RUN_TEST(test_start_traverse_optional_params);

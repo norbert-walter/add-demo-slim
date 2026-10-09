@@ -14,7 +14,7 @@ struct FakeAxis {
     bool     run_backward    = false;
     int32_t  target          = 0;      // driver coordinates
     double   speed_hz        = 0;
-    int32_t  fwd_limit_steps = 18667;  // ~245 mm at 76.19 steps/mm
+    int32_t  fwd_limit_steps = 19200;  // V1.2: phys 252 mm = axis 250 mm (axis 0 = phys 2 mm)
     bool     block           = false;  // simulates a blocked axis (no motion)
     int      force_stops     = 0;
 

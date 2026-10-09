@@ -166,7 +166,7 @@ static void cmdAdc(int n) {
 static void cmdScan(int ms) {
     if (!i2s_ok) { Serial.println("{\"error\":\"i2s mux not initialised\"}"); return; }
     if (ms <= 0) ms = 800;
-    Serial.println("# Watch HV LED (expected i2so.3), buzzer (i2so.7), motor enable/step/dir.");
+    Serial.println("# Watch buzzer (expected i2so.7), motor enable (i2so.0, holding torque), step (i2so.1), dir (i2so.2). HV LED is GPIO 4 (cmd hv).");
     for (int s = 0; s < 32; ++s) {
         Serial.printf("{\"slot\":%d,\"state\":1}\n", s);
         setSlot(s, true);
@@ -281,7 +281,7 @@ static void dispatch(char* l) {
     else if (c == "adc") cmdAdc(atoi(a1));
     else if (c == "slot") { setSlot(atoi(a1), atoi(a2) != 0); Serial.printf("{\"slot\":%d,\"state\":%d}\n", atoi(a1), atoi(a2) != 0); }
     else if (c == "scan") cmdScan(atoi(a1));
-    else if (c == "hv") { setSlot(I2SO_TO_SLOT(I2SO_HV_LED), atoi(a1) != 0); Serial.printf("{\"hv\":%d}\n", atoi(a1) != 0); }
+    else if (c == "hv") { digitalWrite(PIN_HV_LED, atoi(a1) ? HIGH : LOW); Serial.printf("{\"hv\":%d}\n", atoi(a1) != 0); }
     else if (c == "beep") { int ms = atoi(a1) > 0 ? atoi(a1) : 200; setSlot(I2SO_TO_SLOT(I2SO_BUZZER), true); delay(ms);
                             setSlot(I2SO_TO_SLOT(I2SO_BUZZER), false); Serial.println("{\"done\":true}"); }
     else if (c == "shutter") { digitalWrite(PIN_SHUTTER, atoi(a1) ? HIGH : LOW); Serial.printf("{\"shutter\":%d}\n", atoi(a1) != 0); }
@@ -304,6 +304,8 @@ void setup() {
     pinMode(PIN_ESTOP, INPUT);
     pinMode(PIN_SHUTTER, OUTPUT);
     digitalWrite(PIN_SHUTTER, LOW);
+    pinMode(PIN_HV_LED, OUTPUT);          // V1.2: HV LED on GPIO 4
+    digitalWrite(PIN_HV_LED, LOW);
     analogSetPinAttenuation(PIN_SENSOR_ADC, ADC_11db);
 
     engine.init(STEPPER_TASK_CORE);

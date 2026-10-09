@@ -1,4 +1,4 @@
-// FROZEN TESTS (Sprint 0b) – Sprint S2.2 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.2) – Sprint S2.2 must make these pass. Do not modify.
 // Covers: src/logic/measure_logic.cpp (CONTRACT §7)
 #include <unity.h>
 #include "logic/measure_logic.h"
@@ -8,10 +8,20 @@ void setUp() { C = SensorCurve{}; }
 void tearDown() {}
 
 // ---- sensor curve (millimetre, NOT centimetre) ------------------------------
-void test_curve_1v_is_120_8_mm() { TEST_ASSERT_FLOAT_WITHIN(0.05f, 120.8f, sensorMvToMm(1000.0f, C)); }
-void test_curve_2v() { TEST_ASSERT_FLOAT_WITHIN(0.2f, 58.02f, sensorMvToMm(2000.0f, C)); }
-void test_curve_near_end_2v75() { TEST_ASSERT_FLOAT_WITHIN(0.2f, 41.42f, sensorMvToMm(2750.0f, C)); }
-void test_curve_far_end_0v4() { TEST_ASSERT_FLOAT_WITHIN(0.5f, 318.5f, sensorMvToMm(400.0f, C)); }
+// V1.2: default curve fitted to the demo hardware: 121.5 * V^-1.142
+void test_curve_1v_is_121_5_mm() { TEST_ASSERT_FLOAT_WITHIN(0.05f, 121.5f, sensorMvToMm(1000.0f, C)); }
+void test_curve_2v() { TEST_ASSERT_FLOAT_WITHIN(0.2f, 55.06f, sensorMvToMm(2000.0f, C)); }
+void test_curve_matches_measured_demo_points() {
+    // measured on the demo axis (Vortest 2026-10-09): volt -> distance in mm
+    const float v[] = {1.72f, 1.85f, 2.02f, 2.18f, 2.39f, 2.63f};
+    const float d[] = {65.0f, 60.0f, 55.0f, 50.0f, 45.0f, 40.0f};
+    for (int i = 0; i < 6; ++i) TEST_ASSERT_FLOAT_WITHIN(1.0f, d[i], sensorMvToMm(v[i] * 1000.0f, C));
+}
+void test_curve_far_end_0v4_out_of_range() {
+    float mm = sensorMvToMm(400.0f, C);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 345.96f, mm);
+    TEST_ASSERT_FALSE(sensorInRange(mm, C));
+}
 void test_curve_monotonic_decreasing() {
     float prev = sensorMvToMm(300.0f, C);
     for (int mv = 350; mv <= 3100; mv += 50) {
@@ -82,6 +92,11 @@ void test_calib_default_identity() {
     TEST_ASSERT_TRUE(calibValid(p));
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 123.4f, calibApply(123.4f, p));
 }
+void test_calib_defaults_are_demo_identity() {
+    CalibPoints p;
+    TEST_ASSERT_EQUAL_FLOAT(40.0f, p.near_ref); TEST_ASSERT_EQUAL_FLOAT(40.0f, p.near_raw);
+    TEST_ASSERT_EQUAL_FLOAT(65.0f, p.far_ref);  TEST_ASSERT_EQUAL_FLOAT(65.0f, p.far_raw);
+}
 void test_calib_offset() {
     CalibPoints p; p.near_raw = 52; p.near_ref = 50; p.far_raw = 202; p.far_ref = 200;
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 100.0f, calibApply(102.0f, p));
@@ -98,7 +113,7 @@ void test_calib_invalid_cases() {
     p.near_raw = 100; p.far_raw = 103;                 // raw span < 5
     TEST_ASSERT_FALSE(calibValid(p));
     TEST_ASSERT_EQUAL_FLOAT(77.0f, calibApply(77.0f, p));
-    p = CalibPoints{}; p.far_ref = 52;                 // ref span < 5
+    p = CalibPoints{}; p.far_ref = 43;                 // ref span < 5
     TEST_ASSERT_FALSE(calibValid(p));
     p = CalibPoints{}; p.near_ref = 30;                // ref out of range
     TEST_ASSERT_FALSE(calibValid(p));
@@ -169,10 +184,10 @@ void test_stats_reset_and_empty() {
 
 int main(int, char**) {
     UNITY_BEGIN();
-    RUN_TEST(test_curve_1v_is_120_8_mm);
+    RUN_TEST(test_curve_1v_is_121_5_mm);
     RUN_TEST(test_curve_2v);
-    RUN_TEST(test_curve_near_end_2v75);
-    RUN_TEST(test_curve_far_end_0v4);
+    RUN_TEST(test_curve_matches_measured_demo_points);
+    RUN_TEST(test_curve_far_end_0v4_out_of_range);
     RUN_TEST(test_curve_monotonic_decreasing);
     RUN_TEST(test_curve_no_signal);
     RUN_TEST(test_range);
@@ -185,6 +200,7 @@ int main(int, char**) {
     RUN_TEST(test_iir_converges);
     RUN_TEST(test_iir_reset);
     RUN_TEST(test_calib_default_identity);
+    RUN_TEST(test_calib_defaults_are_demo_identity);
     RUN_TEST(test_calib_offset);
     RUN_TEST(test_calib_scale_and_points);
     RUN_TEST(test_calib_invalid_cases);

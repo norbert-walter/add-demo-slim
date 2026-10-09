@@ -92,8 +92,8 @@ bool appCmdIsPriority(CmdId id);
 
 /**
  * V1.1 – Commands an API client may NOT send while LOCAL priority is active
- * (CONTRACT §6.6): INIT, MOVE, START_MEASURE, START_TRAVERSE, HV_ON,
- * SHUTTER_OPEN, CALIB, ACK, REBOOT.  Always allowed: STOP, HV_OFF,
+ * (CONTRACT §6.6): INIT, MOVE, PARK, SERVICE, START_MEASURE, START_TRAVERSE,
+ * HV_ON, SHUTTER_OPEN, CALIB, ACK, REBOOT.  Always allowed: STOP, HV_OFF,
  * SHUTTER_CLOSE, SET, GET_STATE, GET_CONFIG.
  */
 bool appLocalBlocksApi(CmdId id);
@@ -160,6 +160,8 @@ HwOutputs appTick(AppState& s, const HwInputs& hw, const AppConfig& cfg);
  *                    (also if the command is then rejected by the gate);
  *      source API && local && appLocalBlocksApi(id) -> LOCAL_CONTROL, no action.
  *  - gate: safetyCmdAllowed(state, id) != OK -> return it.
+ *  - PARK (V1.2):    motionStartMove(cfg.motion.park_target_mm, approach_speed).
+ *  - SERVICE (V1.2): motionStartMove(params.maint_pos, approach_speed).
  *  - INIT/MOVE/START_*: motion_seq start functions. Defaults: MOVE speed =
  *    approach_speed; START_MEASURE pos = params.measure_pos; START_TRAVERSE
  *    start/end/speed = params.traverse_*.
@@ -169,11 +171,11 @@ HwOutputs appTick(AppState& s, const HwInputs& hw, const AppConfig& cfg);
  *      NEAR/FAR: !stabilityIsStable -> NOT_STABLE; near_raw/far_raw = raw_mm.
  *      BASE:     !in_range -> PRECONDITION; !stable -> NOT_STABLE; base_dist = dist_mm.
  *      SAVE:     !calibValid -> CALIB_INVALID; else out.persist.
- *      RESET:    calib = CalibPoints{} (identity), OK, no persist.
+ *      RESET:    calib = CalibPoints{} (identity 40/40, 65/65), OK, no persist.
  *  - ACK, HV_ON, HV_OFF, SHUTTER_OPEN, SHUTTER_CLOSE: safetyStep with the event;
  *    return its api; motor_stop handled as in appTick step 5.
  *  - REBOOT: hv_on -> PRECONDITION; else out.reboot.
- *  - Comm watchdog arming on success of INIT, MOVE, START_*, HV_ON:
+ *  - Comm watchdog arming on success of INIT, MOVE, PARK, SERVICE, START_*, HV_ON:
  *    source API -> comm_armed = true; source LOCAL -> comm_armed = false.
  *  - Driver request merge (V1.1): the command's request d replaces out.drv if
  *    rank(d) >= rank(out.drv), rank: NONE 0 < MOVE_TO/RUN_BACKWARD 1 < STOP 2

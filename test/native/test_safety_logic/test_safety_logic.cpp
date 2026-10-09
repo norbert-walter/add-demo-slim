@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.1) – Sprint S2.1 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.2) – Sprint S2.1 must make these pass. Do not modify.
 // Covers: src/logic/safety_logic.cpp (CONTRACT §6). Rules R1..R7 refer to safety_logic.h.
 #include <unity.h>
 #include "logic/safety_logic.h"
@@ -153,19 +153,54 @@ void test_r7_hv_on_idempotent() {
     SafetyResult r = step(st(SafetyState::RUNNING, true), SafetyEvent::HV_ON, good());
     ASSERT_STATE(SafetyState::RUNNING, r.next.state); ASSERT_API(ApiError::OK, r.api);
 }
-void test_r7_shutter_open_outside_park() {
-    SafetyResult r = step(st(SafetyState::RUNNING, true), SafetyEvent::SHUTTER_OPEN, good());
-    TEST_ASSERT_TRUE(r.next.shutter_open); ASSERT_API(ApiError::OK, r.api);
+// V1.2: manual SHUTTER_OPEN only in the service zone (20, 60]
+void test_r7_manual_shutter_open_only_in_service_zone() {
+    SafetyInputs in = good();
+    const float ok_pos[]  = {20.1f, 40.0f, 60.0f};
+    const float bad_pos[] = {60.1f, 100.0f, 145.0f, 248.0f};
+    for (float p : ok_pos) {
+        in.pos_mm = p;
+        SafetyResult r = step(st(SafetyState::RUNNING, true), SafetyEvent::SHUTTER_OPEN, in);
+        TEST_ASSERT_TRUE(r.next.shutter_open); ASSERT_API(ApiError::OK, r.api);
+    }
+    for (float p : bad_pos) {
+        in.pos_mm = p;
+        SafetyResult r = step(st(SafetyState::RUNNING, true), SafetyEvent::SHUTTER_OPEN, in);
+        TEST_ASSERT_FALSE(r.next.shutter_open); ASSERT_API(ApiError::PRECONDITION, r.api);
+    }
 }
 void test_r7_shutter_open_in_park_rejected() {
-    SafetyInputs in = good(); in.pos_mm = 5.0f;   // == park -> not allowed
+    SafetyInputs in = good(); in.pos_mm = 20.0f;   // == park limit -> not allowed
     SafetyResult r = step(st(SafetyState::RUNNING, true), SafetyEvent::SHUTTER_OPEN, in);
     TEST_ASSERT_FALSE(r.next.shutter_open); ASSERT_API(ApiError::PRECONDITION, r.api);
-    in.pos_mm = 5.1f;
+    r = step(st(SafetyState::RUNNING, true), SafetyEvent::SHUTTER_AUTO_OPEN, in);
+    TEST_ASSERT_FALSE(r.next.shutter_open); ASSERT_API(ApiError::PRECONDITION, r.api);
+    in.pos_mm = 20.1f;
     TEST_ASSERT_TRUE(step(st(SafetyState::RUNNING, true), SafetyEvent::SHUTTER_OPEN, in).next.shutter_open);
 }
+// V1.2: automation opens anywhere outside the park zone (material zone included)
+void test_r7_auto_open_outside_park() {
+    SafetyInputs in = good(); in.pos_mm = 145.0f;
+    SafetyResult r = step(st(SafetyState::RUNNING, true), SafetyEvent::SHUTTER_AUTO_OPEN, in);
+    TEST_ASSERT_TRUE(r.next.shutter_open); ASSERT_API(ApiError::OK, r.api);
+    ASSERT_API(ApiError::STATE, step(st(SafetyState::READY), SafetyEvent::SHUTTER_AUTO_OPEN, in).api);
+    in.cooling_flow = false;
+    r = step(st(SafetyState::RUNNING, true), SafetyEvent::SHUTTER_AUTO_OPEN, in);
+    ASSERT_API(ApiError::PRECONDITION, r.api); TEST_ASSERT_FALSE(r.next.shutter_open);
+}
+// V1.2: once opened in the service zone the shutter stays open when the axis leaves it
+void test_r7_manual_open_stays_open_outside_service_zone() {
+    SafetyInputs in = good(); in.pos_mm = 40.0f;
+    SafetyStatus s = step(st(SafetyState::RUNNING, true), SafetyEvent::SHUTTER_OPEN, in).next;
+    in.pos_mm = 145.0f;
+    s = step(s, SafetyEvent::TICK, in).next;
+    TEST_ASSERT_TRUE(s.shutter_open);
+    in.pos_mm = 19.0f;                              // entering the park zone closes it
+    s = step(s, SafetyEvent::TICK, in).next;
+    TEST_ASSERT_FALSE(s.shutter_open);
+}
 void test_r7_shutter_auto_closes_entering_park() {
-    SafetyInputs in = good(); in.pos_mm = 4.0f;
+    SafetyInputs in = good(); in.pos_mm = 19.9f;
     SafetyResult r = step(st(SafetyState::RUNNING, true, true), SafetyEvent::TICK, in);
     ASSERT_STATE(SafetyState::RUNNING, r.next.state);
     TEST_ASSERT_TRUE(r.next.hv_on); TEST_ASSERT_FALSE(r.next.shutter_open);
@@ -278,7 +313,7 @@ void test_full_cycle_estop_ack_recover() {
     SafetyStatus s = safetyInitialStatus();
     s = step(s, SafetyEvent::INIT_DONE, in).next;  ASSERT_STATE(SafetyState::READY, s.state);
     s = step(s, SafetyEvent::HV_ON, in).next;      ASSERT_STATE(SafetyState::RUNNING, s.state);
-    s = step(s, SafetyEvent::SHUTTER_OPEN, in).next; TEST_ASSERT_TRUE(s.shutter_open);
+    s = step(s, SafetyEvent::SHUTTER_AUTO_OPEN, in).next; TEST_ASSERT_TRUE(s.shutter_open);
     in.estop = true;
     s = step(s, SafetyEvent::TICK, in).next;       ASSERT_STATE(SafetyState::FAULT, s.state);
     s = step(s, SafetyEvent::TICK, in).next;       ASSERT_STATE(SafetyState::WAIT_ACK, s.state);
@@ -297,6 +332,7 @@ void test_cmd_gate_matrix() {
     struct Row { CmdId c; const char* allowed; };  // one char per state above: 1 = OK
     const Row rows[] = {
         {CmdId::INIT,           "110000"}, {CmdId::MOVE,          "011000"},
+        {CmdId::PARK,           "011000"}, {CmdId::SERVICE,       "011000"},
         {CmdId::START_MEASURE,  "001000"}, {CmdId::START_TRAVERSE, "001000"},
         {CmdId::CALIB,          "111000"}, {CmdId::ACK,           "000010"},
         {CmdId::HV_ON,          "011000"}, {CmdId::SHUTTER_OPEN,  "001000"},
@@ -315,11 +351,13 @@ void test_cmd_gate_matrix() {
 
 // ---- shutter automation ----------------------------------------------------------------------
 void test_auto_open_when_acquiring_outside_park() {
-    ASSERT_STATE(SafetyEvent::SHUTTER_OPEN,
+    ASSERT_STATE(SafetyEvent::SHUTTER_AUTO_OPEN,
                  safetyShutterAutomation(true, false, st(SafetyState::RUNNING, true), 50.0f, CFG));
+    ASSERT_STATE(SafetyEvent::SHUTTER_AUTO_OPEN,
+                 safetyShutterAutomation(true, false, st(SafetyState::RUNNING, true), 145.0f, CFG));
 }
 void test_auto_no_open_in_park_or_not_running() {
-    ASSERT_STATE(SafetyEvent::TICK, safetyShutterAutomation(true, false, st(SafetyState::RUNNING, true), 5.0f, CFG));
+    ASSERT_STATE(SafetyEvent::TICK, safetyShutterAutomation(true, false, st(SafetyState::RUNNING, true), 20.0f, CFG));
     ASSERT_STATE(SafetyEvent::TICK, safetyShutterAutomation(true, false, st(SafetyState::READY), 50.0f, CFG));
     ASSERT_STATE(SafetyEvent::TICK, safetyShutterAutomation(false, false, st(SafetyState::RUNNING, true), 50.0f, CFG));
     ASSERT_STATE(SafetyEvent::TICK, safetyShutterAutomation(true, false, st(SafetyState::RUNNING, true, true), 50.0f, CFG));
@@ -359,12 +397,16 @@ void test_invariants_random_sequences() {
             else if (r < 8) in.interlock = !in.interlock;
             else if (r < 13) in.cooling_flow = !in.cooling_flow;
             else if (r < 18) in.temp_c = (float)(15 + rnd() % 22);         // 15..36
-            else if (r < 25) in.pos_mm = (float)(rnd() % 240);
+            else if (r < 25) in.pos_mm = (float)(rnd() % 249);
             else if (r < 27) in.homed = !in.homed;
             in.motor_fault = (rnd() % 100) < 2;
             in.comm_timeout = (rnd() % 100) < 1;
-            SafetyEvent ev = (SafetyEvent)(rnd() % 8);
+            SafetyEvent ev = (SafetyEvent)(rnd() % 9);   // incl. SHUTTER_AUTO_OPEN
+            const bool was_open = s.shutter_open;
             SafetyResult res = safetyStep(s, ev, in, CFG);
+            if (ev == SafetyEvent::SHUTTER_OPEN && !was_open && res.next.shutter_open)
+                TEST_ASSERT_TRUE_MESSAGE(in.pos_mm > CFG.park_pos_mm && in.pos_mm <= CFG.maint_max_mm,
+                                         "manual open only in the service zone");
             s = res.next;
             checkInvariants(s, in);
         }
@@ -405,7 +447,9 @@ int main(int, char**) {
     RUN_TEST(test_r7_condition_loss_on_command_events);
     RUN_TEST(test_r7_hv_off_to_ready_closes_shutter);
     RUN_TEST(test_r7_hv_on_idempotent);
-    RUN_TEST(test_r7_shutter_open_outside_park);
+    RUN_TEST(test_r7_manual_shutter_open_only_in_service_zone);
+    RUN_TEST(test_r7_auto_open_outside_park);
+    RUN_TEST(test_r7_manual_open_stays_open_outside_service_zone);
     RUN_TEST(test_r7_shutter_open_in_park_rejected);
     RUN_TEST(test_r7_shutter_auto_closes_entering_park);
     RUN_TEST(test_r7_shutter_close);
