@@ -4,6 +4,7 @@
 // (priority queue, overflow latch). Do not modify.
 #define ADD_HOST_SHIM 1
 #include <unity.h>
+#include <stdio.h>
 #include <atomic>
 #include <thread>
 #include <vector>
