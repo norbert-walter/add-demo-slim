@@ -1,7 +1,7 @@
 /**
  * @file motion_drv.h
  * @brief Adapter between DrvRequest (logic/motion_seq.h) and FastAccelStepper
- *        in I2S_MUX mode (FROZEN CONTRACT §11).
+ *        in I2S_MUX mode (FROZEN CONTRACT V1.3 §11).
  *
  * Implementation: src/hal/motion_drv.cpp (Sprint S2.5, from the smoketest).
  * Only the control task calls these functions.
@@ -41,4 +41,4 @@ void motionDrvApply(const DrvRequest& r);
 
 bool    motionDrvRunning();          ///< isRunning()
 int32_t motionDrvPos();              ///< getCurrentPosition() in steps
-float   motionDrvSpeedMmMin();       ///< |getCurrentSpeedInMilliHz()| converted to mm/min
+float   motionDrvSpeedMmS();         ///< V1.3: |getCurrentSpeedInMilliHz()| / 1000 / STEPS_PER_MM (mm/s)

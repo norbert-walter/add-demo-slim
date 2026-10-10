@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.2) – Sprint S2.2 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.3) – Sprint S2.2 must make these pass. Do not modify.
 // Covers: src/logic/params.cpp (CONTRACT §9)
 #include <unity.h>
 #include <string.h>
@@ -23,7 +23,8 @@ void test_defaults() {
     TEST_ASSERT_EQUAL_FLOAT(40.0f, p.maint_pos);
     TEST_ASSERT_EQUAL_FLOAT(60.0f, p.traverse_start);
     TEST_ASSERT_EQUAL_FLOAT(240.0f, p.traverse_end);
-    TEST_ASSERT_EQUAL_FLOAT(200.0f, p.traverse_speed);
+    TEST_ASSERT_EQUAL_FLOAT(10.0f, p.traverse_speed);        // mm/s (V1.3)
+    TEST_ASSERT_FALSE(p.estop_nc);                           // simple switch, active LOW
     TEST_ASSERT_EQUAL_FLOAT(3.0f, p.edge_threshold);
     TEST_ASSERT_EQUAL_FLOAT(70.0f, p.base_dist);
     TEST_ASSERT_EQUAL_FLOAT(40.0f, p.calib.near_ref);
@@ -39,6 +40,17 @@ void test_flags_bool_and_not_persisted() {
     TEST_ASSERT_TRUE(F.interlock); TEST_ASSERT_FALSE(persist);
     OK(setBool("cooling_flow", true)); TEST_ASSERT_TRUE(F.cooling_flow); TEST_ASSERT_FALSE(persist);
     OK(setBool("interlock", false)); TEST_ASSERT_FALSE(F.interlock);
+}
+// V1.3: E-stop wiring parameter – bool like the flags, but PERSISTED
+void test_estop_nc_bool_persisted() {
+    OK(setBool("estop_nc", true)); TEST_ASSERT_TRUE(P.estop_nc); TEST_ASSERT_TRUE(persist);
+    OK(setNum("estop_nc", 0)); TEST_ASSERT_FALSE(P.estop_nc);
+    BAD(setNum("estop_nc", 2)); BAD(setStr("estop_nc", "nc"));
+    TEST_ASSERT_FALSE(P.estop_nc);
+    OK(setBool("estop_nc", true));
+    char buf[600];
+    paramsToJsonMember(P, F, buf, sizeof(buf));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "\"estop_nc\":true,"));
 }
 void test_flags_accept_0_1_numbers_only() {
     OK(setNum("interlock", 1)); TEST_ASSERT_TRUE(F.interlock);
@@ -58,7 +70,7 @@ void test_numeric_params_ranges_and_persist() {
     struct R { const char* k; double lo, hi; } rs[] = {
         {"measure_pos", 21, 248}, {"maint_pos", 21, 60},
         {"traverse_start", 21, 248}, {"traverse_end", 21, 248},
-        {"traverse_speed", 10, 3000}, {"edge_threshold", 0.5, 100}, {"base_dist", 40, 300},
+        {"traverse_speed", 1, 20}, {"edge_threshold", 0.5, 100}, {"base_dist", 40, 300},
         {"calib_near_ref", 40, 300}, {"calib_far_ref", 40, 300},
     };
     for (auto& r : rs) {
@@ -75,7 +87,7 @@ void test_values_land_in_right_fields() {
     OK(setNum("maint_pos", 33)); TEST_ASSERT_EQUAL_FLOAT(33.0f, P.maint_pos);
     OK(setNum("traverse_start", 22)); TEST_ASSERT_EQUAL_FLOAT(22.0f, P.traverse_start);
     OK(setNum("traverse_end", 222)); TEST_ASSERT_EQUAL_FLOAT(222.0f, P.traverse_end);
-    OK(setNum("traverse_speed", 333)); TEST_ASSERT_EQUAL_FLOAT(333.0f, P.traverse_speed);
+    OK(setNum("traverse_speed", 13.5)); TEST_ASSERT_EQUAL_FLOAT(13.5f, P.traverse_speed);
     OK(setNum("edge_threshold", 4.5)); TEST_ASSERT_EQUAL_FLOAT(4.5f, P.edge_threshold);
     OK(setNum("base_dist", 199)); TEST_ASSERT_EQUAL_FLOAT(199.0f, P.base_dist);
     OK(setNum("calib_near_ref", 60)); TEST_ASSERT_EQUAL_FLOAT(60.0f, P.calib.near_ref);
@@ -131,10 +143,10 @@ void test_config_json_exact_defaults() {
     int n = paramsToJsonMember(P, F, buf, sizeof(buf));
     TEST_ASSERT_EQUAL_STRING(
         "\"config\":{\"measure_pos\":145.0,\"maint_pos\":40.0,\"traverse_start\":60.0,"
-        "\"traverse_end\":240.0,\"traverse_speed\":200.0,\"edge_threshold\":3.0,\"base_dist\":70.0,"
+        "\"traverse_end\":240.0,\"traverse_speed\":10.0,\"edge_threshold\":3.0,\"base_dist\":70.0,"
         "\"calib_near_raw\":40.0,\"calib_near_ref\":40.0,\"calib_far_raw\":65.0,"
         "\"calib_far_ref\":65.0,\"calib_valid\":true,\"interlock\":false,"
-        "\"cooling_flow\":false,\"temp\":18.0,\"wifi_ssid\":\"\",\"wifi_pass_set\":false}", buf);
+        "\"cooling_flow\":false,\"temp\":18.0,\"estop_nc\":false,\"wifi_ssid\":\"\",\"wifi_pass_set\":false}", buf);
     TEST_ASSERT_EQUAL_INT((int)strlen(buf), n);
 }
 void test_config_json_never_contains_password() {
@@ -156,6 +168,7 @@ int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_defaults);
     RUN_TEST(test_flags_bool_and_not_persisted);
+    RUN_TEST(test_estop_nc_bool_persisted);
     RUN_TEST(test_flags_accept_0_1_numbers_only);
     RUN_TEST(test_temp);
     RUN_TEST(test_numeric_params_ranges_and_persist);

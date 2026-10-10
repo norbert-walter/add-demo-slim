@@ -1,7 +1,19 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.2 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-09
-**Basis:** Pflichtenheft Demoanlage ADD Slim V1.6
+**Version:** 1.3 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-10
+**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7
+
+### Changes 1.2 → 1.3
+
+| # | Change | Where |
+|---|---|---|
+| 1 | **All speeds in mm/s**: range 1 … 20 mm/s, normal speed 10 mm/s (MOVE/PARK/SERVICE default, approach, traverse default), homing 5 mm/s, homing timeout 70 s; `mmPerSecToHz`; `/proc` `vel` in mm/s | §2, §5, §8, §9 |
+| 2 | E-stop wiring is the persisted parameter **`estop_nc`** (default `false` = simple switch, active LOW, no wire-break detection); settable only while idle with HV off | §9, §11 |
+| 3 | Buzzer patterns (active buzzer, rhythm only) from the pure `sound_logic.h`: BOOT, REBOOT, CLICK, HOMED, FAULT, ESTOP (4 s) | §11.1 |
+| 4 | Heartbeat: blue board LED GPIO 2, 0.5 Hz, driven by the control task | §11 |
+| 5 | WiFi: AP always on + router connection (station) with 3 attempts × 10 s, then 2 min pause, forever; pure `wifi_logic.h` | §12.1 |
+| 6 | REBOOT: the restart happens `REBOOT_DELAY_MS` (700 ms) after the request, after the REBOOT pattern | §5.2, §12 |
+| 7 | NVS schema version 3 | §12 |
 
 ### Changes 1.1 → 1.2 (hardware pre-test 2026-10-09, CONTRACT §14)
 
@@ -95,7 +107,8 @@ C++17 functions without Arduino/ESP-IDF/FreeRTOS. It is tested on the host
 
 - Positions: **mm** in API, JSON and logic interfaces; **steps** inside motion_seq / driver.
   `STEPS_PER_MM = 200 · 16 / 42 = 76.19` (TMC2209 jumper 1/16).
-- Speeds: **mm/min** in API; **steps/s (Hz)** towards the driver.
+- Speeds: **mm/s** in API, parameters, `/proc` and display (V1.3); **steps/s (Hz)** towards the driver.
+  Range 1 … 20 mm/s; normal speed 10 mm/s; homing 5 mm/s.
 - Time: `uint32_t` milliseconds (`millis()`), all comparisons wrap-around safe.
 - Position 0 = 2 mm in front of the backward end switch (after homing). Axis 0 … 248 mm
   (forward end switch at 250 mm).
@@ -134,7 +147,7 @@ the automation may open the shutter anywhere outside the park zone.)
 | 2 | `TEMP_HIGH` | simulated cooling water temperature > 32.0 °C |
 | 3 | `COMM_TIMEOUT` | remote operation active and no `/api` packet for > 5 s |
 | 4 | `MOTOR_FAULT` | end switch hit unexpectedly during motion |
-| 5 | `HOMING_FAILED` | homing timeout (40 s) or forward switch during homing |
+| 5 | `HOMING_FAILED` | homing timeout (70 s) or forward switch during homing |
 
 ### 3.3 API result codes (`/api` response field `err`)
 
@@ -203,7 +216,7 @@ Exact member order, one line, floats with one decimal:
 
 ```json
 {"ts":123456,"state":"RUNNING","err":0,"local":false,
- "motion":{"pos":120.0,"vel":200.0,"state":"moving","mode":"traverse","homed":true,"limit_fwd":false,"limit_bwd":false},
+ "motion":{"pos":120.0,"vel":10.0,"state":"moving","mode":"traverse","homed":true,"limit_fwd":false,"limit_bwd":false},
  "measure":{"dist":187.7,"thick":12.3,"on_material":true,"valid":true,"in_range":true,"avg":12.3,"n":143},
  "safety":{"estop":false,"hv_on":true,"hv_ok":true,"shutter":"open","interlock":true,"cooling_flow":true,"temp":23.0,"temp_ok":true,"comm_armed":true},
  "crc":"XXXXXXXX"}
@@ -254,9 +267,9 @@ because of a full normal queue (§6.7).
 | Command | Params | Allowed in | Effect |
 |---|---|---|---|
 | `INIT` | – | SAFE_START, READY | homing (run backward to switch, 2 mm pull-off, zero) → READY |
-| `MOVE` | `pos` (req.), `speed` (opt., default 1500) | READY, RUNNING | absolute move 0…248 mm, 10…3000 mm/min; requires homed |
-| `PARK` | – | READY, RUNNING | V1.2: move to the park position 2 mm at 1500 mm/min; requires homed; the shutter closes when entering the park zone, HV is not changed |
-| `SERVICE` | – | READY, RUNNING | V1.2: move to `maint_pos` (service zone) at 1500 mm/min; requires homed |
+| `MOVE` | `pos` (req.), `speed` (opt., default 10) | READY, RUNNING | absolute move 0…248 mm, 1…20 mm/s; requires homed |
+| `PARK` | – | READY, RUNNING | move to the park position 2 mm at 10 mm/s; requires homed; the shutter closes when entering the park zone, HV is not changed |
+| `SERVICE` | – | READY, RUNNING | move to `maint_pos` (service zone) at 10 mm/s; requires homed |
 | `START_MEASURE` | `pos` (opt., default `measure_pos`) | RUNNING | move to pos (20 < pos ≤ 248), then stationary measurement until `STOP`; shutter opens automatically |
 | `START_TRAVERSE` | `start`, `end`, `speed` (opt., defaults `traverse_*`) | RUNNING | approach start, traverse to end at speed; shutter opens during the run, closes at the end; HV stays on |
 | `STOP` | – | all | controlled stop; acquisition ends, shutter closes |
@@ -269,7 +282,7 @@ because of a full normal queue (§6.7).
 | `HV_OFF` | – | all | RUNNING → READY |
 | `SHUTTER_OPEN` | – | RUNNING | V1.2: only in the service zone (20 < pos ≤ 60 mm), else `PRECONDITION` |
 | `SHUTTER_CLOSE` | – | all | – |
-| `REBOOT` | – | SAFE_START, READY, WAIT_ACK | restart after the reply |
+| `REBOOT` | – | SAFE_START, READY, WAIT_ACK | REBOOT buzzer pattern, restart 700 ms after the request (reply is sent before) |
 
 ### 5.3 `GET_CONFIG` extra member
 
@@ -476,9 +489,9 @@ request per cycle (`MOVE_TO, RUN_BACKWARD, STOP, FORCE_STOP, ZERO_HERE`).
 
 | Parameter | Value |
 |---|---|
-| Homing speed | 600 mm/min, pull-off 2 mm, timeout 40 s |
-| Approach speed / MOVE default | 1500 mm/min |
-| Speed range | 10 … 3000 mm/min |
+| Homing speed | 5 mm/s (seek and pull-off), pull-off 2 mm, timeout 70 s |
+| Normal speed: MOVE/PARK/SERVICE default, approach moves | 10 mm/s |
+| Speed range | 1 … 20 mm/s |
 | Acceleration | 500 mm/s² (`ACCEL_MM_S2`, VERIFY 0a) |
 | Arrival | driver stopped and at target, or stopped for ≥ 100 ms |
 
@@ -499,12 +512,13 @@ switch outside homing) → force stop, reference lost, `MOTOR_FAULT`
 | `maint_pos` | number | 40.0 | 21 … 60 mm (service zone, customer-defined) | yes |
 | `traverse_start` | number | 60.0 | 21 … 248 mm | yes |
 | `traverse_end` | number | 240.0 | 21 … 248 mm | yes |
-| `traverse_speed` | number | 200.0 | 10 … 3000 mm/min | yes |
+| `traverse_speed` | number | 10.0 | 1 … 20 mm/s | yes |
 | `edge_threshold` | number | 3.0 | 0.5 … 100 mm (thickness) | yes |
 | `base_dist` | number | 70.0 | 40 … 300 mm (virtual reference plane) | yes |
 | `calib_near_ref` | number | 40.0 | 40 … 300 mm | yes |
 | `calib_far_ref` | number | 65.0 | 40 … 300 mm | yes |
-| `wifi_ssid` | string | "" | 0 … 32 chars (empty = AP mode) | yes (effective after REBOOT) |
+| `estop_nc` | bool (or 0/1) | false | – | yes – E-stop wiring (§11); only while idle with HV off |
+| `wifi_ssid` | string | "" | 0 … 32 chars (empty = no router connection) | yes (effective after REBOOT) |
 | `wifi_pass` | string | "" | 0 or 8 … 63 chars | yes (never reported back) |
 
 Safety flags are **fail-safe**: after every boot `interlock = false`,
@@ -543,22 +557,65 @@ The publication of the statistics itself (< 2 µs) is not part of `cycle_max_us`
 ## 11. Hardware layer (`src/hal/*.h`)
 
 - Inputs: limit switches debounced 5 ms. **E-stop: activation immediate, release debounced.**
-  E-stop wiring must be **normally closed to GND** (pressed or wire broken → HIGH → E-stop).
-- Outputs: shutter LED GPIO 32, **HV LED GPIO 4** (V1.2, both HIGH = on, 20 mA, LOW
-  from the first line of `halInit()`); the buzzer is a bit in the 74HC595 chain
-  (i2so.7) set via `engine.i2sMuxSetBit(slot, value)` (FastAccelStepper ≥ 2.0).
+- **E-stop wiring (V1.3, parameter `estop_nc`, REST `SET`, persisted):**
+
+| `estop_nc` | Wiring | E-stop active | Wire break |
+|---|---|---|---|
+| `false` (default) | normally-open switch to GND, board pull-up | LOW | **not detected** (reads as "no E-stop") |
+| `true` | normally-closed contact to GND, board pull-up | HIGH | detected (reads as E-stop) |
+
+  A setting that does not match the wiring always shows a permanent E-stop
+  (normal state reads as active) – the error is safe and visible. The control
+  task calls `halSetEstopActiveHigh(params.estop_nc)` every cycle. The value can
+  only be changed while the axis is idle and HV is off (else `PRECONDITION`).
+  With `false` the display shows `ESTOP(NO)` in the warning colour.
+- Outputs: shutter LED GPIO 32, **HV LED GPIO 4**, **heartbeat LED GPIO 2** (blue
+  board LED, V1.3: on while `(now_ms / 1000)` is even = 0.5 Hz, driven by the
+  control task, so it stops when the control loop stops); all HIGH = on, LOW from
+  the first line of `halInit()`. The buzzer is a bit in the 74HC595 chain (i2so.7)
+  set via `engine.i2sMuxSetBit(slot, value)` (FastAccelStepper ≥ 2.0).
 - Stepper: FastAccelStepper `DRIVER_I2S_MUX`, step/dir/enable as mux slots
   (`slot | PIN_I2S_FLAG`). Slot mapping `I2SO_TO_SLOT(n)` determined in Sprint 0a.
 - Reaction time E-stop → motor stop: ≤ 2 ms (1 ms cycle + driver); outputs off in the same cycle.
+
+### 11.1 Buzzer signals (`src/logic/sound_logic.h`)
+
+The buzzer is an **active** buzzer (fixed tone, on/off only), so signals differ
+by rhythm. Patterns in ms (on/off/on…):
+
+| Sound | Pattern | When |
+|---|---|---|
+| `BOOT` | 100 / 100 / 300 (short–long) | first control cycle after the firmware has started = firmware ready |
+| `REBOOT` | 300 / 100 / 100 (long–short) | accepted REBOOT, before the restart |
+| `CLICK` | 50 | display command accepted (`source = LOCAL`, result OK) |
+| `HOMED` | 150 | homing finished |
+| `FAULT` | 3 × 150 (pause 150) | fault entry, cause other than ESTOP |
+| `ESTOP` | 4000 | fault entry with cause ESTOP (once, not repeated while pressed) |
+
+Priority ESTOP > FAULT > REBOOT > BOOT > HOMED > CLICK: a lower-priority sound
+never interrupts a higher one.
 
 ---
 
 ## 12. System (`src/system/*.h`, `src/comm/*.h`)
 
 - Task watchdog 10 s (ESP-IDF 5 API), control task registered.
-- WiFi: STA with credentials from NVS, else / on failure AP `ADD-Demo` / `adddemo1`
-  (192.168.4.1), mDNS `add-demo.local`.
-- NVS namespace `add_demo`, schema version 2 (V1.2; older data → defaults), keys see `nvs_config.h`.
+- NVS namespace `add_demo`, schema version 3 (V1.3; older data → defaults), keys see `nvs_config.h`.
+- REBOOT: the network task calls `systemRestart()` `REBOOT_DELAY_MS` = 700 ms after
+  the request (HTTP reply sent, REBOOT pattern played).
+
+### 12.1 WiFi (`src/comm/wifi_manager.h`, `src/logic/wifi_logic.h`)
+
+- **Access point always on:** `ADD-Demo` / `adddemo1`, 192.168.4.1 (mode `WIFI_AP_STA`).
+- **Router connection (station):** if `wifi_ssid` is set (REST `SET wifi_ssid` /
+  `wifi_pass`, effective after `REBOOT`), the device logs into that network via
+  DHCP – automatically after every boot – and is then also reachable there
+  (and can use the internet through the router). mDNS `add-demo.local` on both.
+- **Reconnect:** connection lost or failed → 3 attempts of 10 s each; if all fail
+  → 2 min pause → 3 attempts again, forever (`staStep`, tested by `test_wifi_logic`).
+- During connection attempts the ESP32 radio may switch channels; AP clients can
+  notice short interruptions. The pause keeps this rare when the router is absent.
+- Every state change is logged (`/log`); the display shows AP and station IP / state.
 
 ---
 
@@ -571,7 +628,7 @@ Layout details: Pflichtenheft §5.8.
 
 | Screen mode | State | Content |
 |---|---|---|
-| NORMAL | SAFE_START, READY, RUNNING, RECOVER | status, 7 buttons at y = 260, h = 60: `INIT` · `HV` (toggle) · `MEAS` · `TRAV` · `PARK` · `SERV` (64 px each) · `STOP` (96 px); `LOCAL` badge; flags marked `SIM` |
+| NORMAL | SAFE_START, READY, RUNNING, RECOVER | status, 7 buttons at y = 260, h = 60: `INIT` · `HV` (toggle) · `MEAS` · `TRAV` · `PARK` · `SERV` (64 px each) · `STOP` (96 px); `LOCAL` badge; flags marked `SIM`; speed in mm/s; `ESTOP(NO)` warning if `estop_nc` is false; IP line AP + station |
 | FAULT | FAULT (1 cycle) | fault banner, **no buttons** |
 | ACK | WAIT_ACK | fault banner `FEHLER: <name>` + remedy; **all normal buttons hidden**; one ACK area 480 × 60 px at y = 260 |
 

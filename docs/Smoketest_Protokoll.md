@@ -34,9 +34,9 @@ Ergebnis jeder Prüfung eintragen. Werte mit **→ config.h** werden danach in
 |---|---|---|---|
 | 2.1 | `watch 20`, Endschalter vorn betätigen | `limit_fwd` wechselt true/false | Pegel betätigt: ___ **→ LIMIT_ACTIVE_LEVEL** |
 | 2.2 | dito hinten | `limit_bwd` wechselt | |
-| 2.3 | Not-Aus drücken / lösen | `estop` true / false | Pegel gedrückt: ___ (Vortest: LOW) |
-| 2.4 | **Drahtbruch-Test:** Not-Aus-Leitung am PROBE-Stecker abziehen | Pegel wie „gedrückt“ → `estop: true` (fail-safe!) | Pegel abgezogen: ___ ✅/❌ – bei ❌ Verdrahtung ändern (Öffner), **nicht** weitermachen |
-| 2.5 | Aus 2.3/2.4 Pegel festlegen | gedrückt = abgezogen | **→ `ESTOP_ACTIVE_LEVEL`** = ___ |
+| 2.3 | Einfacher Schalter (Standard): `estop low`, `watch 20`, Schalter drücken / lösen | `estop` true / false | ✅/❌ |
+| 2.4 | Info: Leitung abziehen | mit einfachem Schalter **kein** Not-Aus (keine Drahtbrucherkennung – so gewollt für die Tests) | |
+| 2.5 | Später mit Öffner: `estop high`, drücken / lösen, Leitung abziehen | gedrückt **und** abgezogen → `estop: true` | ✅/❌ **→ Parameter `estop_nc` = true** (per REST, nicht in config.h) |
 
 ## 3. Abstandssensor
 
@@ -55,19 +55,21 @@ Ergebnis jeder Prüfung eintragen. Werte mit **→ config.h** werden danach in
 | 4.2 | Formel ableiten | Slot = f(i2so) | **→ `I2SO_TO_SLOT(n)`** = ___ |
 | 4.3 | Nach Anpassung neu flashen: `beep 300` | Buzzer piept | |
 | 4.4 | `hv 1`, `hv 0`, `shutter 1`, `shutter 0` | grüne LED (GPIO 4) / rote LED (GPIO 32) folgen; nach Reset beide aus | |
+| 4.5 | Beobachten | blaue Board-LED (GPIO 2) blinkt 1 s an / 1 s aus | |
 
 ## 5. Antrieb
 
 | # | Aktion | Erwartung | Ergebnis |
 |---|---|---|---|
 | 5.1 | `stepper` | `stepper: true` | |
-| 5.2 | `move 10 300` – Weg mit Messschieber messen | 10,0 mm (±0,2) | gemessen: ___ mm |
+| 5.2 | `move 10 5` (10 mm mit 5 mm/s) – Weg mit Messschieber messen | 10,0 mm (±0,2) | gemessen: ___ mm |
 | 5.3 | Richtung: positive mm = weg vom hinteren Endschalter? | ja | ✅ / ❌ **→ `DIR_POSITIVE_HIGH`** |
-| 5.4 | `move 50 3000`, `move -50 3000` | läuft ruhig, kein Schrittverlust (Position danach wie vorher) | |
+| 5.4 | `move 50 20`, `move -50 20` (Maximalgeschwindigkeit 20 mm/s) | läuft ruhig, kein Schrittverlust (Position danach wie vorher) | |
+| 5.4a | `move 20 1`, `move -20 1` (Minimalgeschwindigkeit 1 mm/s) | gleichmäßig, kein Rattern | |
 | 5.5 | Beschleunigung: ggf. `ACCEL_MM_S2` anpassen | kein Ruckeln | **→ `ACCEL_MM_S2`** = ___ |
-| 5.6 | `home` | stoppt am hinteren Endschalter (`reason: home_switch`) | Dauer: ___ ms |
-| 5.6a | Nach `home` (steht am hinteren Schalter): `move 250 1500` (`move` ist relativ; 250 mm ab Schalter = Achse 248 mm) | vorderer Endschalter löst **nicht** aus; Abstand zum Schalter ≈ 2 mm | ✅/❌ |
-| 5.7 | Not-Aus während `move 100 300` | sofortiger Stopp, `reason: estop` | |
+| 5.6 | `home` (5 mm/s) | stoppt am hinteren Endschalter (`reason: home_switch`) | Dauer: ___ ms |
+| 5.6a | Nach `home` (steht am hinteren Schalter): `move 250 10` (`move` ist relativ; 250 mm ab Schalter = Achse 248 mm) | vorderer Endschalter löst **nicht** aus; Abstand zum Schalter ≈ 2 mm | ✅/❌ |
+| 5.7 | Not-Aus während `move 100 10` | sofortiger Stopp, `reason: estop` | |
 
 ## 6. Display und Touch
 
@@ -82,6 +84,8 @@ Ergebnis jeder Prüfung eintragen. Werte mit **→ config.h** werden danach in
 | # | Aktion | Erwartung | Ergebnis |
 |---|---|---|---|
 | 7.1 | `wifi`, Tablet mit `ADD-Demo` verbinden, `http://192.168.4.1/ping` | JSON `pong: true` | |
+| 7.2 | `sta <ssid> <passwort>` (Router) | `sta: true`, IP aus dem Heimnetz; AP weiter erreichbar | IP: ___ |
+| 7.3 | Vom PC im Heimnetz: `http://<IP>/ping` | JSON `pong: true` | |
 
 ## 8. Agenten-Probelauf (code-server + Cline + Qwen)
 

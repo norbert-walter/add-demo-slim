@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.2) – Sprint S2.4 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.3) – speeds in mm/s – Sprint S2.4 must make these pass. Do not modify.
 // Covers: src/logic/app_logic.cpp (CONTRACT §10) – complete scenarios with a
 // simulated axis (fake_axis.h) and a simulated distance sensor.
 #include <unity.h>
@@ -15,7 +15,8 @@ static bool      estop;
 static uint32_t  last_rx;
 static bool      heartbeat;      // simulated API client sends a packet every second
 static HwOutputs last_out;
-static int       beeps, persists;
+static int       beeps, persists;   // beeps = HOMED/FAULT/ESTOP patterns started
+static int       snd[8];           // V1.3: started patterns per Sound
 
 // ---- simulated sensor = demo geometry (Vortest 2026-10-09, axis coordinates) -------------
 // Stair body 95..215 mm, six 20 mm steps centred at 105, 125 ... 205 mm with sensor
@@ -34,7 +35,7 @@ static HwInputs hw() {
     h.now_ms = now; h.estop = estop;
     h.limit_fwd = A.limitFwd(); h.limit_bwd = A.limitBwd();
     h.drv_running = A.running; h.drv_pos_steps = A.drvPos();
-    h.drv_speed_mm_min = A.running ? (float)(A.speed_hz * 60.0 / C.motion.steps_per_mm) : 0.0f;
+    h.drv_speed_mm_s = A.running ? (float)(A.speed_hz / C.motion.steps_per_mm) : 0.0f;
     h.last_api_rx_ms = last_rx;
     return h;
 }
@@ -59,7 +60,10 @@ static bool cycle(const Command* cmd = nullptr, ApiError* res = nullptr) {
         executed = true;
     }
     A.apply(out.drv);
-    if (out.beep) beeps++;
+    if (out.sound != Sound::NONE) {
+        snd[(int)out.sound]++;
+        if (out.sound == Sound::HOMED || out.sound == Sound::FAULT || out.sound == Sound::ESTOP) beeps++;
+    }
     if (out.persist) persists++;
     last_out = out;
     return executed;
@@ -96,13 +100,14 @@ void setUp() {
     C = AppConfig{}; appInit(S); A = FakeAxis{};
     A.phys_steps = 100.0 * C.motion.steps_per_mm;
     now = 10000; estop = false; last_rx = 0; heartbeat = true; beeps = 0; persists = 0;
+    for (int& x : snd) x = 0;
     run(100);
 }
 void tearDown() {}
 
 static void homeAndReady() {
     API(ApiError::OK, send(CmdId::INIT));
-    run(20000);
+    run(25000);                                  // ~98 mm at 5 mm/s
     STATE(SafetyState::READY);
     TEST_ASSERT_TRUE(S.seq.homed);
 }
@@ -139,10 +144,13 @@ void test_init_homes_and_goes_ready_with_beep() {
     API(ApiError::OK, send(CmdId::INIT));
     TEST_ASSERT_TRUE(proc().motion.state == MotionState::HOMING);
     TEST_ASSERT_TRUE(S.comm_armed);              // remote operation running
-    run(20000);
+    run(25000);
     STATE(SafetyState::READY);
     TEST_ASSERT_TRUE(proc().motion.homed);
     TEST_ASSERT_EQUAL_INT(1, beeps);
+    TEST_ASSERT_EQUAL_INT(1, snd[(int)Sound::HOMED]);
+    TEST_ASSERT_EQUAL_INT(1, snd[(int)Sound::BOOT]);         // V1.3: boot pattern once after start
+    TEST_ASSERT_EQUAL_INT(0, snd[(int)Sound::CLICK]);        // API commands do not click
     TEST_ASSERT_FALSE(S.comm_armed);             // idle and HV off -> disarmed
     TEST_ASSERT_FLOAT_WITHIN(0.05f, 0.0f, proc().motion.pos);
 }
@@ -150,7 +158,7 @@ void test_local_init_does_not_arm_watchdog() {
     heartbeat = false;
     API(ApiError::OK, send(CmdId::INIT, CmdSource::LOCAL));
     TEST_ASSERT_FALSE(S.comm_armed);
-    run(20000);                                  // > 5 s without packets
+    run(25000);                                  // > 5 s without packets
     STATE(SafetyState::READY);
 }
 
@@ -178,13 +186,13 @@ void test_flags_not_persisted_params_persisted() {
 void test_shutter_manual_open_close() {
     running();
     API(ApiError::PRECONDITION, send(CmdId::SHUTTER_OPEN));   // park zone (0 mm)
-    Command m = mk(CmdId::MOVE); m.has_pos = true; m.pos = 145; m.has_speed = true; m.speed = 3000;
+    Command m = mk(CmdId::MOVE); m.has_pos = true; m.pos = 145; m.has_speed = true; m.speed = 20;
     API(ApiError::OK, send(m));
-    run(4000);
+    run(9000);                                                // 145 mm at 20 mm/s
     API(ApiError::PRECONDITION, send(CmdId::SHUTTER_OPEN));   // V1.2: material zone, manual open not allowed
     m.pos = 50;
     API(ApiError::OK, send(m));
-    run(3000);
+    run(6000);
     API(ApiError::OK, send(CmdId::SHUTTER_OPEN));             // service zone
     TEST_ASSERT_TRUE(last_out.shutter_open);
     TEST_ASSERT_TRUE(proc().measure.valid);
@@ -197,7 +205,7 @@ void test_service_moves_to_maint_pos_and_allows_manual_shutter() {
     running();
     API(ApiError::OK, send(CmdId::SERVICE));
     TEST_ASSERT_TRUE(S.comm_armed);                           // motion started from the API
-    run(4000);
+    run(5000);                                                // 40 mm at 10 mm/s
     TEST_ASSERT_FLOAT_WITHIN(0.05f, 40.0f, proc().motion.pos);
     API(ApiError::OK, send(CmdId::SHUTTER_OPEN));
     TEST_ASSERT_TRUE(last_out.shutter_open);
@@ -211,12 +219,12 @@ void test_service_moves_to_maint_pos_and_allows_manual_shutter() {
 void test_park_moves_to_2mm_and_closes_shutter() {
     running();
     API(ApiError::OK, send(CmdId::SERVICE));
-    run(4000);
+    run(5000);
     API(ApiError::OK, send(CmdId::SHUTTER_OPEN));
     TEST_ASSERT_TRUE(last_out.shutter_open);
     API(ApiError::OK, send(CmdId::PARK));
     bool closed_before_park_zone_left = true;
-    for (int i = 0; i < 4000; ++i) {
+    for (int i = 0; i < 5000; ++i) {                          // 38 mm at 10 mm/s
         cycle();
         if (last_out.shutter_open && proc().motion.pos <= C.safety.park_pos_mm) closed_before_park_zone_left = false;
     }
@@ -241,10 +249,10 @@ void test_park_and_service_gate_and_local() {
 // ---- traverse scenario --------------------------------------------------------------------
 void test_traverse_auto_shutter_and_statistics() {
     running();
-    API(ApiError::OK, traverse(60, 240, 3000));               // default profile of the demo
+    API(ApiError::OK, traverse(60, 240, 20));                 // default profile, max speed
     TEST_ASSERT_TRUE(proc().motion.mode == OpMode::TRAVERSE);
     bool sawOpen = false, sawOpenInPark = false;
-    for (int i = 0; i < 8000; ++i) {
+    for (int i = 0; i < 20000; ++i) {                         // 6 s approach + 9 s run
         cycle();
         if (last_out.shutter_open) {
             sawOpen = true;
@@ -268,9 +276,9 @@ void test_traverse_uses_param_defaults() {
     running();
     API(ApiError::OK, setNum("traverse_start", 30));
     API(ApiError::OK, setNum("traverse_end", 40));
-    API(ApiError::OK, setNum("traverse_speed", 3000));
+    API(ApiError::OK, setNum("traverse_speed", 20));
     API(ApiError::OK, send(CmdId::START_TRAVERSE));
-    run(3000);
+    run(5000);
     TEST_ASSERT_FLOAT_WITHIN(0.1f, 40.0f, proc().motion.pos);
 }
 void test_traverse_rejected_in_ready() {
@@ -279,8 +287,8 @@ void test_traverse_rejected_in_ready() {
 }
 void test_stop_during_traverse_closes_shutter() {
     running();
-    API(ApiError::OK, traverse(30, 240, 600));
-    run(2000);
+    API(ApiError::OK, traverse(30, 240, 10));
+    run(4000);                                       // approach 30 mm at 10 mm/s = 3 s
     TEST_ASSERT_TRUE(last_out.shutter_open);
     API(ApiError::OK, send(CmdId::STOP));
     run(2);
@@ -292,7 +300,7 @@ void test_measure_mode_holds_and_averages() {
     running();
     Command m = mk(CmdId::START_MEASURE); m.has_pos = true; m.pos = 145;   // normal position: 55 mm -> 15 mm
     API(ApiError::OK, send(m));
-    run(10000);
+    run(20000);                                               // 145 mm at 10 mm/s + settling
     ProcData p = proc();
     TEST_ASSERT_TRUE(p.motion.mode == OpMode::MEASURE);
     TEST_ASSERT_TRUE(p.measure.valid);
@@ -304,8 +312,8 @@ void test_measure_mode_holds_and_averages() {
 // ---- safety scenarios ------------------------------------------------------------------------
 void test_estop_during_traverse() {
     running();
-    API(ApiError::OK, traverse(30, 240, 600));
-    run(2000);
+    API(ApiError::OK, traverse(30, 240, 10));
+    run(4000);                                       // approach 30 mm at 10 mm/s = 3 s
     int fs = A.force_stops;
     estop = true;
     run(1);
@@ -340,8 +348,8 @@ void test_temp_fault_while_idle_keeps_reference() {
 }
 void test_temp_warning_band_drops_hv_and_stops_traverse() {
     running();
-    API(ApiError::OK, traverse(30, 240, 600));
-    run(2000);
+    API(ApiError::OK, traverse(30, 240, 10));
+    run(4000);                                       // approach 30 mm at 10 mm/s = 3 s
     API(ApiError::OK, setNum("temp", 31.0));
     run(3);
     STATE(SafetyState::READY);
@@ -352,8 +360,8 @@ void test_temp_warning_band_drops_hv_and_stops_traverse() {
 }
 void test_hv_off_during_traverse_stops_motion() {
     running();
-    API(ApiError::OK, traverse(30, 240, 600));
-    run(2000);
+    API(ApiError::OK, traverse(30, 240, 10));
+    run(4000);                                       // approach 30 mm at 10 mm/s = 3 s
     API(ApiError::OK, send(CmdId::HV_OFF));
     run(3);
     STATE(SafetyState::READY);
@@ -362,7 +370,7 @@ void test_hv_off_during_traverse_stops_motion() {
 }
 void test_comm_timeout_without_heartbeat() {
     running();
-    API(ApiError::OK, traverse(30, 240, 300));
+    API(ApiError::OK, traverse(30, 240, 5));
     heartbeat = false;
     run(5100);
     TEST_ASSERT_TRUE(S.safety.state == SafetyState::FAULT || S.safety.state == SafetyState::WAIT_ACK);
@@ -375,7 +383,7 @@ void test_comm_timeout_without_heartbeat() {
 }
 void test_heartbeat_keeps_traverse_alive() {
     running();
-    API(ApiError::OK, traverse(30, 240, 600));
+    API(ApiError::OK, traverse(30, 240, 10));
     run(15000);                                      // heartbeat every second
     STATE(SafetyState::RUNNING);
     TEST_ASSERT_EQUAL_INT(0, (int)proc().err);
@@ -403,9 +411,11 @@ void test_local_hv_on_disarms() {
 void test_fault_beeps_once() {
     running();
     int b = beeps;
+    int e = snd[(int)Sound::ESTOP];
     estop = true;
     run(50);
     TEST_ASSERT_EQUAL_INT(b + 1, beeps);
+    TEST_ASSERT_EQUAL_INT(e + 1, snd[(int)Sound::ESTOP]);    // V1.3: E-stop -> one 4 s tone
 }
 
 // ---- calibration ------------------------------------------------------------------------------
@@ -438,7 +448,7 @@ void test_calib_base_sets_base_dist() {
 }
 void test_calib_busy_during_motion() {
     homeAndReady();
-    Command m = mk(CmdId::MOVE); m.has_pos = true; m.pos = 200; m.has_speed = true; m.speed = 100;
+    Command m = mk(CmdId::MOVE); m.has_pos = true; m.pos = 200; m.has_speed = true; m.speed = 2;
     API(ApiError::OK, send(m));
     run(700);
     API(ApiError::BUSY, calib(CalibAction::NEAR));
@@ -505,9 +515,9 @@ void test_local_command_blocks_api_start_commands() {
     TEST_ASSERT_TRUE(proc().local);
     API(ApiError::LOCAL_CONTROL, send(CmdId::HV_ON));
     API(ApiError::LOCAL_CONTROL, send(CmdId::INIT));
-    API(ApiError::LOCAL_CONTROL, send(moveCmd(50, 600, CmdSource::API)));
+    API(ApiError::LOCAL_CONTROL, send(moveCmd(50, 10, CmdSource::API)));
     API(ApiError::LOCAL_CONTROL, send(CmdId::START_MEASURE));
-    API(ApiError::LOCAL_CONTROL, traverse(30, 240, 600));
+    API(ApiError::LOCAL_CONTROL, traverse(30, 240, 10));
     API(ApiError::LOCAL_CONTROL, send(CmdId::SHUTTER_OPEN));
     API(ApiError::LOCAL_CONTROL, calib(CalibAction::RESET));
     API(ApiError::LOCAL_CONTROL, send(CmdId::REBOOT));
@@ -525,7 +535,7 @@ void test_local_released_30s_after_last_touch_when_idle() {
     API(ApiError::OK, send(CmdId::INIT, CmdSource::LOCAL));
     uint32_t t0 = now;
     API(ApiError::LOCAL_CONTROL, send(CmdId::INIT));
-    run(20000);                                              // homing done, idle
+    run(25000);                                              // homing done, idle
     STATE(SafetyState::READY);
     while (now < t0 + C.local_hold_ms - 20) cycle();
     TEST_ASSERT_TRUE(S.local);
@@ -554,7 +564,7 @@ void test_local_held_while_hv_on() {
 }
 void test_local_held_until_local_motion_ends() {
     homeAndReady();
-    API(ApiError::OK, send(moveCmd(230, 300, CmdSource::LOCAL)));   // ~46 s
+    API(ApiError::OK, send(moveCmd(230, 5, CmdSource::LOCAL)));     // 230 mm at 5 mm/s = 46 s
     run(C.local_hold_ms + 5000);
     TEST_ASSERT_TRUE(proc().motion.state == MotionState::MOVING);
     TEST_ASSERT_TRUE(S.local);
@@ -564,7 +574,7 @@ void test_local_held_until_local_motion_ends() {
 }
 void test_local_takes_over_remote_operation() {
     running();
-    API(ApiError::OK, traverse(30, 240, 300));
+    API(ApiError::OK, traverse(30, 240, 5));
     TEST_ASSERT_TRUE(S.comm_armed);
     run(1000);
     API(ApiError::OK, send(CmdId::STOP, CmdSource::LOCAL));
@@ -573,7 +583,7 @@ void test_local_takes_over_remote_operation() {
     heartbeat = false;
     run(6000);
     TEST_ASSERT_EQUAL_INT(0, (int)proc().err);
-    API(ApiError::LOCAL_CONTROL, traverse(30, 240, 300));
+    API(ApiError::LOCAL_CONTROL, traverse(30, 240, 5));
 }
 void test_api_stop_allowed_during_local_operation() {
     running();
@@ -601,7 +611,7 @@ void test_local_ack_in_fault() {
 void test_stop_executes_in_first_cycle_during_traverse() {
     running();
     for (int k = 0; k < 25; ++k) {                           // STOP at many different sequencer phases
-        API(ApiError::OK, traverse(30, 240, 3000));
+        API(ApiError::OK, traverse(30, 240, 20));
         run((uint32_t)(k * 211));
         Command c = mk(CmdId::STOP); ApiError r = ApiError::UNKNOWN_CMD;
         TEST_ASSERT_TRUE_MESSAGE(cycle(&c, &r), "STOP deferred");   // never waits for a free cycle
@@ -634,7 +644,7 @@ static bool cycleStopOnRequest(bool& executed, ApiError& res, DrvOp& tick_op, Dr
 }
 void test_stop_executed_in_cycle_with_driver_request() {
     running();
-    API(ApiError::OK, traverse(30, 240, 3000));
+    API(ApiError::OK, traverse(30, 240, 20));
     bool executed = false; ApiError r = ApiError::UNKNOWN_CMD; DrvOp t = DrvOp::NONE, f = DrvOp::NONE;
     bool hit = false;
     for (int i = 0; i < 20000 && !hit; ++i) hit = cycleStopOnRequest(executed, r, t, f);
@@ -650,7 +660,7 @@ void test_stop_executed_in_cycle_with_driver_request() {
 }
 void test_stop_overrides_pending_move_request() {
     running();
-    API(ApiError::OK, traverse(30, 240, 600));
+    API(ApiError::OK, traverse(30, 240, 10));
     run(500);
     HwOutputs out; out.drv.op = DrvOp::MOVE_TO; out.drv.target_steps = 12345;
     API(ApiError::OK, appCommand(S, mk(CmdId::STOP), hw(), C, out));
@@ -706,8 +716,8 @@ void test_prio_latch_order_coalesce_and_source() {
 // All pending priority commands in ONE cycle (control task step 3a).
 void test_all_priority_commands_in_one_cycle() {
     running();
-    API(ApiError::OK, traverse(30, 240, 600));
-    run(2000);
+    API(ApiError::OK, traverse(30, 240, 10));
+    run(4000);                                       // approach 30 mm at 10 mm/s = 3 s
     TEST_ASSERT_TRUE(last_out.shutter_open);
     now++; A.step(1);
     HwOutputs out = appTick(S, hw(), C);
@@ -727,8 +737,8 @@ void test_all_priority_commands_in_one_cycle() {
 // ---- V1.1: concurrent faults -------------------------------------------------------------
 void test_estop_and_cooling_loss_simultaneous() {
     running();
-    API(ApiError::OK, traverse(30, 240, 600));
-    run(2000);
+    API(ApiError::OK, traverse(30, 240, 10));
+    run(4000);                                       // approach 30 mm at 10 mm/s = 3 s
     estop = true;
     S.flags.cooling_flow = false;                            // same cycle (only the test may do this)
     run(1);
@@ -737,6 +747,88 @@ void test_estop_and_cooling_loss_simultaneous() {
     TEST_ASSERT_FALSE(last_out.hv_on); TEST_ASSERT_FALSE(last_out.shutter_open);
     TEST_ASSERT_FALSE(A.running);
     TEST_ASSERT_FALSE(S.seq.homed);
+}
+
+
+// ---- V1.3: sounds, heartbeat, E-stop wiring parameter, speeds in mm/s ------------------------
+void test_click_only_for_accepted_local_commands() {
+    homeAndReady();
+    int c0 = snd[(int)Sound::CLICK];
+    API(ApiError::OK, send(CmdId::STOP, CmdSource::LOCAL));
+    TEST_ASSERT_EQUAL_INT(c0 + 1, snd[(int)Sound::CLICK]);
+    API(ApiError::PRECONDITION, send(CmdId::HV_ON, CmdSource::LOCAL));   // flags missing -> no click
+    TEST_ASSERT_EQUAL_INT(c0 + 1, snd[(int)Sound::CLICK]);
+    API(ApiError::OK, send(CmdId::STOP));                                 // API -> no click
+    TEST_ASSERT_EQUAL_INT(c0 + 1, snd[(int)Sound::CLICK]);
+}
+void test_estop_tone_4s_not_cut_by_click() {
+    running();
+    estop = true; run(2);
+    TEST_ASSERT_EQUAL_INT(1, snd[(int)Sound::ESTOP]);
+    int on = 0;
+    for (int i = 0; i < 4500; ++i) {
+        if (i == 100) { Command c = mk(CmdId::HV_OFF, CmdSource::LOCAL); ApiError r; cycle(&c, &r); }
+        else cycle();
+        if (last_out.buzzer) on++;
+    }
+    TEST_ASSERT_INT_WITHIN(5, 4000, on);                    // one 4 s tone, the click did not cut it
+}
+void test_other_fault_three_beeps() {
+    running();
+    API(ApiError::OK, setNum("temp", 35.0));
+    run(2);
+    TEST_ASSERT_EQUAL_INT(1, snd[(int)Sound::FAULT]);
+    TEST_ASSERT_EQUAL_INT(0, snd[(int)Sound::ESTOP]);
+    int edges = 0; bool prev = last_out.buzzer;
+    for (int i = 0; i < 1000; ++i) { cycle(); if (last_out.buzzer && !prev) edges++; prev = last_out.buzzer; }
+    TEST_ASSERT_TRUE(edges >= 2 && edges <= 3);             // 3 beeps (the first one started before the loop)
+}
+void test_reboot_plays_pattern_and_requests_restart() {
+    Command c = mk(CmdId::REBOOT);
+    HwOutputs o;
+    API(ApiError::OK, appCommand(S, c, hw(), C, o));
+    TEST_ASSERT_TRUE(o.reboot);
+    TEST_ASSERT_TRUE(o.sound == Sound::REBOOT);
+    TEST_ASSERT_TRUE(o.buzzer);
+    TEST_ASSERT_TRUE(soundDurationMs(Sound::REBOOT) <= 700);   // REBOOT_DELAY_MS
+}
+void test_heartbeat_half_hertz() {
+    int on = 0, edges = 0; bool prev = last_out.heartbeat;
+    for (int i = 0; i < 4000; ++i) {
+        cycle();
+        if (last_out.heartbeat) on++;
+        if (last_out.heartbeat != prev) edges++;
+        prev = last_out.heartbeat;
+    }
+    TEST_ASSERT_INT_WITHIN(2, 2000, on);                    // 50 % duty
+    TEST_ASSERT_TRUE(edges >= 3 && edges <= 4);              // toggles every second -> 0.5 Hz
+}
+void test_estop_nc_only_while_idle_and_hv_off() {
+    running();
+    Command c = mk(CmdId::SET); strcpy(c.key, "estop_nc"); c.vtype = ValueType::BOOL; c.b = true;
+    API(ApiError::PRECONDITION, send(c));                    // HV on
+    API(ApiError::OK, send(CmdId::HV_OFF));
+    Command m = mk(CmdId::MOVE); m.has_pos = true; m.pos = 150;
+    API(ApiError::OK, send(m));
+    API(ApiError::PRECONDITION, send(c));                    // axis moving
+    run(20000);
+    int p = persists;
+    API(ApiError::OK, send(c));
+    TEST_ASSERT_TRUE(S.params.estop_nc);
+    TEST_ASSERT_EQUAL_INT(p + 1, persists);                  // wiring setting is persisted
+}
+void test_speeds_mm_per_s() {
+    homeAndReady();
+    Command m = mk(CmdId::MOVE); m.has_pos = true; m.pos = 150;   // no speed -> normal 10 mm/s
+    API(ApiError::OK, send(m));
+    run(2000);
+    TEST_ASSERT_EQUAL_DOUBLE((double)mmPerSecToHz(10.0f, C.motion), A.speed_hz);
+    TEST_ASSERT_FLOAT_WITHIN(0.2f, 10.0f, proc().motion.vel);     // /proc vel in mm/s
+    m.speed = 25; m.has_speed = true;
+    run(15000);
+    API(ApiError::BAD_PARAM, send(m));                            // > 20 mm/s
+    m.speed = 20;
+    API(ApiError::OK, send(m));
 }
 
 int main(int, char**) {
@@ -789,5 +881,12 @@ int main(int, char**) {
     RUN_TEST(test_estop_and_cooling_loss_simultaneous);
     RUN_TEST(test_prio_latch_order_coalesce_and_source);
     RUN_TEST(test_all_priority_commands_in_one_cycle);
+    RUN_TEST(test_click_only_for_accepted_local_commands);
+    RUN_TEST(test_estop_tone_4s_not_cut_by_click);
+    RUN_TEST(test_other_fault_three_beeps);
+    RUN_TEST(test_reboot_plays_pattern_and_requests_restart);
+    RUN_TEST(test_heartbeat_half_hertz);
+    RUN_TEST(test_estop_nc_only_while_idle_and_hv_off);
+    RUN_TEST(test_speeds_mm_per_s);
     return UNITY_END();
 }

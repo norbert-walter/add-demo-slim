@@ -1,6 +1,6 @@
 /**
  * @file system.h
- * @brief Boot helpers and task watchdog (FROZEN CONTRACT §12, implemented in Sprint S1).
+ * @brief Boot helpers and task watchdog (FROZEN CONTRACT V1.3 §12, implemented in Sprint S1).
  *
  * ESP-IDF 5.x API (Arduino Core 3.x): the task watchdog is configured with
  * esp_task_wdt_config_t + esp_task_wdt_reconfigure() (the core may already have
@@ -14,5 +14,7 @@
 /// version, reset reason; task watchdog WDT_TIMEOUT_S with panic = true.
 void systemInit();
 
-/// Restart helper used by the network task (after the HTTP reply was sent).
+/// Restart helper used by the network task: called REBOOT_DELAY_MS after
+/// snapshotTakeRebootRequest() returned true, so that the HTTP reply is sent and
+/// the REBOOT buzzer pattern has finished (V1.3).
 void systemRestart();

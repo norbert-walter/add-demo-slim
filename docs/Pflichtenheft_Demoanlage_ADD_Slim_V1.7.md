@@ -2,12 +2,23 @@
 
 **Stand:** 2026-10-08
 **Autor:** Norbert Walter
-**Version:** 1.6
+**Version:** 1.7
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.6 → V1.7 (Contract V1.3)
+
+| Bereich | V1.6 | V1.7 |
+|---|---|---|
+| Geschwindigkeiten | mm/min, 10 … 3000, Referenzfahrt 600 mm/min | **mm/s** überall (API, Parameter, /proc, Display): 1 … 20 mm/s, Normalgeschwindigkeit 10 mm/s (Bewegungen, Profilfahrt), Referenzfahrt 5 mm/s, Referenzfahrt-Timeout 70 s |
+| WLAN | Station oder AP als Rückfall | **AP immer an** + Verbindung zum Router (Station, SSID/Passwort per REST, Login nach jedem Boot automatisch); bei Verbindungsverlust 3 Versuche à 10 s, dann 2 min Pause, dann erneut |
+| Herzschlag | – | blaue LED auf dem Board (**GPIO 2**) blinkt mit 0,5 Hz, solange die Steuerschleife läuft |
+| Buzzer | ein kurzer Piep bei Fehler/Referenzfahrt | Signalmuster (aktiver Summer, nur Rhythmus): Start, Reboot, Tastenquittung, Referenzfahrt, Fehler, Not-Aus 4 s |
+| Not-Aus-Verdrahtung | fest in `config.h` | **Parameter `estop_nc`** per REST: Standard einfacher Schalter (LOW-aktiv, ohne Drahtbrucherkennung), umschaltbar auf Öffner mit Drahtbrucherkennung |
+| REBOOT | sofort nach der Antwort | Reboot-Signal, Neustart 700 ms nach dem Befehl |
 
 ### V1.5 → V1.6 (Contract V1.2, Hardware-Vortest vom 09.10.2026)
 
@@ -125,7 +136,7 @@ optischen Abstandssensor ersetzt. Die Firmware wird agentenbasiert entwickelt
 | MCU | ESP32 (ESP32-WROOM-32U), Dual-Core 240 MHz |
 | Flash | 4 MB (App 2944 KB, SPIFFS 1088 KB, NVS 20 KB) |
 | RAM | 520 kB SRAM |
-| Kommunikation | WiFi 802.11b/g/n |
+| Kommunikation | WiFi 802.11b/g/n: eigener AP (immer an) + optional Verbindung zum Router |
 | USB/UART | CH340C (Flashen + Konsole) |
 
 ### Antrieb X-Achse
@@ -174,8 +185,9 @@ Sensorfleck wieder vollständig auf einer Fläche liegt. 70 mm entspricht etwa d
 | ADC | GPIO 34 (ADC1_CH6, 11 dB), `analogReadMilliVolts()` (eFuse-kalibriert), Pull-up R20 4k7 **entfernt**, Serienwiderstand R23 1k |
 | LED Grün | HV eingeschaltet, **GPIO 4**, HIGH aktiv, 20 mA |
 | LED Rot | Shutter offen, GPIO 32, HIGH aktiv, 20 mA |
-| Buzzer | i2so.7 (aktiver Summer, Ein/Aus) |
-| Not-Aus | GPIO 22. Muss ausfallsicher sein: gedrückt **und** Drahtbruch → Not-Aus. Vortest: „LOW = Not-Aus“ – Pegel und Verdrahtung werden mit dem Drahtbruch-Test (Smoketest 2.4) festgelegt |
+| Buzzer | i2so.7, **aktiver Summer** (feste Tonhöhe, nur Ein/Aus) – Signale unterscheiden sich im Rhythmus (§5.11) |
+| LED Blau | Herzschlag, **GPIO 2** (Board-LED), HIGH aktiv, 0,5 Hz |
+| Not-Aus | GPIO 22 (PROBE), Pull-up auf dem Board. Verdrahtung per Parameter `estop_nc` (§6): Standard **einfacher Schalter gegen GND, LOW-aktiv, ohne Drahtbrucherkennung** (für die ersten Tests); später Öffner gegen GND, HIGH-aktiv, **mit** Drahtbrucherkennung |
 
 > **Hinweis Sensor:** Im Arbeitsbereich (40–65 mm, 2,63–1,72 V) liegt der ESP32-ADC
 > am oberen Rand; 2,63 V ist noch gut messbar (Smoketest 3.1/3.2 prüfen).
@@ -205,7 +217,8 @@ Verbindlich in `src/config.h`. Werte mit `VERIFY(0a)` werden im Smoketest bestä
 | Endschalter vorn | GPIO 36 (X-) | input only |
 | Endschalter hinten | GPIO 35 (Y-) | Referenzschalter |
 | Abstandssensor | GPIO 34 (Z-) | analog |
-| Not-Aus | GPIO 22 (PROBE) | ausfallsicher, Pegel per Drahtbruch-Test |
+| Not-Aus | GPIO 22 (PROBE) | Pegel per Parameter `estop_nc` |
+| Herzschlag-LED (blau) | GPIO 2 | HIGH = an, 0,5 Hz |
 | Shutter-LED | GPIO 32 (SPINDLE/TTL) | HIGH = offen |
 | HV-LED | GPIO 4 | HIGH = an |
 | I2S DATA / BCK / WS | GPIO 21 / 16 / 17 | 74HC595-Kette |
@@ -235,7 +248,8 @@ Die Zuordnung FluidNC-Bit `i2so.N` → FastAccelStepper-Slot ermittelt der Smoke
 - **Reine Logik** in `src/logic/` ohne Arduino/IDF/FreeRTOS – vollständig nativ testbar (inkl. simulierter Achse)
 - Hardware-Schicht dünn, aus dem Smoketest übernommen
 - Code und Kommentare in Englisch
-- Task-Watchdog 10 s, WiFi-Reconnect, AP-Fallback
+- Task-Watchdog 10 s; WLAN: AP immer an, Router-Verbindung mit Wiederverbindung (§5.12)
+- Herzschlag-LED aus dem Control-Task: blinkt nur, solange die 1-kHz-Schleife läuft
 - Weboberfläche: statisches HTML auf SPIFFS, Daten per JS
 
 ### 5.2 Modulstruktur
@@ -274,7 +288,7 @@ scripts/                     serial_cmd.py, add_client.py
 ### 5.3 Betriebsmodi
 
 **Stehende Messung (`START_MEASURE`)** – nur in RUNNING
-- Fährt mit 1500 mm/min an die Messposition (20 < pos ≤ 248 mm, Standard 145 mm)
+- Fährt mit 10 mm/s an die Messposition (20 < pos ≤ 248 mm, Standard 145 mm)
 - Shutter öffnet automatisch, Messung bis `STOP`
 - Mittelwert und Anzahl gültiger Werte in `/proc` (`avg`, `n`)
 
@@ -305,7 +319,7 @@ Vollständige Definition: **CONTRACT §5**. Kurzfassung:
 | `ACK` | – | WAIT_ACK (Ursache muss beseitigt sein) |
 | `HV_ON` | – | READY, RUNNING |
 | `SHUTTER_OPEN` | – | RUNNING, nur in der Wartungszone (20 < Position ≤ 60 mm) |
-| `REBOOT` | – | SAFE_START, READY, WAIT_ACK |
+| `REBOOT` | – | SAFE_START, READY, WAIT_ACK (Reboot-Signal, Neustart nach 700 ms) |
 
 Fehlercodes: Anlage `err` 0–5, API `err` 0 … −10 (CONTRACT §3).
 
@@ -366,7 +380,8 @@ im AP-Modus gibt es kein Internet), Fallback `sans-serif` / `monospace`.
 - Sicherheitsflags (Toggle Interlock, Toggle Cooling, Temperatur)
 - Kalibrierung: Referenzwerte Nah/Fern (`SET calib_near_ref/far_ref`),
   Tasten Capture Near / Capture Far / Capture Base / Save / Reset (`CALIB`)
-- WLAN: SSID, Passwort, Reboot-Taste
+- WLAN: SSID, Passwort des Routers (wirksam nach Reboot), Reboot-Taste; Anzeige des Verbindungszustands
+- Not-Aus-Verdrahtung `estop_nc` (Umschalter mit Warnhinweis, nur bei stehender Achse und HV aus)
 - Jede Rückmeldung (`err`, `msg`) sichtbar als Toast
 
 ### 5.8 Display (1 Seite, 480×320, LovyanGFX)
@@ -380,7 +395,7 @@ Neuzeichnen nur geänderter Zonen. **Sprache: Englisch.**
 ├───────────┬───────────┬───────────┬──────────────────────────────┤ y=34
 │ POS       │ SPEED     │ DIST      │ THICK                        │
 │ 145.0     │ 200       │ 55.0      │ 15.0                         │ h=72
-│ mm        │ mm/min    │ mm        │ mm                           │
+│ mm        │ mm/s      │ mm        │ mm                           │
 ├───────────┴───────────┴───────────┴──────────────────────────────┤ y=110
 │ POS |PP▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|  248         │ h=24
 ├──────────────────────────────────────────────────────────────────┤ y=140
@@ -463,6 +478,36 @@ lib_deps =
     bblanchon/ArduinoJson @ ^7.4.2
 ```
 
+### 5.11 Akustische Signale (aktiver Summer)
+
+Der Summer hat eine feste Tonhöhe; die Signale unterscheiden sich im Rhythmus
+(Muster in ms, an/aus/an …, Logik `src/logic/sound_logic.h`):
+
+| Ereignis | Muster | Bedeutung |
+|---|---|---|
+| Firmware gestartet | 100 / 100 / 300 (kurz–lang) | Firmware arbeitet korrekt |
+| REBOOT | 300 / 100 / 100 (lang–kurz), danach Neustart | Neustart folgt |
+| Display-Taste angenommen | 50 | Quittung (nur bei Erfolg) |
+| Referenzfahrt fertig | 150 | Achse referenziert |
+| Fehler (außer Not-Aus) | 3 × 150 | Quittierung nötig |
+| Not-Aus | 4000 (Dauerton 4 s, einmalig) | Not-Aus ausgelöst |
+
+Ein Signal niedrigerer Priorität unterbricht nie ein höheres (Not-Aus > Fehler >
+Reboot > Start > Referenzfahrt > Tastenquittung).
+
+### 5.12 WLAN
+
+- **Access Point immer aktiv:** `ADD-Demo` / `adddemo1`, 192.168.4.1 – das Tablet erreicht
+  die Anlage immer direkt.
+- **Router-Verbindung:** `SET wifi_ssid` und `SET wifi_pass` per REST-API (gespeichert),
+  danach `REBOOT`. Nach jedem Boot meldet sich die Anlage automatisch an (DHCP) und ist
+  zusätzlich im Heimnetz erreichbar (`http://add-demo.local`, Internet über den Router).
+- **Wiederverbindung:** Bei Verbindungsverlust oder gescheitertem Aufbau 3 Versuche à 10 s;
+  scheitern alle, ruht die Station 2 min, danach erneut 3 Versuche – ohne Ende.
+- Während der Verbindungsversuche kann der AP kurz stocken (gemeinsames Funkmodul); die
+  Pause hält das selten, wenn der Router fehlt.
+- Zustand im Log (`/log`) und auf dem Display (Zeile „AP … STA …“).
+
 ---
 
 ## 6. Sicherheitskonzept
@@ -536,9 +581,21 @@ wartender Befehle (gilt unter den gemessenen Zeitbedingungen Jitter < 1,5 ms, Re
 selbst (`prio_lat_max_us` in `GET_STATE`); erst die Messung bei der Abnahme ist der
 Nachweis. Der schnellste Stopp bleibt der physische Not-Aus.
 
+### Not-Aus-Verdrahtung (Parameter `estop_nc`)
+
+| `estop_nc` | Verdrahtung | Not-Aus bei | Drahtbruch |
+|---|---|---|---|
+| `false` (Standard) | einfacher Schalter (Schließer) gegen GND, Pull-up auf dem Board | LOW | **nicht erkannt** |
+| `true` | Öffner gegen GND | HIGH | erkannt |
+
+Eine Einstellung, die nicht zur Verdrahtung passt, zeigt immer Dauer-Not-Aus – der Fehler
+ist sicher und sofort sichtbar. Umschaltung nur bei stehender Achse und HV aus; die
+Einstellung wird gespeichert. Solange `false` gilt, zeigt das Display `ESTOP(NO)` als
+Warnung. Für den Demo-Einsatz wird der Öffner mit Drahtbrucherkennung empfohlen.
+
 ### Fail-Safe-Grundsätze
 - Sicherheitsflags werden nie gespeichert (nach Boot gesperrt)
-- Not-Aus als Öffner, Drahtbruch = Not-Aus
+- Not-Aus: Öffner mit Drahtbrucherkennung empfohlen (`estop_nc = true`); der einfache Schalter (Standard) ist nur für Tests gedacht
 - Reihenfolge der Ausgänge in jedem Zyklus: Shutter → Motor → HV
 
 ---
@@ -587,13 +644,15 @@ des Style Guides. **Kein** eigener Top-Level-Block `live_data` – `/proc` wird 
 | `test_params` | params | alle SET-Schlüssel, Bereiche, Persistenz, Config-JSON |
 | `test_motion_seq` | motion_seq | Homing, Timeout, Endschalterfehler, Fahren, Profil, Messen, Stopps |
 | `test_app_logic` | app_logic | **Szenarien mit simulierter Achse**: Profilfahrt, Not-Aus, Temperatur, Watchdog, Kalibrierung, Bedienvorrang LOCAL, STOP-Priorität, Not-Aus + Kühlungsausfall gleichzeitig |
+| `test_sound_logic` | sound_logic | Signalmuster, Prioritäten, Ende, Zeitüberlauf |
+| `test_wifi_logic` | wifi_logic | Auto-Login, 3 Versuche à 10 s, 2 min Pause, Wiederverbindung |
 | `test_display_logic` | display_logic | Bildschirmmodus, „Ursache aktiv“, ACK 1 s halten, Flankenerkennung |
 | `test_command_queue` | app/command_queue.cpp (echter Code, FreeRTOS-Nachbildung mit Threads) | 8 gleichzeitige Aufrufer, Priorität vor Normal, Überlauf-Latch mit Herkunft, alle Prioritätsbefehle in einem Abruf, Last aus 8 Threads, Mutex belegt, verspätete Antworten |
 | `test_proc_json` | proc_json | exaktes /proc-Format, Worst Case < 512 Byte |
 | `test_api_parse` | api_parse | Parser, Typen, Fehlerfälle |
 
 Alle Tests sind **eingefroren** und gegen eine Referenzimplementierung geprüft
-(235 Testfälle, alle grün, `test_command_queue` zusätzlich mit ThreadSanitizer geprüft; Mutationstests bestätigen die Trennschärfe).
+(260 Testfälle, alle grün, `test_command_queue` zusätzlich mit ThreadSanitizer geprüft; Mutationstests bestätigen die Trennschärfe).
 
 **Regressionsregel (DoD jedes Sprints):** Alle Suiten, die vor dem Sprint grün waren,
 sind danach weiterhin grün (`pio test -e native` vollständig, nicht nur die Sprint-Suite).
@@ -653,10 +712,12 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 **2. Hardware-Signale**
 - [ ] LED Grün folgt `HV_ON`/`HV_OFF`
 - [ ] LED Rot folgt Shutter
-- [ ] Buzzer piept bei Fehler, Referenzfahrt-Ende
+- [ ] Buzzer: Startsignal nach dem Booten, Quittungs-Piep bei Display-Tasten, Not-Aus 4 s Dauerton, andere Fehler 3 Pieps, Referenzfahrt-Ende ein Piep, Reboot-Signal vor dem Neustart
+- [ ] Blaue LED blinkt mit 0,5 Hz (1 s an, 1 s aus); steht still, wenn die Steuerschleife hängt (Watchdog-Reset folgt)
 - [ ] Endschalter in `/proc` korrekt
 - [ ] Abstand plausibel 40–300 mm (±5 %)
-- [ ] Not-Aus-Drahtbruch löst Not-Aus aus
+- [ ] Not-Aus mit `estop_nc = false` (einfacher Schalter): Drücken löst aus
+- [ ] Nach Umstellung auf Öffner (`estop_nc = true`): Drücken **und** Drahtbruch lösen aus; falsche Einstellung zeigt Dauer-Not-Aus
 
 **3. Motor**
 - [ ] `INIT` referenziert (Endschalter hinten, 2 mm Rückzug, Position 0)
@@ -700,7 +761,9 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 - [ ] Live-Daten ≤ 500 ms, Zeitreihe 100 Punkte
 - [ ] 4 Themes, funktioniert ohne Internet (AP-Modus)
 - [ ] Einstellungen laden/speichern, Kalibrierung, WLAN-Konfiguration
-- [ ] Tablet über WLAN
+- [ ] Tablet über WLAN (AP)
+- [ ] Router-Verbindung: SSID/Passwort per REST setzen, REBOOT → Gerät ist im Heimnetz erreichbar (`add-demo.local`), AP bleibt erreichbar
+- [ ] Router aus: 3 Versuche, dann 2 min Pause (Log), Router wieder an → Verbindung kommt automatisch zurück
 
 **8. Betriebsmodi**
 - [ ] Stehende Messung: Mittelwert auf Treppenstufe ±0,5 mm
@@ -723,11 +786,12 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 | Toolchain | pioarduino | ✅ |
 | Mikroschritt | 1/16 | ✅ |
 | Architektur | Single-Writer, reine Logik | ✅ |
-| /proc-Schema, API, CRC, Fehlercodes | CONTRACT V1.2 | ✅ |
+| /proc-Schema, API, CRC, Fehlercodes | CONTRACT V1.3 | ✅ |
+| Geschwindigkeiten, Signale, WLAN, Herzschlag | V1.7 | ✅ |
 | Bedienvorrang Display, Haltezeit | LOCAL, 30 s | ✅ |
 | Quittierung am Display | eine ACK-Fläche, 1 s halten | ✅ |
 | i2so → Slot-Zuordnung (Buzzer, Enable, Step, Dir) | Smoketest `scan` | Offen (0a) |
-| Not-Aus-Pegel und Ausfallsicherheit | Drahtbruch-Test Smoketest 2.4 | Offen (0a) – Vortest meldet „LOW = Not-Aus“ |
+| Not-Aus-Verdrahtung | Parameter `estop_nc`, Standard einfacher Schalter | ✅ – Umstellung auf Öffner mit Drahtbrucherkennung vor dem Demo-Einsatz empfohlen |
 | Geometrie, Zonen, Sensorkurve | Hardware-Vortest 09.10.2026 | ✅ (V1.6) |
 | Display-/Touch-Pins, Farbreihenfolge | Smoketest (mit CNC-Firmware funktionsfähig) | Werte für LovyanGFX offen (0a) |
 | ADC am Z--Eingang (Pull-up?) | R20 4k7 entfernt (Vortest) | ✅, Smoketest 3.2 bestätigt |

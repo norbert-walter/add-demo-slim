@@ -1,7 +1,7 @@
-# Sprint-Prompts – Demoanlage ADD (Slim) · V2.2
+# Sprint-Prompts – Demoanlage ADD (Slim) · V2.3
 
 **Stand:** 2026-10-08 · **Autor:** Norbert Walter
-**Basis:** Pflichtenheft V1.6, `docs/CONTRACT.md` V1.2
+**Basis:** Pflichtenheft V1.7, `docs/CONTRACT.md` V1.3
 **Werkzeuge:** code-server + Cline, Modell Qwen3.6-35B-A3B (64k Kontext), Review mit Claude
 
 ---
@@ -97,7 +97,8 @@ Bereits erledigt in diesem Paket. **Review-Checkliste:**
 
 ```
 Sprint S1 of the ADD Demo System firmware. Read first:
-- .clinerules, docs/CONTRACT.md §1, §9, §12
+- .clinerules, docs/CONTRACT.md §1, §9, §12, §12.1
+- src/logic/wifi_logic.h and test/native/test_wifi_logic/test_wifi_logic.cpp
 - src/config.h, src/system/system.h, src/system/nvs_config.h, src/comm/wifi_manager.h,
   src/comm/log_buffer.h, src/app/control_task.h, src/app/snapshot.h, src/comm/http_server.h,
   src/display/display.h, src/logic/params.h
@@ -108,11 +109,16 @@ Implement these files (and nothing else):
                                 if the core already initialised the TWDT, else esp_task_wdt_init()).
                                 Boot banner: FW_VERSION, ESP_ARDUINO_VERSION_STR, esp_get_idf_version(),
                                 esp_reset_reason().
-2. src/system/nvs_config.cpp  – Preferences, keys exactly as listed in nvs_config.h, "ver" = 1.
+0. src/logic/wifi_logic.cpp   – pure C++ (like all of src/logic), rules exactly as in wifi_logic.h.
+                                DoD: pio test -e native -f native/test_wifi_logic green.
+2. src/system/nvs_config.cpp  – Preferences, keys exactly as listed in nvs_config.h, "ver" = 3.
                                 nvsLoadParams: start from paramsDefaults(), read each key, replace any
                                 value outside the CONTRACT §9 range by its default. Never store flags.
-3. src/comm/wifi_manager.cpp  – as documented (STA, AP fallback, reconnect, mDNS "add-demo").
-                                wifiLoop must never block longer than 50 ms.
+3. src/comm/wifi_manager.cpp  – as documented: WiFi.mode(WIFI_AP_STA), softAP always on,
+                                station via staStep() every 100 ms (BEGIN -> WiFi.begin(ssid, pass)
+                                without waiting; DISCONNECT -> WiFi.disconnect(false, false) so the
+                                AP stays up; link_up = WiFi.status() == WL_CONNECTED), log every
+                                state change, mDNS "add-demo". wifiLoop never blocks > 50 ms.
 4. src/comm/log_buffer.cpp    – ring buffer LOG_LINES x LOG_LINE_LEN, spinlock, vsnprintf,
                                 echo to Serial.
 5. src/main.cpp:
@@ -130,7 +136,8 @@ Implement these files (and nothing else):
      wifiLoop(millis()); httpServerLoop();
      if (snapshotTakePersistRequest()) { Params q; SafetyFlags f; snapshotGetConfig(q, f);
                                          bool ok = nvsSaveParams(q); logLine(...); }
-     if (snapshotTakeRebootRequest())  { vTaskDelay(pdMS_TO_TICKS(300)); systemRestart(); }
+     if (snapshotTakeRebootRequest())  { reboot_at = millis() + REBOOT_DELAY_MS; }   // V1.3
+     if (reboot_at && (int32_t)(millis() - reboot_at) >= 0) systemRestart();        // pattern played
    loop(): vTaskDelay(portMAX_DELAY);   // Arduino loop task is not used
 
 Rules: ESP-IDF 5 APIs only. No String in log_buffer. English comments.
@@ -144,8 +151,11 @@ Report: files, decisions, anything in the headers that was unclear.
 - [ ] Watchdog mit IDF-5-API, Control-Task wird in `control_task.cpp` registriert (nicht doppelt)
 - [ ] NVS: Bereichsprüfung beim Laden, Flags nie gespeichert
 - [ ] `wifiLoop` blockiert nicht (kein `WiFi.begin` mit Warteschleife im Loop)
+- [ ] AP bleibt aktiv, auch während der Station-Versuche und in der 2-min-Pause
+- [ ] NVS `ver` = 3, Schlüssel `estnc` vorhanden
 - [ ] Persist/Reboot nur im Netzwerk-Task
-- [ ] Nach S2.6 am Gerät: Boot-Banner, AP sichtbar, Reboot über `REBOOT`
+- [ ] Nach S2.6 am Gerät: Boot-Banner, AP sichtbar, Startsignal, Reboot über `REBOOT` (Signal, dann Neustart)
+- [ ] Router-Login: `SET wifi_ssid/wifi_pass`, `REBOOT` → IP im Log; Router aus → 3 Versuche, 2 min Pause
 
 ---
 
@@ -293,6 +303,10 @@ Pay attention to:
 - Comm watchdog: arm only on SUCCESS of INIT, MOVE, PARK, SERVICE, START_*, HV_ON (API -> true, LOCAL -> false).
 - V1.2: PARK -> motionStartMove(cfg.motion.park_target_mm, approach_speed);
   SERVICE -> motionStartMove(params.maint_pos, approach_speed).
+- V1.3: also implement src/logic/sound_logic.cpp (test_sound_logic). appTick step 11:
+  BOOT on the first tick, ESTOP/FAULT on fault entry, HOMED; out.buzzer, out.sound,
+  out.heartbeat. appCommand: CLICK for LOCAL + OK, REBOOT pattern, SET estop_nc only
+  while idle and HV off. All speeds are mm/s.
 - V1.1 LOCAL priority (CONTRACT §6.6): at the start of appCommand, after GET_STATE/GET_CONFIG:
   source LOCAL -> local = true, local_last_ms = now, comm_armed = false (even if the gate
   rejects the command afterwards); source API && local && appLocalBlocksApi(id) -> return
@@ -336,8 +350,11 @@ Implement exactly:
   mapping exactly as documented, speed conversion |getCurrentSpeedInMilliHz()| / 1000 / STEPS_PER_MM * 60.
 - src/hal/hal_io.cpp     – inputs with debounce (limit switches both directions,
   E-stop: activation immediate, release after INPUT_DEBOUNCE_MS), outputs, non-blocking
-  buzzer via engine->i2sMuxSetBit(I2SO_TO_SLOT(I2SO_BUZZER), ...). HV LED (PIN_HV_LED,
-  GPIO 4) and shutter LED (PIN_SHUTTER) are plain digitalWrite outputs, set LOW first in halInit().
+  halSetBuzzer(on) via engine->i2sMuxSetBit(I2SO_TO_SLOT(I2SO_BUZZER), on) (the pattern
+  comes from sound_logic, the HAL only sets the bit). HV LED (GPIO 4), shutter LED (GPIO 32)
+  and heartbeat LED (GPIO 2) are plain digitalWrite outputs, set LOW first in halInit().
+  halSetEstopActiveHigh(bool) stores the active level used by halUpdateInputs (default LOW).
+  motionDrvSpeedMmS(): |getCurrentSpeedInMilliHz()| / 1000 / STEPS_PER_MM.
 
 No delay(), no Serial, no heap in any of these functions.
 Definition of done:
@@ -444,7 +461,7 @@ python scripts/stress_api.py --host 192.168.4.1 latency
 Sprint S4a. Web UI (vanilla HTML/CSS/JS, no framework, no CDN). Read first:
 - .clinerules, docs/CONTRACT.md §4 (JavaScript crc32/frame/verify – copy them verbatim),
   §5 (all JSON formats), §6.5 (heartbeat), §9 (parameters)
-- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.6.md §5.7 (content of both pages)
+- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.7.md §5.7 (content of both pages)
 - docs/reference/style_guide_excerpt_S4.md (CSS variables, themes, components – use them exactly)
 
 Deliver:
@@ -472,6 +489,11 @@ Behaviour (index.html):
 settings.html: load GET_CONFIG on open; one input per parameter with its range from
 CONTRACT §9; send SET on change; calibration buttons (CALIB near/far/base/save/reset);
 WiFi ssid/pass + REBOOT button with confirmation.
+V1.3: speeds are mm/s everywhere (SPEED panel, traverse_speed 1..20). Settings page:
+estop_nc toggle with a warning text ("simple switch, no wire-break detection" for false;
+"normally-closed contact with wire-break detection" for true), enabled only when
+/proc shows state != RUNNING and motion.state == "idle"; WiFi section explains that the
+AP stays on and the router login is effective after REBOOT.
 
 Size budget: each page < 40 KB. Test locally: open the files with a small mock is optional.
 Definition of done: files exist, no external URLs (grep -n "http" data/www/*.html shows only
@@ -496,7 +518,7 @@ Sprint S4b. Local display. Two parts: pure logic first (tested), then drawing.
 Read first:
 - .clinerules, docs/CONTRACT.md §13, src/display/display.h, src/display/lgfx_config.h
 - src/logic/display_logic.h and test/native/test_display_logic/test_display_logic.cpp
-- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.6.md §5.8 (layout, fault screen, colours – binding)
+- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.7.md §5.8 (layout, fault screen, colours – binding)
 - src/app/snapshot.h, src/app/command_queue.h, src/logic/types.h
 - .pio/libdeps/firmware/LovyanGFX/src/ (real API; examples/ for getTouch)
 
@@ -561,7 +583,7 @@ Read completely before writing anything:
 - docs/reference/ADD_Developer_Guide_v1_0.md
 - docs/reference/style_guide_excerpt_S4.md (only for the optional "ui" block)
 - docs/CONTRACT.md (the device behaviour – every statement in add.json must match it)
-- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.6.md §1, §6, §7
+- docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.7.md §1, §6, §7
 
 Task 1 – data/add.json (served at /add, max. 32 KB, valid JSON):
 - Exactly the header fields schema, version, spec_url, spec_license and the seven blocks
@@ -610,6 +632,18 @@ Then run the ADD validation (spec §13) against the live device together with me
 ```
 
 ---
+
+## Anhang: Änderungen V2.2 → V2.3 (Contract V1.3)
+
+| Sprint | Neu |
+|---|---|
+| S0a | `move` in mm/s, `home` mit 5 mm/s, `estop <low\|high>`, `sta <ssid> <pass>`, Herzschlag-LED |
+| S1 | `wifi_logic.cpp` (getestet), AP immer an + Station mit Wiederverbindung, NVS ver 3, Reboot-Verzögerung |
+| S2.2 | `traverse_speed` in mm/s (1 … 20), Parameter `estop_nc` |
+| S2.3 | alle Geschwindigkeiten mm/s, `mmPerSecToHz`, Referenzfahrt 5 mm/s, Timeout 70 s |
+| S2.4 | `sound_logic.cpp` (getestet), Signale, Herzschlag, `estop_nc` nur im Stillstand |
+| S2.5 | `halSetBuzzer`, `halSetHeartbeat`, `halSetEstopActiveHigh`, `motionDrvSpeedMmS` |
+| S4a/b | mm/s, `ESTOP(NO)`-Warnung, WLAN-Zustand, Einstellung `estop_nc` |
 
 ## Anhang: Änderungen V2.1 → V2.2 (Contract V1.2, Hardware-Vortest)
 

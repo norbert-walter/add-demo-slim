@@ -89,7 +89,7 @@ struct Command {
     bool      want_reply = false;  ///< HTTP waits for the result, touch does not
 
     bool  has_pos = false, has_speed = false, has_start = false, has_end = false;
-    float pos = 0.0f, speed = 0.0f, start = 0.0f, end = 0.0f;  ///< mm, mm/min
+    float pos = 0.0f, speed = 0.0f, start = 0.0f, end = 0.0f;  ///< mm, mm/s (V1.3)
 
     char      key[24] = {0};       ///< SET: parameter key
     ValueType vtype   = ValueType::NONE;
@@ -120,7 +120,7 @@ struct ProcData {
 
     struct {
         float       pos       = 0.0f;   ///< mm
-        float       vel       = 0.0f;   ///< mm/min (unsigned magnitude)
+        float       vel       = 0.0f;   ///< mm/s (unsigned magnitude, V1.3)
         MotionState state     = MotionState::IDLE;
         OpMode      mode      = OpMode::NONE;
         bool        homed     = false;

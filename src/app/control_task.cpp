@@ -1,6 +1,6 @@
 /**
  * @file control_task.cpp
- * @brief Control task – glue between hardware and pure logic (Contract V1.1, complete).
+ * @brief Control task – glue between hardware and pure logic (Contract V1.3, complete).
  *
  * RULES (do not break):
  *  - This task is the ONLY writer of AppState. Other tasks talk to it through
@@ -39,6 +39,7 @@ static AppConfig makeConfig() {
 }
 
 static HwInputs readInputs(uint32_t now) {
+    halSetEstopActiveHigh(s_app.params.estop_nc);   // V1.3: wiring from the parameter
     halUpdateInputs(now);
     HwInputs hw;
     hw.now_ms = now;
@@ -47,17 +48,17 @@ static HwInputs readInputs(uint32_t now) {
     hw.limit_bwd = halLimitBwd();
     hw.drv_running = motionDrvRunning();
     hw.drv_pos_steps = motionDrvPos();
-    hw.drv_speed_mm_min = motionDrvSpeedMmMin();
+    hw.drv_speed_mm_s = motionDrvSpeedMmS();
     hw.last_api_rx_ms = snapshotLastApiRx();
     return hw;
 }
 
-static void applyOutputs(const HwOutputs& out, uint32_t now) {
+static void applyOutputs(const HwOutputs& out) {
     halSetShutter(out.shutter_open);          // 1. close shutter first
     motionDrvApply(out.drv);                  // 2. motor
     halSetHvLed(out.hv_on);                   // 3. HV
-    if (out.beep) halBeep(now, BEEP_MS);
-    halUpdateBuzzer(now);
+    halSetBuzzer(out.buzzer);                 // V1.3: pattern computed by sound_logic
+    halSetHeartbeat(out.heartbeat);           // V1.3: 0.5 Hz – proves the control loop runs
     if (out.persist) {
         snapshotPublishConfig(s_app.params, s_app.flags);
         snapshotRequestPersist();
@@ -113,7 +114,7 @@ static void controlLoop(void*) {
         }
 
         // 4. outputs
-        applyOutputs(out, now);
+        applyOutputs(out);
 
         // 5. replies only now: "OK" means accepted AND outputs set
         const uint32_t t_out = (uint32_t)esp_timer_get_time();

@@ -1,6 +1,8 @@
 /**
  * @file motion_seq.h
- * @brief Pure, non-blocking motion sequencer (FROZEN CONTRACT §8).
+ * @brief Pure, non-blocking motion sequencer (FROZEN CONTRACT V1.3 §8).
+ *
+ * V1.3: ALL speeds are mm/s (API, parameters, /proc, MotionConfig).
  *
  * Implementation: src/logic/motion_seq.cpp (Sprint S2.3).
  *
@@ -29,12 +31,12 @@ struct MotionConfig {
     float    axis_max_mm       = 248.0f;  ///< V1.2: forward end switch at 250 mm, 2 mm margin
     float    park_pos_mm       = 20.0f;   ///< V1.2: park zone limit; measuring positions must be > park
     float    park_target_mm    = 2.0f;    ///< V1.2: destination of the PARK command
-    float    homing_speed      = 600.0f;  ///< mm/min
+    float    homing_speed      = 5.0f;    ///< mm/s (V1.3), also pull-off
     float    pulloff_mm        = 2.0f;
-    uint32_t homing_timeout_ms = 40000;   ///< whole homing sequence
-    float    approach_speed    = 1500.0f; ///< mm/min, MOVE default and approach moves
-    float    min_speed         = 10.0f;   ///< mm/min
-    float    max_speed         = 3000.0f; ///< mm/min
+    uint32_t homing_timeout_ms = 70000;   ///< whole homing sequence (250 mm at 5 mm/s = 50 s + margin)
+    float    approach_speed    = 10.0f;   ///< mm/s, normal speed: MOVE/PARK/SERVICE default and approach moves
+    float    min_speed         = 1.0f;    ///< mm/s
+    float    max_speed         = 20.0f;   ///< mm/s
     uint32_t settle_ms         = 100;     ///< see motionTick "arrival"
 };
 
@@ -92,7 +94,7 @@ struct MotionSeq {
 // ---- conversions ----------------------------------------------------------
 int32_t  mmToSteps(float mm, const MotionConfig& c);            ///< lroundf(mm * steps_per_mm)
 float    stepsToMm(int32_t steps, const MotionConfig& c);       ///< steps / steps_per_mm
-uint32_t mmPerMinToHz(float mm_min, const MotionConfig& c);     ///< lroundf(mm_min / 60 * steps_per_mm)
+uint32_t mmPerSecToHz(float mm_s, const MotionConfig& c);       ///< lroundf(mm_s * steps_per_mm)
 
 // ---- commands (each returns OK or an ApiError and fills `out`) ------------
 // `out` is reset to NONE first. On error the sequencer state is unchanged.
@@ -109,7 +111,7 @@ ApiError motionStartHoming(MotionSeq& s, const MotionInputs& in, const MotionCon
  * pos outside [0, axis_max_mm] or speed outside [min_speed, max_speed] -> BAD_PARAM.
  * OK: phase MOVE, out = MOVE_TO(pos, speed).
  */
-ApiError motionStartMove(MotionSeq& s, float pos_mm, float speed_mm_min,
+ApiError motionStartMove(MotionSeq& s, float pos_mm, float speed_mm_s,
                          const MotionInputs& in, const MotionConfig& c, DrvRequest& out);
 
 /**
@@ -118,7 +120,7 @@ ApiError motionStartMove(MotionSeq& s, float pos_mm, float speed_mm_min,
  * or speed out of range.
  * OK: mode TRAVERSE, phase TRAV_APPROACH, out = MOVE_TO(start, approach_speed).
  */
-ApiError motionStartTraverse(MotionSeq& s, float start_mm, float end_mm, float speed_mm_min,
+ApiError motionStartTraverse(MotionSeq& s, float start_mm, float end_mm, float speed_mm_s,
                              const MotionInputs& in, const MotionConfig& c, DrvRequest& out);
 
 /**

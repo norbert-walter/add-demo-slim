@@ -54,7 +54,8 @@ static size_t line_len = 0;
 // ------------------------------------------------------------------ helpers
 static bool rawLimitFwd() { return digitalRead(PIN_LIMIT_FWD) == LIMIT_ACTIVE_LEVEL; }
 static bool rawLimitBwd() { return digitalRead(PIN_LIMIT_BWD) == LIMIT_ACTIVE_LEVEL; }
-static bool rawEstop()    { return digitalRead(PIN_ESTOP) == ESTOP_ACTIVE_LEVEL; }
+static int  estop_active_level = LOW;   // V1.3: default = simple switch (estop_nc = false); cmd "estop"
+static bool rawEstop()    { return digitalRead(PIN_ESTOP) == estop_active_level; }
 
 static float readMv() {
     uint16_t s[ADC_SAMPLES];
@@ -87,8 +88,8 @@ static void waitMotion(uint32_t timeout_ms, bool allow_bwd_limit) {
 static void cmdHelp() {
     Serial.println("# ver | crc | part | nvs | fs | in | watch <s> | adc [n]");
     Serial.println("# slot <n> <0|1> | scan [ms] | hv <0|1> | beep [ms] | shutter <0|1>");
-    Serial.println("# stepper | move <mm> [mm/min] | home | pos | stop");
-    Serial.println("# disp | touch <s> | wifi | help");
+    Serial.println("# stepper | move <mm> [mm/s] | home | pos | stop | estop <low|high>");
+    Serial.println("# disp | touch <s> | wifi | sta <ssid> <pass> | help");
     Serial.println("{\"done\":true}");
 }
 
@@ -194,20 +195,21 @@ static void cmdStepper() {
 
 static void cmdMove(float mm, float speed) {
     if (!stepper) { Serial.println("{\"error\":\"run 'stepper' first\"}"); return; }
-    if (speed <= 0) speed = 300;
-    stepper->setSpeedInHz((uint32_t)(speed / 60.0f * STEPS_PER_MM));
+    if (speed <= 0) speed = 10.0f;                 // V1.3: normal speed 10 mm/s
+    if (speed > 20.0f) speed = 20.0f;              // V1.3: max 20 mm/s
+    stepper->setSpeedInHz((uint32_t)(speed * STEPS_PER_MM));
     stepper->move((int32_t)lroundf(mm * STEPS_PER_MM));
-    Serial.printf("# move %.2f mm at %.0f mm/min - measure the real distance!\n", mm, speed);
+    Serial.printf("# move %.2f mm at %.1f mm/s - measure the real distance!\n", mm, speed);
     waitMotion(120000, false);
 }
 
 static void cmdHome() {
     if (!stepper) { Serial.println("{\"error\":\"run 'stepper' first\"}"); return; }
     if (rawLimitBwd()) { stepper->forceStopAndNewPosition(0); Serial.println("{\"done\":true,\"reason\":\"already_on_switch\"}"); return; }
-    stepper->setSpeedInHz((uint32_t)(600.0f / 60.0f * STEPS_PER_MM));
+    stepper->setSpeedInHz((uint32_t)(5.0f * STEPS_PER_MM));   // V1.3: homing 5 mm/s
     stepper->runBackward();
-    Serial.println("# seeking backward switch at 600 mm/min (timeout 40 s)");
-    waitMotion(40000, true);
+    Serial.println("# seeking backward switch at 5 mm/s (timeout 70 s)");
+    waitMotion(70000, true);
 }
 
 static void cmdDisp() {
@@ -250,7 +252,7 @@ static void cmdTouch(int sec) {
 
 static void cmdWifi() {
     if (!web) {
-        WiFi.mode(WIFI_AP);
+        WiFi.mode(WIFI_AP_STA);              // V1.3: AP always on + optional station
         WiFi.softAP(WIFI_AP_SSID, WIFI_AP_PASS);
         web = new WebServer(HTTP_PORT);
         web->on("/ping", []() {
@@ -263,6 +265,18 @@ static void cmdWifi() {
     }
     Serial.printf("{\"ap\":\"%s\",\"ip\":\"%s\",\"url\":\"http://%s/ping\"}\n", WIFI_AP_SSID,
                   WiFi.softAPIP().toString().c_str(), WiFi.softAPIP().toString().c_str());
+}
+
+// V1.3: station test – "sta <ssid> <pass>" (max. 23 chars each in the smoketest)
+static void cmdSta(const char* ssid, const char* pass) {
+    if (!web) cmdWifi();
+    WiFi.begin(ssid, pass);
+    uint32_t t0 = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - t0 < 10000) delay(100);
+    bool ok = WiFi.status() == WL_CONNECTED;
+    Serial.printf("{\"sta\":%s,\"ip\":\"%s\",\"rssi\":%d,\"ms\":%lu,\"ap_ip\":\"%s\"}\n", tf(ok),
+                  ok ? WiFi.localIP().toString().c_str() : "", ok ? WiFi.RSSI() : 0,
+                  (unsigned long)(millis() - t0), WiFi.softAPIP().toString().c_str());
 }
 
 static void dispatch(char* l) {
@@ -293,6 +307,9 @@ static void dispatch(char* l) {
     else if (c == "disp") cmdDisp();
     else if (c == "touch") cmdTouch(atoi(a1));
     else if (c == "wifi") cmdWifi();
+    else if (c == "sta") cmdSta(a1, a2);
+    else if (c == "estop") { estop_active_level = (String(a1) == "high") ? HIGH : LOW;
+                             Serial.printf("{\"estop_active\":\"%s\"}\n", estop_active_level == HIGH ? "high" : "low"); }
     else Serial.printf("{\"error\":\"unknown command '%s'\"}\n", cmd);
 }
 
@@ -306,6 +323,8 @@ void setup() {
     digitalWrite(PIN_SHUTTER, LOW);
     pinMode(PIN_HV_LED, OUTPUT);          // V1.2: HV LED on GPIO 4
     digitalWrite(PIN_HV_LED, LOW);
+    pinMode(PIN_HEARTBEAT_LED, OUTPUT);   // V1.3: blue board LED, blinks 0.5 Hz in loop()
+    digitalWrite(PIN_HEARTBEAT_LED, LOW);
     analogSetPinAttenuation(PIN_SENSOR_ADC, ADC_11db);
 
     engine.init(STEPPER_TASK_CORE);
@@ -330,5 +349,6 @@ void loop() {
         }
     }
     if (web) web->handleClient();
+    digitalWrite(PIN_HEARTBEAT_LED, ((millis() / 1000) % 2) == 0 ? HIGH : LOW);   // 0.5 Hz heartbeat
     delay(2);
 }

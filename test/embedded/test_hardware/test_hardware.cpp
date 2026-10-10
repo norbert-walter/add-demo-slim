@@ -39,8 +39,8 @@ void test_sensor_in_range() {
 void test_outputs_switch_without_fault() {
     halSetShutter(true);  delay(300); halSetShutter(false);
     halSetHvLed(true);    delay(300); halSetHvLed(false);
-    halBeep(millis(), 100);
-    uint32_t t0 = millis(); while (millis() - t0 < 200) { halUpdateBuzzer(millis()); delay(5); }
+    halSetBuzzer(true);   delay(100); halSetBuzzer(false);
+    halSetHeartbeat(true); delay(300); halSetHeartbeat(false);
     TEST_PASS();
 }
 void test_nvs_roundtrip() {

@@ -22,13 +22,12 @@
 
 // Active levels. VERIFY(0a) with the real switches.
 #define LIMIT_ACTIVE_LEVEL   LOW  // end switch pressed -> LOW
-// E-stop must be fail-safe: pressed AND wire broken must both read as "active".
-// Variant A: NC contact to GND, board pull-up   -> normal LOW,  active HIGH.
-// Variant B: NC contact from 3.3 V, pull-down   -> normal HIGH, active LOW.
-// Pre-test (CNC firmware) reported "LOW = E-stop active" -> variant B only if the
-// wire-break test (Smoketest 2.4) shows "active" with the cable unplugged.
-// VERIFY(0a) – never set this without the wire-break test.
-#define ESTOP_ACTIVE_LEVEL   HIGH
+// E-stop active level is a PARAMETER since V1.3 (params.estop_nc, REST API SET):
+//   estop_nc = false (default): normally-open switch to GND, board pull-up,
+//                               E-stop active LOW, NO wire-break detection.
+//   estop_nc = true:            normally-closed contact to GND, active HIGH,
+//                               a broken wire is detected as E-stop.
+// The smoketest shows the raw level; Smoketest 2.3-2.5 documents the wiring.
 
 #define INPUT_DEBOUNCE_MS    5    // limit switches and E-stop
 
@@ -37,6 +36,7 @@
 // =========================================================================
 #define PIN_SHUTTER          32   // SPINDLE/TTL connector: shutter LED red (HIGH = open), 20 mA
 #define PIN_HV_LED            4   // V1.2: HV LED green (HIGH = on), 20 mA – moved from i2so.3 (verified)
+#define PIN_HEARTBEAT_LED     2   // V1.3: blue board LED, 0.5 Hz heartbeat from the control task (HIGH = on)
 
 // =========================================================================
 // I2S shift register (74HC595 chain) – driven by FastAccelStepper I2S_MUX
@@ -101,7 +101,7 @@
 #define ACK_HOLD_MS          1000   // V1.1: ACK area must be held this long
 #define WDT_TIMEOUT_S        10
 #define COMM_TIMEOUT_MS      5000
-#define BEEP_MS              80
+#define REBOOT_DELAY_MS      700    // V1.3: >= soundDurationMs(REBOOT) (500 ms) + HTTP reply
 
 // =========================================================================
 // Tasks

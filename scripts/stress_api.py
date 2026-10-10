@@ -91,7 +91,7 @@ def t_latency(host, n):
         raise SystemExit("precondition: state RUNNING (INIT, set flags, HV_ON) - not done automatically")
     replies, idles = [], []
     for i in range(n):
-        r, _ = api(host, "START_TRAVERSE", {"start": 20, "end": 220, "speed": 3000})
+        r, _ = api(host, "START_TRAVERSE", {"start": 60, "end": 240, "speed": 20})   # mm/s (V1.3)
         if r["err"] != 0:
             raise SystemExit(f"START_TRAVERSE failed: {r}")
         time.sleep(0.8 + 0.37 * (i % 3))      # stop at different phases

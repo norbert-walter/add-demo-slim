@@ -1,6 +1,6 @@
 /**
  * @file params.h
- * @brief Parameters, simulated safety flags and the SET key table (FROZEN CONTRACT V1.2 §9).
+ * @brief Parameters, simulated safety flags and the SET key table (FROZEN CONTRACT V1.3 §9).
  *
  * Implementation: src/logic/params.cpp (Sprint S2.2).
  *
@@ -12,18 +12,24 @@
  *   maint_pos       number  40.0    21.0 .. 60.0 mm      yes  (V1.2: service position, service zone)
  *   traverse_start  number  60.0    21.0 .. 248.0 mm     yes
  *   traverse_end    number  240.0   21.0 .. 248.0 mm     yes
- *   traverse_speed  number  200.0   10 .. 3000 mm/min    yes
+ *   traverse_speed  number  10.0    1 .. 20 mm/s         yes  (V1.3: mm/s)
  *   edge_threshold  number  3.0     0.5 .. 100.0 mm      yes  (thickness threshold!)
  *   base_dist       number  70.0    40.0 .. 300.0 mm     yes  (V1.2: virtual reference plane,
  *                                                              thick = base_dist - dist; 70 mm = material edge)
  *   calib_near_ref  number  40.0    40.0 .. 300.0 mm     yes
  *   calib_far_ref   number  65.0    40.0 .. 300.0 mm     yes
- *   wifi_ssid       string  ""      0 .. 32 chars        yes  (empty = AP mode)
+ *   estop_nc        bool    false   -                    yes  (V1.3: E-stop wiring, see below)
+ *   wifi_ssid       string  ""      0 .. 32 chars        yes  (empty = no router connection)
  *   wifi_pass       string  ""      0 or 8 .. 63 chars   yes  (never reported back)
  *
  * String rule: only printable ASCII 0x20..0x7E, without '"' and '\'.
  * Type rules: bool keys accept JSON true/false or the numbers 0 and 1 (exactly).
  * Number keys accept numbers only. String keys accept strings only.
+ * estop_nc (V1.3): false = normally-open switch to GND (pull-up), E-stop active
+ *   when LOW, NO wire-break detection (default, simple test switch);
+ *   true = normally-closed contact to GND, E-stop active when HIGH, a broken wire
+ *   is detected as E-stop. A wrong setting always shows a permanent E-stop (safe).
+ *   app_logic accepts SET estop_nc only while the axis is idle and HV is off.
  * Safety flags are NEVER persisted: after every boot interlock=false,
  * cooling_flow=false, temp=18.0 (fail-safe).
  */
@@ -37,10 +43,11 @@ struct Params {
     float       maint_pos      = 40.0f;
     float       traverse_start = 60.0f;
     float       traverse_end   = 240.0f;
-    float       traverse_speed = 200.0f;
+    float       traverse_speed = 10.0f;     ///< mm/s
     float       edge_threshold = 3.0f;
     float       base_dist      = 70.0f;
     CalibPoints calib;                  ///< near_ref/far_ref settable via SET, *_raw via CALIB
+    bool        estop_nc       = false; ///< V1.3: E-stop wiring (see above)
     char        wifi_ssid[33]  = {0};
     char        wifi_pass[64]  = {0};
 };
@@ -67,10 +74,10 @@ ApiError paramSet(Params& p, SafetyFlags& f, const char* key,
 /**
  * Writes the configuration as ONE JSON member (no surrounding braces), exactly:
  *   "config":{"measure_pos":145.0,"maint_pos":40.0,"traverse_start":60.0,
- *   "traverse_end":240.0,"traverse_speed":200.0,"edge_threshold":3.0,"base_dist":70.0,
+ *   "traverse_end":240.0,"traverse_speed":10.0,"edge_threshold":3.0,"base_dist":70.0,
  *   "calib_near_raw":40.0,"calib_near_ref":40.0,"calib_far_raw":65.0,
  *   "calib_far_ref":65.0,"calib_valid":true,"interlock":false,
- *   "cooling_flow":false,"temp":18.0,"wifi_ssid":"","wifi_pass_set":false}
+ *   "cooling_flow":false,"temp":18.0,"estop_nc":false,"wifi_ssid":"","wifi_pass_set":false}
  * (one line, no spaces).
  * Floats with one decimal. wifi_pass is never written; instead
  * "wifi_pass_set":true|false. Also contains the calibration raw values and
