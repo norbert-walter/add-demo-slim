@@ -718,7 +718,7 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 - [ ] Abstand plausibel 40–300 mm (±5 %)
 - [ ] Not-Aus mit `estop_nc = false` (einfacher Schalter): Drücken löst aus
 - [ ] Nach Umstellung auf Öffner (`estop_nc = true`): Drücken **und** Drahtbruch lösen aus; falsche Einstellung zeigt Dauer-Not-Aus
-- [ ] Umschalten von `estop_nc` bei nicht gedrücktem Not-Aus: falsche Polarität löst **sofort** Not-Aus aus (On-Target-Test `test_estop_polarity_change`)
+- [ ] Umschalten von `estop_nc` bei nicht gedrücktem Not-Aus: falsche Polarität löst **sofort** Not-Aus aus (On-Target-Test `test_estop_polarity_change`; nutzt die gespeicherte Verdrahtung `estop_nc`, Voraussetzung: Not-Aus nicht gedrückt)
 
 **3. Motor**
 - [ ] `INIT` referenziert (Endschalter hinten, 2 mm Rückzug, Position 0)

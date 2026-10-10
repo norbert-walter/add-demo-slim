@@ -44,17 +44,21 @@ void test_outputs_switch_without_fault() {
     TEST_PASS();
 }
 // V1.3: changing the E-stop polarity must re-evaluate immediately (CONTRACT §11).
-// With the E-stop NOT pressed, the "wrong" polarity must read as active at once,
-// the correct one must read inactive only after the release debounce.
+// Works for both wirings: the configured polarity is read from NVS (estop_nc).
+// PRECONDITION: E-stop NOT pressed and wired as configured (else the test stops with a message).
+// With the released E-stop, the opposite polarity must read as active at once,
+// the configured one must read inactive only after the release debounce.
 void test_estop_polarity_change() {
-    halSetEstopActiveHigh(false);
-    for (int i = 0; i < 20; ++i) { halUpdateInputs(millis()); delay(1); }
-    bool normal = halEstop();
-    TEST_ASSERT_FALSE_MESSAGE(normal, "E-stop must not be pressed for this test (simple switch, estop_nc=false)");
-    halSetEstopActiveHigh(true);                 // wrong polarity for a released simple switch
+    Params p; nvsLoadParams(p);
+    const bool cfg = p.estop_nc;
+    halSetEstopActiveHigh(cfg);
+    for (int i = 0; i < INPUT_DEBOUNCE_MS + 10; ++i) { halUpdateInputs(millis()); delay(1); }
+    TEST_ASSERT_FALSE_MESSAGE(halEstop(),
+        "precondition: E-stop released and wired as configured (estop_nc) - check wiring/parameter");
+    halSetEstopActiveHigh(!cfg);                 // opposite polarity for a released E-stop
     halUpdateInputs(millis());
     TEST_ASSERT_TRUE_MESSAGE(halEstop(), "polarity change must activate E-stop in the same call");
-    halSetEstopActiveHigh(false);
+    halSetEstopActiveHigh(cfg);
     halUpdateInputs(millis());
     TEST_ASSERT_TRUE_MESSAGE(halEstop(), "release must be debounced");
     for (int i = 0; i < INPUT_DEBOUNCE_MS + 5; ++i) { halUpdateInputs(millis()); delay(1); }
