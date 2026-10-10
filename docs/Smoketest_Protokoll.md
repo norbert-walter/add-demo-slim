@@ -20,13 +20,13 @@ Ergebnis jeder Prüfung eintragen. Werte mit **→ config.h** werden danach in
 
 | # | Befehl / Aktion | Erwartung | Ergebnis |
 |---|---|---|---|
-| 1.1 | `pio run -e smoketest` | Build ohne Fehler (pioarduino, FastAccelStepper-Commit, LovyanGFX) | |
-| 1.2 | `pio test -e native -f native/test_env` | `1 Tests 0 Failures` | |
+| 1.1 | `pio run -e smoketest` | Build ohne Fehler (pioarduino, FastAccelStepper-Commit, LovyanGFX) | ✅ |
+| 1.2 | `pio test -e native -f native/test_env` | `1 Tests 0 Failures` | ✅ |
 | 1.3 | Flashen, `ver` | `arduino` 3.x, `idf` ≥ v5.3, `i2s_mux: true`, `flash_mb: 4` | arduino: ___ idf: ___ |
 | 1.4 | `crc` | `match: true` (eigene CRC = `esp_rom_crc32_le` = CBF43926) | |
 | 1.5 | `part` | nvs 20 KB, otadata 8 KB, app0 2944 KB, spiffs 1088 KB | |
 | 1.6 | `nvs` / `fs` | `nvs: true` / `spiffs: true` | |
-| 1.7 | Versionen in platformio.ini festpinnen (LovyanGFX exakte Version aus Build-Log) | | LovyanGFX: ___ |
+| 1.7 | Versionen in platformio.ini festpinnen (LovyanGFX exakte Version aus Build-Log) | | LovyanGFX: 1.2.32 |
 
 ## 2. Eingänge
 
