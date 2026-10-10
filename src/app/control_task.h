@@ -1,6 +1,6 @@
 /**
  * @file control_task.h
- * @brief The one and only writer of the application state (FROZEN – Sprint 0b).
+ * @brief The one and only writer of the application state (FROZEN – Contract V1.3).
  *
  * Runs on Core 1 every CONTROL_PERIOD_MS. Reads HAL + stepper driver,
  * calls the pure logic (app_logic.h), writes outputs, publishes the snapshot.

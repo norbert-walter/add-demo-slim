@@ -1,6 +1,6 @@
 /**
  * @file snapshot.h
- * @brief Single-writer process image shared between cores (FROZEN – Contract V1.1, complete).
+ * @brief Single-writer process image shared between cores (FROZEN – Contract V1.3, complete).
  *
  * Writer: control task (Core 1) once per cycle with snapshotPublish().
  * Readers: HTTP task (Core 0) and display (Core 1) with snapshotGet().

@@ -1,6 +1,6 @@
 /**
  * @file config.h
- * @brief Board, pin and timing constants for the ADD Demo System (FROZEN – Sprint 0b).
+ * @brief Board, pin and timing constants for the ADD Demo System (FROZEN – Contract V1.3).
  *
  * Board: Makerbase MKS DLC32 V2.1 (ESP32-WROOM-32U), display MKS TS35R.
  * Toolchain: pioarduino (Arduino Core 3.x / ESP-IDF 5.x).

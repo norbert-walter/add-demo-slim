@@ -1,6 +1,6 @@
 /**
  * @file display_logic.h
- * @brief Pure decision logic of the touch display (FROZEN CONTRACT V1.1 §13).
+ * @brief Pure decision logic of the touch display (FROZEN CONTRACT V1.3 §13).
  *
  * Implementation: src/logic/display_logic.cpp (Sprint S4a). The display task
  * (src/display/display.cpp) only draws and reads the touch panel; every

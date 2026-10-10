@@ -1,6 +1,6 @@
 /**
  * @file crc32.h
- * @brief CRC32 (IEEE 802.3 / zlib) and the JSON CRC frame (FROZEN CONTRACT §4).
+ * @brief CRC32 (IEEE 802.3 / zlib) and the JSON CRC frame (FROZEN CONTRACT V1.3 §4).
  *
  * Pure C++, no ESP-IDF dependency. The firmware uses this implementation on the
  * target as well, so host tests and target behave identically.

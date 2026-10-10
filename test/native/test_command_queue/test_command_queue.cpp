@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.1) – integration test of the REAL src/app/command_queue.cpp
+// FROZEN TESTS (Contract V1.3) – integration test of the REAL src/app/command_queue.cpp
 // on the host. FreeRTOS is replaced by test/native/freertos_shim (threads = tasks,
 // 1 tick = 1 ms). Covers CONTRACT §1 (reply assignment, serialisation) and §6.7
 // (priority queue, overflow latch). Do not modify.

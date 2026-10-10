@@ -1,7 +1,7 @@
 /**
  * @file command_queue.h
  * @brief FreeRTOS queues between HTTP/display and the control task
- *        (FROZEN – Contract V1.1, complete).
+ *        (FROZEN – Contract V1.3, complete).
  *
  * Producers: HTTP task (Core 0), display touch (Core 1).
  * Consumer:  control task (Core 1), max. one command per cycle.

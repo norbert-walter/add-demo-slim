@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.1) – Sprint S4a must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.3) – Sprint S4b must make these pass. Do not modify.
 // Covers: src/logic/display_logic.cpp (CONTRACT §13)
 #include <unity.h>
 #include "logic/display_logic.h"

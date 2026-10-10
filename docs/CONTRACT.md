@@ -15,6 +15,11 @@
 | 6 | REBOOT: the restart happens `REBOOT_DELAY_MS` (700 ms) after the request, after the REBOOT pattern | §5.2, §12 |
 | 7 | NVS schema version 3 | §12 |
 
+**Clarifications 1.3.1 (review, no behaviour change):** per-cycle command limit in §1;
+exact snapshot semantics of `cmdQueueReceivePriority` (§6.7); E-stop decoding when the
+polarity changes (§11); HAL writes outputs only on change (§11); version markers of all
+frozen files unified to V1.3; `scripts/verify_reference.sh` reproduces the native test run.
+
 ### Changes 1.1 → 1.2 (hardware pre-test 2026-10-09, CONTRACT §14)
 
 | # | Change | Where |
@@ -75,7 +80,7 @@ Every other task communicates through exactly two channels:
 
 | Channel | Direction | Implementation (frozen, complete) |
 |---|---|---|
-| Command queues | HTTP / display → control | `src/app/command_queue.*` (FreeRTOS priority queue + normal queue, max. 1 command per cycle, §6.7) |
+| Command queues | HTTP / display → control | `src/app/command_queue.*` (FreeRTOS priority queue + overflow latch + normal queue; per cycle: **all** pending priority commands (max. 7) + max. **1** normal command, §6.7, §10) |
 | Snapshot | control → HTTP / display | `src/app/snapshot.*` (copy of `ProcData` under one spinlock) |
 
 No other shared mutable globals exist. Nobody but snapshot/command_queue uses
@@ -395,7 +400,12 @@ command.
 **All pending priority commands per cycle.** In step 3a the control task takes
 every priority request that is pending at that moment
 (`cmdQueueReceivePriority`: up to 4 from the queue + the whole latch, max. 7)
-and executes all of them in the same cycle. This is safe because all three are
+and executes all of them in the same cycle. Exact semantics (not one atomic
+snapshot of both stores): the queue is read first (FIFO, at most the 4 entries
+it can hold), then the latch is taken under its spinlock. A request that arrives
+in the queue after its read, or in the latch after the latch was taken, is
+executed in the next cycle. Every request that was already pending when the call
+started is executed in this cycle – this is what `test_command_queue` checks. This is safe because all three are
 idempotent and act in the safe direction; driver requests are merged by rank.
 Consequence: a STOP never waits behind other priority commands. Requests that
 arrive during step 3a are taken in the next cycle.
@@ -566,7 +576,14 @@ The publication of the statistics itself (< 2 µs) is not part of `cycle_max_us`
 
   A setting that does not match the wiring always shows a permanent E-stop
   (normal state reads as active) – the error is safe and visible. The control
-  task calls `halSetEstopActiveHigh(params.estop_nc)` every cycle. The value can
+  task calls `halSetEstopActiveHigh(params.estop_nc)` every cycle.
+  **Decoding on a polarity change (binding for `hal_io.cpp`):** the decoded state
+  is re-evaluated from the current raw level in the same `halUpdateInputs()` call.
+  If the new interpretation says "active", E-stop is active **immediately** (no
+  debounce, like every activation); if it says "inactive", the normal release
+  debounce applies. A change can therefore never hide an E-stop for even one cycle
+  longer than the release debounce. Verified on the target by
+  `test_hardware: test_estop_polarity_change` and acceptance §4. The value can
   only be changed while the axis is idle and HV is off (else `PRECONDITION`).
   With `false` the display shows `ESTOP(NO)` in the warning colour.
 - Outputs: shutter LED GPIO 32, **HV LED GPIO 4**, **heartbeat LED GPIO 2** (blue
@@ -574,6 +591,8 @@ The publication of the statistics itself (< 2 µs) is not part of `cycle_max_us`
   control task, so it stops when the control loop stops); all HIGH = on, LOW from
   the first line of `halInit()`. The buzzer is a bit in the 74HC595 chain (i2so.7)
   set via `engine.i2sMuxSetBit(slot, value)` (FastAccelStepper ≥ 2.0).
+  All output setters write the hardware **only when the value changes** (cached
+  last value), so buzzer and heartbeat add no I2S/GPIO work in most cycles.
 - Stepper: FastAccelStepper `DRIVER_I2S_MUX`, step/dir/enable as mux slots
   (`slot | PIN_I2S_FLAG`). Slot mapping `I2SO_TO_SLOT(n)` determined in Sprint 0a.
 - Reaction time E-stop → motor stop: ≤ 2 ms (1 ms cycle + driver); outputs off in the same cycle.

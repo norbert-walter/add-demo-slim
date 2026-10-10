@@ -718,6 +718,7 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 - [ ] Abstand plausibel 40–300 mm (±5 %)
 - [ ] Not-Aus mit `estop_nc = false` (einfacher Schalter): Drücken löst aus
 - [ ] Nach Umstellung auf Öffner (`estop_nc = true`): Drücken **und** Drahtbruch lösen aus; falsche Einstellung zeigt Dauer-Not-Aus
+- [ ] Umschalten von `estop_nc` bei nicht gedrücktem Not-Aus: falsche Polarität löst **sofort** Not-Aus aus (On-Target-Test `test_estop_polarity_change`)
 
 **3. Motor**
 - [ ] `INIT` referenziert (Endschalter hinten, 2 mm Rückzug, Position 0)
@@ -738,6 +739,7 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 - [ ] STOP per API während Profilfahrt: Antwort < 150 ms, Achse steht < 1 s (`stress_api.py latency`)
 - [ ] Zeitverhalten nach 10 min (`stress_api.py soak`): `cycle_max_us` < 500, `overruns` = 0,
       `period_max_us` < 1500 (Jitter), nach STOP-Tests `prio_lat_max_us` ≤ 2000
+- [ ] Zeitverhalten mit und ohne Buzzer-Signal vergleichen (z. B. Not-Aus-Ton 4 s während `soak`): `cycle_max_us` bleibt < 500
 - [ ] Queue-Flut (200 SET): nur OK/BUSY, alle CRC gültig (`stress_api.py flood`)
 - [ ] Parallele Anfragen (8 Threads, 400 gemischte Befehle mit bekanntem Ergebnis):
       keine vertauschte Antwort, nur erwartetes Ergebnis oder BUSY (`stress_api.py parallel`)

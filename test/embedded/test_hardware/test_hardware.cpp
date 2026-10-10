@@ -43,6 +43,23 @@ void test_outputs_switch_without_fault() {
     halSetHeartbeat(true); delay(300); halSetHeartbeat(false);
     TEST_PASS();
 }
+// V1.3: changing the E-stop polarity must re-evaluate immediately (CONTRACT §11).
+// With the E-stop NOT pressed, the "wrong" polarity must read as active at once,
+// the correct one must read inactive only after the release debounce.
+void test_estop_polarity_change() {
+    halSetEstopActiveHigh(false);
+    for (int i = 0; i < 20; ++i) { halUpdateInputs(millis()); delay(1); }
+    bool normal = halEstop();
+    TEST_ASSERT_FALSE_MESSAGE(normal, "E-stop must not be pressed for this test (simple switch, estop_nc=false)");
+    halSetEstopActiveHigh(true);                 // wrong polarity for a released simple switch
+    halUpdateInputs(millis());
+    TEST_ASSERT_TRUE_MESSAGE(halEstop(), "polarity change must activate E-stop in the same call");
+    halSetEstopActiveHigh(false);
+    halUpdateInputs(millis());
+    TEST_ASSERT_TRUE_MESSAGE(halEstop(), "release must be debounced");
+    for (int i = 0; i < INPUT_DEBOUNCE_MS + 5; ++i) { halUpdateInputs(millis()); delay(1); }
+    TEST_ASSERT_FALSE(halEstop());
+}
 void test_nvs_roundtrip() {
     Params p; paramsDefaults(p);
     p.measure_pos = 111.0f; strcpy(p.wifi_ssid, "TestNet");
@@ -81,6 +98,7 @@ void setup() {
     RUN_TEST(test_inputs_readable_and_estop_released);
     RUN_TEST(test_sensor_in_range);
     RUN_TEST(test_outputs_switch_without_fault);
+    RUN_TEST(test_estop_polarity_change);
     RUN_TEST(test_nvs_roundtrip);
     RUN_TEST(test_motor_moves_2mm_and_back);
     RUN_TEST(test_proc_json_fits);

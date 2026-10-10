@@ -1,4 +1,4 @@
-// FROZEN – Contract V1.1 (complete implementation). See snapshot.h.
+// FROZEN – Contract V1.3 (complete implementation). See snapshot.h.
 #include "snapshot.h"
 #include <Arduino.h>
 

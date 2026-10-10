@@ -22,6 +22,7 @@ agentenbasierte Entwicklung mit code-server + Cline.
 | `test/embedded/*` | On-Target-Tests (S5) |
 | `scripts/serial_cmd.py` | nicht-interaktiver Serial-Client (auch für Cline) |
 | `scripts/add_client.py` | REST-Client mit CRC-Rahmenregel (Referenz) |
+| `scripts/verify_reference.sh` | alle nativen Tests gegen die Referenzimplementierung (`referenz_logic.zip`, separat geliefert) in einem temporären Worktree – Nachweis, dass die eingefrorenen Tests widerspruchsfrei und erfüllbar sind |
 | `scripts/stress_api.py` | Abnahme V1.1: STOP-Latenz, Queue-Flut, parallele Anfragen, Dauerlauf, Bedienvorrang |
 
 ## Schnellstart
@@ -48,3 +49,11 @@ pio device monitor -e smoketest           # "help"
 
 Bis zur Implementierung der Logik schlagen die nativen Test-Suiten beim Linken
 fehl – das ist erwartet. Jede Suite wird mit ihrem Sprint grün.
+
+**Nachweis der Tests:** Die 260 Testfälle sind keine reine Sollvorgabe – sie laufen
+vollständig grün gegen eine Referenzimplementierung (`referenz_logic.zip`, bewusst nicht
+im Repository, damit der Agent sie nicht abschreibt). Reproduzierbar mit
+`scripts/verify_reference.sh /pfad/zu/referenz_logic.zip`. Zusätzlich wurden 40 Fehler in die
+Logik und 10 in den Queue-Code gezielt eingebaut (Mutationstest); die Tests erkennen alle
+bis auf einen harmlosen (fehlendes Leeren alter Antworten – die Sequenznummer sichert die
+Zuordnung trotzdem).

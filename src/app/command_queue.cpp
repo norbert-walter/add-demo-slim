@@ -1,4 +1,4 @@
-// FROZEN – Contract V1.1 (complete implementation). See command_queue.h.
+// FROZEN – Contract V1.3 (complete implementation). See command_queue.h.
 #include "command_queue.h"
 #include "config.h"
 #include "logic/app_logic.h"   // appCmdIsPriority

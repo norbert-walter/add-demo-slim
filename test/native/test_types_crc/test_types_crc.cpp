@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.2) – Sprint S2.1 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.3) – Sprint S2.1 must make these pass. Do not modify.
 // Covers: src/logic/types.cpp, src/logic/crc32.cpp  (CONTRACT §3, §4)
 #include <unity.h>
 #include <string.h>

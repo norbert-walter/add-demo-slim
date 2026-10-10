@@ -20,6 +20,9 @@ void halInit();
 /// V1.3: E-stop active level from the parameter estop_nc (true -> HIGH = active,
 /// false -> LOW = active). Called by the control task every cycle BEFORE
 /// halUpdateInputs(). Default before the first call: LOW = active.
+/// On a change, halUpdateInputs() re-evaluates the current raw level with the new
+/// polarity in the same call: "active" takes effect immediately, "inactive" only
+/// after the release debounce (CONTRACT §11).
 void halSetEstopActiveHigh(bool active_high);
 
 /// Inputs decoded with the active levels (limits: config.h, E-stop: see above).
@@ -34,6 +37,8 @@ bool halLimitBwd();   ///< true = backward switch pressed
 /// ADC_SAMPLES x analogReadMilliVolts(PIN_SENSOR_ADC) into buf (n entries). ~0.5 ms.
 void halReadSensorSamples(uint16_t* buf, uint8_t n);
 
+/// Output setters write the hardware only when the value differs from the last
+/// written value (first call always writes). Cheap to call every cycle.
 void halSetShutter(bool open);   ///< GPIO32 HIGH = open
 void halSetHvLed(bool on);       ///< V1.2: GPIO PIN_HV_LED (digitalWrite, HIGH = on)
 void halSetBuzzer(bool on);      ///< V1.3: active buzzer, i2s bit I2SO_TO_SLOT(I2SO_BUZZER); pattern from sound_logic
