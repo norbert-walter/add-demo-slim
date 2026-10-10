@@ -29,6 +29,12 @@ Requirements (German): docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.7.md.
 - Frozen check:     git diff --exit-code -- src/config.h ':(glob)src/**/*.h' test docs/CONTRACT.md
 - NEVER run without explicit user approval: any "-t upload", "-t uploadfs",
   "pio test -e esp32-test", "pio device monitor". (Flashing can move the motor.)
+- NEVER without explicit user approval: serial_cmd.py with a command that can move
+  the axis or switch outputs: move, home, scan, stepper, slot, hv, shutter, beep,
+  estop, sta. Allowed without approval (read-only): help, ver, crc, part, fs, in,
+  watch, adc, pos, disp, touch, wifi. "stop" is always allowed.
+- NEVER without explicit user approval: git commit, git push, git tag, git reset,
+  git checkout -- <file>, rm outside .pio/. The user commits and pushes.  
 - Interactive tools hang the agent. For the serial port use:
   python scripts/serial_cmd.py "<command>" --timeout 10
 
