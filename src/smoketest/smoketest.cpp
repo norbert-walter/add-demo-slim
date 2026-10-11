@@ -108,6 +108,10 @@
  *  - Now: limits checked per direction, race-free stopNow(), supervisor in
  *    loop(), strict argument checks for all commands (move, slot, scan, ...),
  *    scan leaves the driver disabled, sensor curve per CONTRACT V1.4.2.
+ * 0a.2 (11.10.2026) – "sta" failed with ESP_ERR_WIFI_STATE ("sta is connecting")
+ *    because an earlier attempt was still retrying. Now: earlier attempt
+ *    cancelled first, no auto-reconnect, no credentials in NVS, disconnect
+ *    reason in the reply.
  */
 #include <Arduino.h>
 #include <Preferences.h>
@@ -332,7 +336,7 @@ static void cmdHelp() {
 
 /// "ver": versions and key figures (protocol 1.3). i2s_mux must be true.
 static void cmdVer() {
-    Serial.printf("{\"fw\":\"smoketest-0a.1\",\"arduino\":\"%d.%d.%d\",\"idf\":\"%s\",\"chip_rev\":%d,"
+    Serial.printf("{\"fw\":\"smoketest-0a.2\",\"arduino\":\"%d.%d.%d\",\"idf\":\"%s\",\"chip_rev\":%d,"
                   "\"cpu_mhz\":%lu,\"flash_mb\":%lu,\"heap\":%lu,\"i2s_mux\":%s,\"steps_per_mm\":%.3f}\n",
                   ESP_ARDUINO_VERSION_MAJOR, ESP_ARDUINO_VERSION_MINOR, ESP_ARDUINO_VERSION_PATCH,
                   esp_get_idf_version(), ESP.getChipRevision(), (unsigned long)ESP.getCpuFreqMHz(),
@@ -625,10 +629,17 @@ static void cmdTouch(const char* a1) {
 // Commands – section 7: WiFi
 // =============================================================================
 
+static volatile int sta_reason = 0;   ///< last STA disconnect reason (wifi_err_reason_t)
+
 /// "wifi": starts AP+STA mode (V1.3: the AP is always on), the access point
 /// from config.h and a web server with GET /ping (JSON: idf, uptime).
 static void cmdWifi() {
     if (!web) {
+        WiFi.persistent(false);     // never store router credentials in NVS
+        WiFi.setAutoReconnect(false);   // a failed "sta" must not keep retrying in the background
+        WiFi.onEvent([](arduino_event_id_t, arduino_event_info_t info) {
+            sta_reason = info.wifi_sta_disconnected.reason;
+        }, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
         WiFi.mode(WIFI_AP_STA);
         WiFi.softAP(WIFI_AP_SSID, WIFI_AP_PASS);
         web = new WebServer(HTTP_PORT);
@@ -646,17 +657,26 @@ static void cmdWifi() {
 
 /// "sta <ssid> [pass]": additionally connects to a router (starts "wifi" first
 /// if needed) and waits up to 10 s. Max. 23 chars each, no blanks; empty
-/// password = open network. The AP stays on.
+/// password = open network. The AP stays on. A running or failed earlier attempt
+/// is cancelled first (otherwise ESP_ERR_WIFI_STATE "sta is connecting").
+/// On failure "reason" is the last disconnect reason of the IDF, e.g.
+/// 15 = 4-way handshake timeout (wrong password), 201 = no AP found
+/// (wrong SSID or 5 GHz only), 202 = auth fail, 204 = handshake timeout.
+/// The ESP32 only supports 2.4 GHz.
 static void cmdSta(const char* ssid, const char* pass) {
     if (!ssid[0]) { error("usage: sta <ssid> [pass]"); return; }
     if (!web) cmdWifi();
+    WiFi.disconnect(false, true);   // stop auto-reconnect of an earlier attempt, keep the AP
+    delay(200);
+    sta_reason = 0;
     WiFi.begin(ssid, pass);
     uint32_t t0 = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - t0 < 10000) delay(100);
     bool ok = WiFi.status() == WL_CONNECTED;
-    Serial.printf("{\"sta\":%s,\"ip\":\"%s\",\"rssi\":%d,\"ms\":%lu,\"ap_ip\":\"%s\"}\n", tf(ok),
-                  ok ? WiFi.localIP().toString().c_str() : "", ok ? WiFi.RSSI() : 0,
-                  (unsigned long)(millis() - t0), WiFi.softAPIP().toString().c_str());
+    Serial.printf("{\"sta\":%s,\"ip\":\"%s\",\"rssi\":%d,\"ms\":%lu,\"ap_ip\":\"%s\",\"reason\":%d}\n",
+                  tf(ok), ok ? WiFi.localIP().toString().c_str() : "", ok ? WiFi.RSSI() : 0,
+                  (unsigned long)(millis() - t0), WiFi.softAPIP().toString().c_str(), ok ? 0 : (int)sta_reason);
+    if (!ok) WiFi.disconnect(false, true);   // no endless retries in the background
 }
 
 // =============================================================================
