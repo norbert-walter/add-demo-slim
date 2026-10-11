@@ -1,6 +1,6 @@
 # Sprint 0a – Smoketest-Protokoll
 
-**Anlage:** ADD Demo System (Slim) · **Firmware:** `pio run -e smoketest -t upload` (Smoketest 0a.1)
+**Anlage:** ADD Demo System (Slim) · **Firmware:** `pio run -e smoketest -t upload` (Smoketest 0a.1; aktuell 0a.2)
 **Bedienung:** `pio device monitor -e smoketest` (interaktiv) oder
 `python scripts/serial_cmd.py "<befehl>"` (skriptfähig, auch für Cline)
 
@@ -14,8 +14,8 @@ jetzt die Werte für **unsere** Firmware (Pegel, Slots, Kurve) – Hardwarefehle
 Ergebnis jeder Prüfung eintragen. Werte mit **→ config.h** werden danach in
 `src/config.h` übernommen; erst dann wird `config.h` eingefroren (Sprint 0b).
 
-**Durchführung:** 11.10.2026, Flash-Rechner Dell (`/dev/ttyUSB0`). Abschnitte 1–6 erledigt,
-7–8 offen.
+**Durchführung:** 11.10.2026, Flash-Rechner Dell (`/dev/ttyUSB0`). Abschnitte 1–7 erledigt,
+8 offen.
 
 > **Vorfall „move 2010“ (11.10.2026):** Ein Tippfehler (`move 2010` statt `move 20 10`) wurde von
 > Smoketest 0a als 2010 mm interpretiert; die Fahrt lief unüberwacht über Not-Aus und Endschalter
@@ -104,9 +104,9 @@ Messposition der Produktiv-Firmware 155 mm (`measure_pos`, Contract V1.4.2).
 
 | # | Aktion | Erwartung | Ergebnis |
 |---|---|---|---|
-| 7.1 | `wifi`, Tablet mit `ADD-Demo` verbinden, `http://192.168.4.1/ping` | JSON `pong: true` | |
-| 7.2 | `sta <ssid> <passwort>` (Router) | `sta: true`, IP aus dem Heimnetz; AP weiter erreichbar | IP: ___ |
-| 7.3 | Vom PC im Heimnetz: `http://<IP>/ping` | JSON `pong: true` | |
+| 7.1 | `wifi`, Tablet mit `ADD-Demo` verbinden, `http://192.168.4.1/ping` | JSON `pong: true` | ✅ (AP-Ping bei gleichzeitig aktivem STA) |
+| 7.2 | `sta <ssid> <passwort>` (Router) | `sta: true`, IP aus dem Heimnetz; AP weiter erreichbar | IP 192.168.1.39, RSSI −46 dBm, 3500 ms, AP 192.168.4.1 ✅ · Erster Versuch: falsches Passwort, der Hintergrund-Retry blockierte den zweiten (`ESP_ERR_WIFI_STATE`); nach Reset ✅. **Smoketest 0a.2:** `sta` bricht frühere Versuche ab, kein Auto-Reconnect, keine Zugangsdaten im NVS, Feld `reason` bei Fehlschlag |
+| 7.3 | Vom PC im Heimnetz: `http://<IP>/ping` | JSON `pong: true` | ✅ |
 
 ## 8. Agenten-Probelauf (code-server + Cline + Qwen)
 
@@ -121,16 +121,16 @@ Messposition der Produktiv-Firmware 155 mm (`measure_pos`, Contract V1.4.2).
 
 ## Offene Punkte
 
-- 5.2 Multimeter-Vergleich, Abschnitte 7–8
+- 5.2 Multimeter-Vergleich, Abschnitt 8
 - Resonanz bei 5 mm/s (Homing) – Resonanztest, ggf. Homing-Geschwindigkeit ändern
 - Not-Aus hart verdrahten (wirkt derzeit nur per Software)
 - Motorzucken beim Reset (bekannt, I2S-Register undefiniert bis zur Initialisierung)
 
 ## Freigabe
 
-- [ ] Alle ❌ behoben oder als bekannte Einschränkung dokumentiert
-- [ ] `src/config.h` mit allen **→**-Werten aktualisiert, `VERIFY(0a)`-Kommentare entfernt
-      (erledigt bis auf WLAN – folgt mit Abschnitt 7)
+- [x] Alle ❌ behoben oder als bekannte Einschränkung dokumentiert
+- [x] `src/config.h` mit allen **→**-Werten aktualisiert, `VERIFY(0a)`-Kommentare entfernt
+      (erledigt)
 - [x] `platformio.ini`: LovyanGFX-Version exakt gepinnt (1.2.32)
 - [ ] Commit „Sprint 0a abgeschlossen“ → `config.h` gilt ab jetzt als eingefroren
 
