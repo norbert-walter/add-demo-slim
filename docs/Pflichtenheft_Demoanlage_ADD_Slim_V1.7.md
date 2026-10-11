@@ -2,12 +2,20 @@
 
 **Stand:** 2026-10-11
 **Autor:** Norbert Walter
-**Version:** 1.7.2 (Contract V1.4.2, Ergebnisse Smoketest 0a)
+**Version:** 1.7.3 (Contract V1.4.2, Ergebnisse Smoketest 0a vollständig)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.7.2 → V1.7.3 (Smoketest 0a Abschnitte 5.2 und 6)
+
+| Bereich | V1.7.2 | V1.7.3 |
+|---|---|---|
+| ADC-Spannungen | als Sensorspannungen angegeben | sind **ESP-Messwerte** (`analogReadMilliVolts()`); sie liegen konstant ≈ 235 mV über der mit DVM am Sensor gemessenen Spannung (Steigung 0,99). Die Kurve ist gegen die ESP-Werte kalibriert, das Ergebnis in mm stimmt. Bekannte Einschränkung, Ursache nicht abschließend geklärt |
+| ADC-Kalibrierung | – | **Option** (nicht im Contract): Zweipunkt-Kalibrierung des ESP-ADC mit unabhängiger Referenzquelle oder parallel messendem DVM |
+| Display / Touch | Werte offen | `invert` = false, `rgb_order` = false, Touch `offset_rotation` = 2, Kalibrierung X 130 … 3775, Y 200 … 3900 |
 
 ### V1.7.1 → V1.7.2 (Contract V1.4.2, Smoketest 0a Abschnitt 5 „Abstandssensor“)
 
@@ -195,6 +203,13 @@ optischen Abstandssensor ersetzt. Die Firmware wird agentenbasiert entwickelt
 | 242 mm (neben dem Messgut) | unterer Ausleger | 0,933 V | 2,5 mV | ≈ 186 mm (nur Richtwert) |
 
 (Vortest 09.10.2026 ohne Last: 1,72 … 2,63 V – die Werte sind mit der neuen Beschaltung nicht mehr gültig.)
+
+**Hinweis (V1.7.3):** Die Spannungen sind ESP-Messwerte. Mit DVM direkt am Sensor (Vo gegen GND)
+gemessen: 1,743 V bei ESP 1,973 V (Stufe 1) und 0,703 V bei ESP 0,942 V (neben dem Messgut) –
+konstanter Versatz ≈ +235 mV, gleiche Steigung. `adcraw` zeigt, dass schon der Rohwert erhöht ist
+(eFuse-Kalibrierung `vref` vorhanden, Umrechnung der Bibliothek plausibel). Für die Messung ohne
+Bedeutung, da Kurve und Messkette gegen die ESP-Werte kalibriert sind; bei Tausch von Board,
+ESP32 oder Sensor neu kalibrieren. Ein Vergleich mit dem Sharp-Datenblatt ist um diesen Versatz verschoben.
 
 An den Messgutkanten springt der Messwert nicht, sondern ändert sich stetig, bis der
 Sensorfleck wieder vollständig auf einer Fläche liegt. 70 mm entspricht etwa der Kante.
@@ -824,7 +839,8 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 | Motor zuckt bei Reset/Flash | Enable über das I2S-Schieberegister ist bis `setup()` undefiniert; harmlos (max. ein Vollschritt) | Bekannt |
 | Not-Aus-Verdrahtung | Parameter `estop_nc`, Standard einfacher Schalter | ✅ – Umstellung auf Öffner mit Drahtbrucherkennung vor dem Demo-Einsatz empfohlen |
 | Geometrie, Zonen, Sensorkurve | Hardware-Vortest 09.10.2026 | ✅ (V1.6) |
-| Display-/Touch-Pins, Farbreihenfolge | Smoketest (mit CNC-Firmware funktionsfähig) | Werte für LovyanGFX offen (0a) |
+| Display-/Touch-Pins, Farbreihenfolge | Smoketest 6: Farben korrekt, Touch 180° gedreht → `offset_rotation` = 2, Kalibrierung X 130 … 3775, Y 200 … 3900 | ✅ (0a) |
 | ADC am Z--Eingang (Pull-up?) | R20 4k7 entfernt (Vortest), 11 kΩ Last + 47 µF am Sensor (Smoketest) | ✅ |
+| ADC-Versatz ESP ↔ DVM (+235 mV) | Bekannte Einschränkung (Smoketest 5.2), Kurve gegen ESP-Werte kalibriert. **Option:** Zweipunkt-Kalibrierung des ESP-ADC mit Referenzquelle oder parallel messendem DVM (z. B. als Service-Funktion mit zwei Korrekturparametern) | Option, später |
 | Autonomy-Level im ADD | konzeptionell Level 2, Scores in S6 | Offen (S6) |
 | Python-Demo-Skripte | S6 | Offen |

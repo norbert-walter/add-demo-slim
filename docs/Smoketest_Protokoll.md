@@ -14,7 +14,7 @@ jetzt die Werte für **unsere** Firmware (Pegel, Slots, Kurve) – Hardwarefehle
 Ergebnis jeder Prüfung eintragen. Werte mit **→ config.h** werden danach in
 `src/config.h` übernommen; erst dann wird `config.h` eingefroren (Sprint 0b).
 
-**Durchführung:** 11.10.2026, Flash-Rechner Dell (`/dev/ttyUSB0`). Abschnitte 1–8 erledigt bis auf 5.2 (Abweichung, wird untersucht).
+**Durchführung:** 11.10.2026, Flash-Rechner Dell (`/dev/ttyUSB0`). Abschnitte 1–8 erledigt; 5.2 als bekannte Einschränkung dokumentiert.
 
 > **Vorfall „move 2010“ (11.10.2026):** Ein Tippfehler (`move 2010` statt `move 20 10`) wurde von
 > Smoketest 0a als 2010 mm interpretiert; die Fahrt lief unüberwacht über Not-Aus und Endschalter
@@ -84,7 +84,7 @@ auf dem DLC32 bleibt entfernt, R23 ist der Serienwiderstand zu IO34.
 | # | Aktion | Erwartung | Ergebnis |
 |---|---|---|---|
 | 5.1 | `home`, `move 117 10` (= Achse 115, Mitte Stufe 1), dann 5 × `move 20 10`; an jeder Stufenmitte `adc 10` | `mm` mit Kurve 168,8·V^-1,398 = 65, 60 … 40 mm (±1 mm) | 1972 / 2091 / 2236 / 2403 / 2588 / 2777 mV → max. Abweichung 0,48 mm ✅ · **→ Kurve `k_mm` = 168,8, `exponent` = −1,398, `min_mm` = 35** (Contract V1.4.2) |
-| 5.2 | Multimeter direkt am Sensorausgang vs. `mv` | Abweichung < 50 mV, auch bei 2,8 V (ADC-Rand) | ❌ DVM (Vo gegen GND am Sensor) / ESP: 1,743 V / 1,973 V (Stufe 1) und 0,703 V / 0,942 V (neben dem Messgut) → **konstanter Versatz +230…239 mV, Steigung 0,99**. Ein passiver Pfad (11 kΩ, R23 1 kΩ) kann die Spannung am ESP nur senken, nie anheben, und ein Hochziehen über einen Widerstand wäre spannungsabhängig → Verdacht: Umrechnung in `analogReadMilliVolts()` (eFuse-Kalibrierung). Prüfung mit `adcraw` (0a.3). Messkette Abstand → ESP-Wert stimmt trotzdem, da die Kurve gegen die ESP-Werte kalibriert ist (5.1) |
+| 5.2 | Multimeter direkt am Sensorausgang vs. `mv` | Abweichung < 50 mV, auch bei 2,8 V (ADC-Rand) | ⚠️ **Bekannte Einschränkung.** DVM (Vo gegen GND am Sensor) / ESP: 1,743 / 1,973 V (Stufe 1), 0,703 / 0,942 V (neben dem Messgut) → konstanter Versatz +230…239 mV, Steigung 0,99. `adcraw` (0a.3): raw/mV = 2250/1978, 2404/2104, 2590/2255, 2795/2422, 3037/2596, 3335/2782 (Stufen 1–6), 989/949 (Achse 65, ∞); `efuse: vref` → Umrechnung der Bibliothek plausibel (≈ 0,816 mV/LSB + 142 mV), schon der Rohwert ist erhöht. Ursache nicht abschließend geklärt (Messung am ESP-Pin zu riskant). Ohne Einfluss auf das Messergebnis, da die Kurve gegen die ESP-Werte kalibriert ist (5.1). Option für später: Zweipunkt-Kalibrierung des ADC mit Referenzquelle oder parallel messendem DVM |
 | 5.3 | Rauschen: `adc 10` an den Stufen | Streuung < ±0,5 mm | σ ≤ 8,4 mV = 0,34 mm ✅ |
 | 5.4 | Neben dem Messgut (Achse 242, Sensor sieht den unteren Ausleger, Boden 60 mm tiefer) | weit außerhalb des Prüfkörpers (≫ 70 mm) | 933 mV ≈ 186 mm ✅ |
 
@@ -120,7 +120,7 @@ Messposition der Produktiv-Firmware 155 mm (`measure_pos`, Contract V1.4.2).
 
 ## Offene Punkte
 
-- 5.2 Versatz ESP ↔ Multimeter (+235 mV) klären: `adcraw`
+- Option: Zweipunkt-Kalibrierung des ESP-ADC (Referenzquelle oder parallel messendes DVM), siehe 5.2
 - llama.cpp mit HIP stabil bekommen (derzeit Vulkan, ca. halbe Tokenrate)
 - Resonanz bei 5 mm/s (Homing) – Resonanztest, ggf. Homing-Geschwindigkeit ändern
 - Not-Aus hart verdrahten (wirkt derzeit nur per Software)
@@ -128,10 +128,10 @@ Messposition der Produktiv-Firmware 155 mm (`measure_pos`, Contract V1.4.2).
 
 ## Freigabe
 
-- [ ] Alle ❌ behoben oder als bekannte Einschränkung dokumentiert (offen: 5.2)
+- [x] Alle ❌ behoben oder als bekannte Einschränkung dokumentiert (5.2: ADC-Versatz)
 - [x] `src/config.h` mit allen **→**-Werten aktualisiert, `VERIFY(0a)`-Kommentare entfernt
       (erledigt)
 - [x] `platformio.ini`: LovyanGFX-Version exakt gepinnt (1.2.32)
-- [ ] Commit „Sprint 0a abgeschlossen“ → `config.h` gilt ab jetzt als eingefroren
+- [x] Commit „Sprint 0a abgeschlossen“ (Tag `sprint-0a`) → `config.h` gilt ab jetzt als eingefroren
 
-Datum / Unterschrift: ______________________
+Datum / Unterschrift: 11.10.2026, ______________________
