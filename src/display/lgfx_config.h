@@ -3,7 +3,7 @@
  * @brief LovyanGFX setup for MKS TS35R on MKS DLC32 V2.1 (Sprint 0a, verified by smoketest).
  *
  * ST7796 320x480 (used as 480x320, rotation 1), touch ADS7843E (XPT2046 protocol),
- * both on VSPI. Pins and touch calibration from config.h (VERIFY(0a)).
+ * both on VSPI. Pins and touch calibration from config.h (smoketest 0a section 6).
  */
 #pragma once
 #define LGFX_USE_V1
@@ -45,8 +45,8 @@ public:
             cfg.offset_y        = 0;
             cfg.offset_rotation = 0;
             cfg.readable        = true;
-            cfg.invert          = false;   // VERIFY(0a): set true if colours are inverted
-            cfg.rgb_order       = false;   // VERIFY(0a): set true if red/blue are swapped
+            cfg.invert          = false;   // verified 0a 6.1
+            cfg.rgb_order       = false;   // verified 0a 6.1
             cfg.dlen_16bit      = false;
             cfg.bus_shared      = true;    // touch on the same bus
             _panel.config(cfg);
@@ -68,7 +68,7 @@ public:
             cfg.y_max           = TOUCH_Y_MAX;
             cfg.pin_int         = -1;
             cfg.bus_shared      = true;
-            cfg.offset_rotation = 0;       // VERIFY(0a): 0..7 until touch matches the picture
+            cfg.offset_rotation = 2;       // smoketest 0a 6.2: touch was rotated 180 deg against the picture
             cfg.spi_host        = VSPI_HOST;
             cfg.freq            = 1000000;
             cfg.pin_sclk        = PIN_DISP_SCK;

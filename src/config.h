@@ -85,11 +85,12 @@
 #define PIN_DISP_RST         27
 #define PIN_DISP_BL           5
 #define PIN_TOUCH_CS         26
-// Touch calibration (raw ADS7843 values at the screen corners). VERIFY(0a).
-#define TOUCH_X_MIN          300
-#define TOUCH_X_MAX          3800
-#define TOUCH_Y_MIN          300
-#define TOUCH_Y_MAX          3800
+// Touch calibration: raw ADS7843 values extrapolated to the panel edges
+// (smoketest 0a 6.2, four corner targets). Touch offset_rotation = 2 in lgfx_config.h.
+#define TOUCH_X_MIN          130
+#define TOUCH_X_MAX          3775
+#define TOUCH_Y_MIN          200
+#define TOUCH_Y_MAX          3900
 
 // =========================================================================
 // Timing
