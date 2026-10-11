@@ -2,12 +2,18 @@
 
 **Stand:** 2026-10-11
 **Autor:** Norbert Walter
-**Version:** 1.7.3 (Contract V1.4.2, Ergebnisse Smoketest 0a vollständig)
+**Version:** 1.7.4 (Contract V1.4.2, Ergebnisse Smoketest 0a vollständig)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.7.3 → V1.7.4
+
+| Bereich | V1.7.3 | V1.7.4 |
+|---|---|---|
+| Offene Punkte | – | neuer Abschnitt **11.1 Erweiterungen nach S6**: QR-Code auf dem Display, NFC-Tag, GitHub als Informationsquelle, Offline-Doku, Dokumentation per KI, Konzept KI-gestützte Serientests |
 
 ### V1.7.2 → V1.7.3 (Smoketest 0a Abschnitte 5.2 und 6)
 
@@ -844,3 +850,17 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 | ADC-Versatz ESP ↔ DVM (+235 mV) | Bekannte Einschränkung (Smoketest 5.2), Kurve gegen ESP-Werte kalibriert. **Option:** Zweipunkt-Kalibrierung des ESP-ADC mit Referenzquelle oder parallel messendem DVM (z. B. als Service-Funktion mit zwei Korrekturparametern) | Option, später |
 | Autonomy-Level im ADD | konzeptionell Level 2, Scores in S6 | Offen (S6) |
 | Python-Demo-Skripte | S6 | Offen |
+
+### 11.1 Erweiterungen nach S6 (Ideen, V1.7.4)
+
+Nicht Teil des Sprintplans und nicht im Contract. Aufnahme erst nach S6, jeweils mit eigener
+Contract-Version.
+
+| Idee | Umsetzung (Vorschlag) | Nutzen / Hinweis |
+|---|---|---|
+| **Dynamischer QR-Code auf dem Display** | LovyanGFX `qrcode()`: (1) WLAN-Zugang `WIFI:S:ADD-Demo;T:WPA;P:…;;`, (2) aktuelle URL (AP- oder STA-IP), (3) Einstieg KI-Service-Anfrage (Seite mit Geräteidentität, Link zur ADD-Datei, fertigem Prompt) | Handy/Tablet ohne Tippen verbinden; zeigt im Gegensatz zu einem Aufkleber die aktuelle IP und den Zustand |
+| **NFC-Tag am Gerät** | NDEF-URL-Eintrag: Gerätetyp, Seriennummer, Links zu Repo und Doku | Dauerhafte Identität. Tags/Aufkleber sind austauschbar → die KI prüft die geladene ADD-Datei gegen das Gerät (z. B. Hash der ADD-Beschreibung in `/proc`) |
+| **GitHub als einzige Informationsquelle** | Repo, Releases mit Prüfsummen, GitHub Pages für die HTML-Doku; Handbuch, Befehlssatz und ADD-Datei aus denselben Quelldaten erzeugt | Keine auseinanderlaufenden Dokumente; jede KI findet alles an einer Stelle |
+| **Offline-Doku auf der Anlage** | Kompakte HTML-Fassung im SPIFFS (≈ 1 MB frei), ausgeliefert vom eingebauten Webserver im AP-Modus | Messen haben oft kein verlässliches Internet |
+| **Dokumentation per KI** | Softwareschnittstelle und Befehlssatz aus `CONTRACT.md` und Headern, technische Beschreibung aus Pflichtenheft und Smoketest-Protokoll, Bedienhandbuch mit menschlichem Input (Abläufe, Fotos) | Sicherheitshinweise und Not-Aus: KI entwirft, Mensch prüft und gibt frei |
+| **KI-gestützte Serientests (Präsentationsthema)** | Grundsatz: Sicherheit hängt nicht von der KI ab – deterministische Schicht (Verriegelungen, Zäune bei HV/Shutter, Not-Aus, Grenzwerte in der Firmware), die KI arbeitet nur innerhalb dieses Rahmens. Eingefrorene Kette (Modell, Quantisierung, Inferenz-Software, Prompt, Testvorgaben; Temperatur 0), Änderung = Requalifizierung. Erste Läufe menschlich begleitet mit vorher festgelegtem Endkriterium. Stufenweise: erst Sensorik, dann gefährliche Aktionen; Stufenübergänge per fester Regel, nicht per KI-Urteil. Langsame Bewegungen, Plausibilisierung mit weiteren Größen (Strom, Kühlwasserfluss, Brandmeldung). Watchdog → sicherer Zustand, lückenloses Protokoll, Ergebnis vom Menschen freigegeben. Eigenes Sicherheitskonzept (Rahmen IEC 61508 / ISO 13849, KI als nicht sicherheitsgerichteter Teil) | Die Demoanlage zeigt das Prinzip im Kleinen: Argumentprüfung, richtungsabhängige Endschalter, Freigaben in `.clinerules`, eingefrorene Contract-Tests |
