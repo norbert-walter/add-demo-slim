@@ -1,6 +1,6 @@
 /**
  * @file http_server.h
- * @brief HTTP endpoints (FROZEN CONTRACT V1.3 §5, Sprint S3). Runs in the network task (Core 0).
+ * @brief HTTP endpoints (FROZEN CONTRACT V1.4 §5, Sprint S3). Runs in the network task (Core 0).
  *
  * Library: WebServer (Arduino core). All handlers return quickly.
  *   GET  /            -> SPIFFS /www/index.html

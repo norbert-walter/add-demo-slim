@@ -40,13 +40,13 @@ static void home() {
 
 // ---- conversions ----------------------------------------------------------------
 void test_conversions() {
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 76.190f, C.steps_per_mm);
-    TEST_ASSERT_EQUAL_INT32(9143, mmToSteps(120.0f, C));      // 120 * 76.190 = 9142.86
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 78.489f, C.steps_per_mm);  // V1.4: 3200 / 40.77
+    TEST_ASSERT_EQUAL_INT32(9419, mmToSteps(120.0f, C));      // 120 * 78.489 = 9418.69
     TEST_ASSERT_EQUAL_INT32(0, mmToSteps(0.0f, C));
-    TEST_ASSERT_FLOAT_WITHIN(0.02f, 120.0f, stepsToMm(9143, C));
-    TEST_ASSERT_EQUAL_UINT32(381, mmPerSecToHz(5.0f, C));     // 5 * 76.19 = 380.95
-    TEST_ASSERT_EQUAL_UINT32(762, mmPerSecToHz(10.0f, C));
-    TEST_ASSERT_EQUAL_UINT32(1524, mmPerSecToHz(20.0f, C));
+    TEST_ASSERT_FLOAT_WITHIN(0.02f, 120.0f, stepsToMm(9419, C));
+    TEST_ASSERT_EQUAL_UINT32(392, mmPerSecToHz(5.0f, C));     // 5 * 78.489 = 392.45
+    TEST_ASSERT_EQUAL_UINT32(785, mmPerSecToHz(10.0f, C));    // 784.89
+    TEST_ASSERT_EQUAL_UINT32(1570, mmPerSecToHz(20.0f, C));   // 1569.78
 }
 void test_speed_defaults_v13() {
     TEST_ASSERT_EQUAL_FLOAT(5.0f, C.homing_speed);
@@ -124,12 +124,12 @@ void test_move_range_and_speed_checks() {
     home();
     DrvRequest r;
     API(ApiError::BAD_PARAM, motionStartMove(S, -0.1f, 10, A.inputs(now), C, r));
-    API(ApiError::BAD_PARAM, motionStartMove(S, 248.1f, 10, A.inputs(now), C, r));   // V1.2 axis 0..248
+    API(ApiError::BAD_PARAM, motionStartMove(S, 242.1f, 10, A.inputs(now), C, r));   // V1.4 axis 0..242
     API(ApiError::BAD_PARAM, motionStartMove(S, 100, 0.9f, A.inputs(now), C, r));    // V1.3 min 1 mm/s
     API(ApiError::BAD_PARAM, motionStartMove(S, 100, 20.1f, A.inputs(now), C, r));   // V1.3 max 20 mm/s
     TEST_ASSERT_TRUE(S.phase == SeqPhase::IDLE);
     MotionSeq s2 = S;
-    API(ApiError::OK, motionStartMove(s2, 248.0f, 20.0f, A.inputs(now), C, r));  // upper boundary ok
+    API(ApiError::OK, motionStartMove(s2, 242.0f, 20.0f, A.inputs(now), C, r));  // upper boundary ok
     API(ApiError::OK, motionStartMove(S, 0.0f, 1.0f, A.inputs(now), C, r));      // boundaries ok
 }
 void test_move_executes_and_returns_idle() {
@@ -137,14 +137,14 @@ void test_move_executes_and_returns_idle() {
     DrvRequest r;
     API(ApiError::OK, motionStartMove(S, 120.0f, 20.0f, A.inputs(now), C, r));
     OP(DrvOp::MOVE_TO, r.op);
-    TEST_ASSERT_EQUAL_INT32(9143, r.target_steps);
+    TEST_ASSERT_EQUAL_INT32(9419, r.target_steps);
     TEST_ASSERT_EQUAL_UINT32(mmPerSecToHz(20.0f, C), r.speed_hz);
     A.apply(r);
     TEST_ASSERT_TRUE(motionStateOf(S) == MotionState::MOVING);
     API(ApiError::BUSY, motionStartMove(S, 10.0f, 20.0f, A.inputs(now), C, r));
     runFor(7000);                    // 120 mm at 20 mm/s = 6 s
     TEST_ASSERT_TRUE(S.phase == SeqPhase::IDLE);
-    TEST_ASSERT_EQUAL_INT32(9143, A.drvPos());
+    TEST_ASSERT_EQUAL_INT32(9419, A.drvPos());
 }
 void test_move_settles_even_if_driver_stopped_elsewhere() {
     home();
@@ -162,7 +162,7 @@ void test_traverse_param_checks() {
     DrvRequest r;
     API(ApiError::BAD_PARAM, motionStartTraverse(S, 20.0f, 100, 10, A.inputs(now), C, r));  // start in park zone (<= 20)
     API(ApiError::BAD_PARAM, motionStartTraverse(S, 100, 20.0f, 10, A.inputs(now), C, r));  // end in park zone
-    API(ApiError::BAD_PARAM, motionStartTraverse(S, 25, 248.5f, 10, A.inputs(now), C, r));
+    API(ApiError::BAD_PARAM, motionStartTraverse(S, 25, 242.5f, 10, A.inputs(now), C, r));
     API(ApiError::BAD_PARAM, motionStartTraverse(S, 100, 100.5f, 10, A.inputs(now), C, r)); // < 1 mm
     API(ApiError::BAD_PARAM, motionStartTraverse(S, 25, 230, 0.5f, A.inputs(now), C, r));  // < 1 mm/s
     API(ApiError::BAD_PARAM, motionStartTraverse(S, 25, 230, 20.5f, A.inputs(now), C, r)); // > 20 mm/s
@@ -205,7 +205,7 @@ void test_measure_holds_until_stop() {
     home();
     DrvRequest r;
     API(ApiError::BAD_PARAM, motionStartMeasure(S, 20.0f, A.inputs(now), C, r));   // park zone boundary
-    API(ApiError::BAD_PARAM, motionStartMeasure(S, 248.1f, A.inputs(now), C, r));
+    API(ApiError::BAD_PARAM, motionStartMeasure(S, 242.1f, A.inputs(now), C, r));
     start(ApiError::OK, motionStartMeasure(S, 50.0f, A.inputs(now), C, r), r);
     TEST_ASSERT_TRUE(S.mode == OpMode::MEASURE);
     MotionEvents e = runFor(7000);   // 50 mm at 10 mm/s
@@ -261,7 +261,7 @@ void test_emergency_while_idle_keeps_reference() {
 void test_fwd_limit_during_move_is_motor_fault() {
     home();
     DrvRequest r;
-    start(ApiError::OK, motionStartMove(S, 248.0f, 20.0f, A.inputs(now), C, r), r);
+    start(ApiError::OK, motionStartMove(S, 242.0f, 20.0f, A.inputs(now), C, r), r);
     A.fwd_limit_steps = (int32_t)(A.phys_steps + mmToSteps(50.0f, C));   // switch earlier than expected
     MotionEvents e = runFor(5000);
     TEST_ASSERT_TRUE(e.motor_fault);
@@ -283,16 +283,16 @@ void test_bwd_limit_during_traverse_is_motor_fault_and_ends_acq() {
     TEST_ASSERT_TRUE(e.acq_ended);
     TEST_ASSERT_TRUE(S.mode == OpMode::NONE);
 }
-// V1.2: a move to the full axis length must NOT touch the forward switch (at 250 mm)
+// V1.4: a move to the full axis length must NOT touch the forward switch (axis 244.3 mm)
 void test_move_to_axis_max_does_not_hit_forward_switch() {
     home();
     DrvRequest r;
     start(ApiError::OK, motionStartMove(S, C.axis_max_mm, 20.0f, A.inputs(now), C, r), r);
-    MotionEvents e = runFor(15000);       // 248 mm at 20 mm/s = 12.4 s
+    MotionEvents e = runFor(15000);       // 242 mm at 20 mm/s = 12.1 s
     TEST_ASSERT_FALSE(e.motor_fault);
     TEST_ASSERT_TRUE(S.phase == SeqPhase::IDLE);
     TEST_ASSERT_FALSE(A.limitFwd());
-    TEST_ASSERT_EQUAL_INT32(mmToSteps(248.0f, C), A.drvPos());
+    TEST_ASSERT_EQUAL_INT32(mmToSteps(242.0f, C), A.drvPos());
 }
 void test_static_limit_without_motion_is_no_fault() {
     home();

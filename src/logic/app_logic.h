@@ -1,6 +1,6 @@
 /**
  * @file app_logic.h
- * @brief Complete application logic as pure functions (FROZEN CONTRACT V1.3 §10).
+ * @brief Complete application logic as pure functions (FROZEN CONTRACT V1.4 §10).
  *
  * Implementation: src/logic/app_logic.cpp (Sprint S2.4).
  *

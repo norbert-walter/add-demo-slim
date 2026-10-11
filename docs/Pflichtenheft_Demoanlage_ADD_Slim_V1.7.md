@@ -1,13 +1,24 @@
 # Pflichtenheft – Demoanlage ADD (Slim)
 
-**Stand:** 2026-10-08
+**Stand:** 2026-10-11
 **Autor:** Norbert Walter
-**Version:** 1.7
+**Version:** 1.7.1 (Contract V1.4, Ergebnisse Smoketest 0a)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.7 → V1.7.1 (Contract V1.4, Smoketest 0a vom 11.10.2026)
+
+| Bereich | V1.7 | V1.7.1 |
+|---|---|---|
+| Übertragung | 42 mm/U (Annahme) → 76,19 Schritte/mm | **40,77 mm/U (gemessen)** → **78,49 Schritte/mm**; 126,2 mm statt 130 mm Sollweg mit dem alten Wert, nach Korrektur 130,25 mm (< 0,2 %) |
+| Verfahrweg | 0 … 248 mm, vorderer Endschalter bei 250 mm | **0 … 242 mm**, vorderer Endschalter **gemessen bei Achse 244,3 mm** (246,3 mm ab hinterem Schalter); mechanisch nicht verschiebbar (Schleppkette) |
+| Parameterbereiche | `measure_pos`, `traverse_start/end` 21 … 248 mm | **21 … 242 mm** (Standardwerte 145 / 60 / 240 unverändert) |
+| Drehrichtung | `DIR_POSITIVE_HIGH` = true (Annahme) | **false** (gemessen: positive mm = weg von der Parkseite) |
+| Nothalt im Treiber | `forceStop()` | **`forceStopAndNewPosition()`**: `forceStop()` wird von FastAccelStepper verworfen, wenn noch ein neuer Fahrbefehl ansteht (Vorfall im Smoketest, siehe Kapitel 11) |
+| Smoketest | 0a | **0a.1**: Endschalter richtungsabhängig, Stopp ohne Wettlauf, Überwachung in `loop()`, strenge Argumentprüfung aller Befehle |
 
 ### V1.6 → V1.7 (Contract V1.3)
 
@@ -146,9 +157,9 @@ optischen Abstandssensor ersetzt. Die Firmware wird agentenbasiert entwickelt
 | Schrittmotortreiber | TMC2209 (Standalone), **Mikroschritt 1/16** (Jumper), Strom 0,8 A eingestellt |
 | Ansteuerung | Step/Dir/Enable über 74HC595-Kette am I2S (DATA 21, BCK 16, WS 17) |
 | Schrittmotor | Nanotec ST4118L0804-A, 200 Schritte/U, 0,8 A |
-| Übertragung | Zahnstange, 42 mm/U → **76,19 Schritte/mm**, Auflösung 0,013 mm |
-| Verfahrweg | 0 … 248 mm (0 = 2 mm vor hinterem Endschalter, vorderer Endschalter bei 250 mm) |
-| Endlagenschalter | GPIO 36 vorn (250 mm), GPIO 35 hinten (Referenz) |
+| Übertragung | Zahnstange, **40,77 mm/U (gemessen, Smoketest 0a)** → **78,49 Schritte/mm**, Auflösung 0,013 mm |
+| Verfahrweg | **0 … 242 mm** (0 = 2 mm vor hinterem Endschalter, vorderer Endschalter gemessen bei 244,3 mm) |
+| Endlagenschalter | GPIO 36 vorn (Achse 244,3 mm), GPIO 35 hinten (Referenz), beide aktiv LOW |
 
 ### Zonen und Positionen der Achse
 
@@ -288,7 +299,7 @@ scripts/                     serial_cmd.py, add_client.py
 ### 5.3 Betriebsmodi
 
 **Stehende Messung (`START_MEASURE`)** – nur in RUNNING
-- Fährt mit 10 mm/s an die Messposition (20 < pos ≤ 248 mm, Standard 145 mm)
+- Fährt mit 10 mm/s an die Messposition (20 < pos ≤ 242 mm, Standard 145 mm)
 - Shutter öffnet automatisch, Messung bis `STOP`
 - Mittelwert und Anzahl gültiger Werte in `/proc` (`avg`, `n`)
 
@@ -397,7 +408,7 @@ Neuzeichnen nur geänderter Zonen. **Sprache: Englisch.**
 │ 145.0     │ 200       │ 55.0      │ 15.0                         │ h=72
 │ mm        │ mm/s      │ mm        │ mm                           │
 ├───────────┴───────────┴───────────┴──────────────────────────────┤ y=110
-│ POS |PP▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|  248         │ h=24
+│ POS |PP▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|  242         │ h=24
 ├──────────────────────────────────────────────────────────────────┤ y=140
 │ ESTOP ●  INTERLOCK ●  COOLING ●  TEMP 23.0°C ●                   │ h=26
 │ MODE traverse   AVG 12.3 mm (143)   ERR NONE                     │ h=26
@@ -734,7 +745,7 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 - [ ] Nach ACK kein automatischer Wiederanlauf; nach Not-Aus in Fahrt erneutes INIT nötig
 - [ ] Shutter öffnet nie in der Parkzone (≤ 20 mm)
 - [ ] `SHUTTER_OPEN` manuell nur in der Wartungszone; bei 145 mm → `PRECONDITION`
-- [ ] Fahrt auf 248 mm löst den vorderen Endschalter nicht aus
+- [ ] Fahrt auf 242 mm löst den vorderen Endschalter nicht aus
 - [ ] Not-Aus und `cooling_flow = false` gleichzeitig → `FAULT ESTOP`
 - [ ] STOP per API während Profilfahrt: Antwort < 150 ms, Achse steht < 1 s (`stress_api.py latency`)
 - [ ] Zeitverhalten nach 10 min (`stress_api.py soak`): `cycle_max_us` < 500, `overruns` = 0,
@@ -788,11 +799,17 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 | Toolchain | pioarduino | ✅ |
 | Mikroschritt | 1/16 | ✅ |
 | Architektur | Single-Writer, reine Logik | ✅ |
-| /proc-Schema, API, CRC, Fehlercodes | CONTRACT V1.3 | ✅ |
+| /proc-Schema, API, CRC, Fehlercodes | CONTRACT V1.4 | ✅ |
 | Geschwindigkeiten, Signale, WLAN, Herzschlag | V1.7 | ✅ |
 | Bedienvorrang Display, Haltezeit | LOCAL, 30 s | ✅ |
 | Quittierung am Display | eine ACK-Fläche, 1 s halten | ✅ |
-| i2so → Slot-Zuordnung (Buzzer, Enable, Step, Dir) | Smoketest `scan` | Offen (0a) |
+| i2so → Slot-Zuordnung (Buzzer, Enable, Step, Dir) | Smoketest `scan`: Slot = i2so-Nummer (Enable 0, Step 1, Dir 2, Buzzer 7) | ✅ (0a) |
+| Weg pro Umdrehung, Drehrichtung, Verfahrweg | Smoketest 5: 40,77 mm/U, `DIR_POSITIVE_HIGH` = false, Achse 0 … 242 mm | ✅ (0a, Contract V1.4) |
+| **Not-Aus wirkt nur über die Software** | Vorfall 11.10.2026: Fahrt lief unüberwacht, Not-Aus und Endschalter ohne Wirkung, Stopp nur durch Ziehen des Netzsteckers (Ursache im Smoketest behoben, 0a.1). Not-Aus zusätzlich **hart verdrahten** (Motorspannung oder Treiber-Enable direkt unterbrechen) | **Offen – vor dem Demo-Einsatz** |
+| Resonanz des Antriebs | deutlich hörbar bei 5 mm/s (= Referenzfahrt-Geschwindigkeit); Geschwindigkeits-Sweep 3 … 12 mm/s, ggf. Referenzfahrt-Geschwindigkeit verschieben | Offen |
+| Materialzone / Messposition | wurden mit der alten Skalierung (42 mm/U, 3 % zu kurz) bestimmt; im Smoketest 3 mit `adc` prüfen, ob 90 … 220 mm und 145 mm noch auf dem Treppenkörper liegen | Offen (0a, Abschnitt 3) |
+| Flash 8 MB statt 4 MB | Projekt nutzt bewusst 4 MB (Partitionen wie spezifiziert); Reserve z. B. für OTA | Info |
+| Motor zuckt bei Reset/Flash | Enable über das I2S-Schieberegister ist bis `setup()` undefiniert; harmlos (max. ein Vollschritt) | Bekannt |
 | Not-Aus-Verdrahtung | Parameter `estop_nc`, Standard einfacher Schalter | ✅ – Umstellung auf Öffner mit Drahtbrucherkennung vor dem Demo-Einsatz empfohlen |
 | Geometrie, Zonen, Sensorkurve | Hardware-Vortest 09.10.2026 | ✅ (V1.6) |
 | Display-/Touch-Pins, Farbreihenfolge | Smoketest (mit CNC-Firmware funktionsfähig) | Werte für LovyanGFX offen (0a) |

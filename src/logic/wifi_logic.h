@@ -1,6 +1,6 @@
 /**
  * @file wifi_logic.h
- * @brief Station (router) connection state machine (FROZEN CONTRACT V1.3 §12.1).
+ * @brief Station (router) connection state machine (FROZEN CONTRACT V1.4 §12.1).
  *
  * Implementation: src/logic/wifi_logic.cpp (Sprint S1). Pure, no hardware.
  * wifi_manager.cpp calls staStep() every 100 ms from the network task and

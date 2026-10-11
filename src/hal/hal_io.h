@@ -1,6 +1,6 @@
 /**
  * @file hal_io.h
- * @brief Thin hardware layer for digital/analog I/O (FROZEN CONTRACT V1.3 §11).
+ * @brief Thin hardware layer for digital/analog I/O (FROZEN CONTRACT V1.4 §11).
  *
  * Implementation: src/hal/hal_io.cpp (Sprint S2.5, taken over from the
  * smoketest code). Only the control task (Core 1) calls these functions.

@@ -157,7 +157,7 @@ void test_r7_hv_on_idempotent() {
 void test_r7_manual_shutter_open_only_in_service_zone() {
     SafetyInputs in = good();
     const float ok_pos[]  = {20.1f, 40.0f, 60.0f};
-    const float bad_pos[] = {60.1f, 100.0f, 145.0f, 248.0f};
+    const float bad_pos[] = {60.1f, 100.0f, 145.0f, 242.0f};
     for (float p : ok_pos) {
         in.pos_mm = p;
         SafetyResult r = step(st(SafetyState::RUNNING, true), SafetyEvent::SHUTTER_OPEN, in);

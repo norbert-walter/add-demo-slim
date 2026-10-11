@@ -1,6 +1,6 @@
 /**
  * @file motion_seq.h
- * @brief Pure, non-blocking motion sequencer (FROZEN CONTRACT V1.3 §8).
+ * @brief Pure, non-blocking motion sequencer (FROZEN CONTRACT V1.4 §8).
  *
  * V1.3: ALL speeds are mm/s (API, parameters, /proc, MotionConfig).
  *
@@ -27,13 +27,13 @@
 #include "types.h"
 
 struct MotionConfig {
-    float    steps_per_mm      = 3200.0f / 42.0f;  ///< 200 steps * 16 microsteps / 42 mm
-    float    axis_max_mm       = 248.0f;  ///< V1.2: forward end switch at 250 mm, 2 mm margin
+    float    steps_per_mm      = 3200.0f / 40.77f; ///< V1.4: 200 steps * 16 microsteps / 40.77 mm (measured)
+    float    axis_max_mm       = 242.0f;  ///< V1.4: forward end switch at axis 244.3 mm (measured), 2.3 mm margin
     float    park_pos_mm       = 20.0f;   ///< V1.2: park zone limit; measuring positions must be > park
     float    park_target_mm    = 2.0f;    ///< V1.2: destination of the PARK command
     float    homing_speed      = 5.0f;    ///< mm/s (V1.3), also pull-off
     float    pulloff_mm        = 2.0f;
-    uint32_t homing_timeout_ms = 70000;   ///< whole homing sequence (250 mm at 5 mm/s = 50 s + margin)
+    uint32_t homing_timeout_ms = 70000;   ///< whole homing sequence (246 mm at 5 mm/s = 49 s + margin)
     float    approach_speed    = 10.0f;   ///< mm/s, normal speed: MOVE/PARK/SERVICE default and approach moves
     float    min_speed         = 1.0f;    ///< mm/s
     float    max_speed         = 20.0f;   ///< mm/s

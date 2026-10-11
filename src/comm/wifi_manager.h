@@ -1,6 +1,6 @@
 /**
  * @file wifi_manager.h
- * @brief WiFi: access point always on + optional router connection (FROZEN CONTRACT V1.3 §12.1, Sprint S1).
+ * @brief WiFi: access point always on + optional router connection (FROZEN CONTRACT V1.4 §12.1, Sprint S1).
  *
  * Mode WIFI_AP_STA from the start:
  *  - AP "ADD-Demo" / WIFI_AP_PASS, 192.168.4.1 – ALWAYS active, so the tablet can

@@ -68,8 +68,8 @@ void test_temp() {
 }
 void test_numeric_params_ranges_and_persist() {
     struct R { const char* k; double lo, hi; } rs[] = {
-        {"measure_pos", 21, 248}, {"maint_pos", 21, 60},
-        {"traverse_start", 21, 248}, {"traverse_end", 21, 248},
+        {"measure_pos", 21, 242}, {"maint_pos", 21, 60},
+        {"traverse_start", 21, 242}, {"traverse_end", 21, 242},
         {"traverse_speed", 1, 20}, {"edge_threshold", 0.5, 100}, {"base_dist", 40, 300},
         {"calib_near_ref", 40, 300}, {"calib_far_ref", 40, 300},
     };

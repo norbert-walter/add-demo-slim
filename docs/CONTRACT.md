@@ -1,7 +1,18 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.3 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-10
-**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7
+**Version:** 1.4 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-11
+**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.1
+
+### Changes 1.3 → 1.4 (smoketest 0a 2026-10-11, §14: hardware measurement)
+
+| # | Change | Where |
+|---|---|---|
+| 1 | Rack **40.77 mm per revolution** (measured; 42 mm was an estimate) → `STEPS_PER_MM` = 78.49; `MotionConfig::steps_per_mm` default 3200 / 40.77 | §2, §8, `config.h`, `motion_seq.h` |
+| 2 | Axis 0 … **242 mm**: forward switch measured at axis 244.3 mm (246.3 mm from the backward switch), 2.3 mm margin; cannot be moved mechanically (cable chain) | §2, §5.2, §8, §9, `motion_seq.h`, `params.h` |
+| 3 | Parameter ranges `measure_pos`, `traverse_start`, `traverse_end`: 21 … **242** mm (defaults unchanged) | §9 |
+| 4 | `DIR_POSITIVE_HIGH` = **false** (measured) | `config.h` |
+| 5 | Driver `FORCE_STOP` → `forceStopAndNewPosition(getCurrentPosition())` instead of `forceStop()`: FastAccelStepper drops a `forceStop()` that arrives while a newer move is still pending (incident in the smoketest). The per-cycle repetition of `FORCE_STOP` (§10, step 5) stays mandatory | §11, `motion_drv.h` |
+| 6 | Tests: `fake_axis` forward switch at 19 334 steps (measured), conversions and boundaries for 78.49 steps/mm and 242 mm; reference implementation re-run (260/260) | `test/native` |
 
 ### Changes 1.2 → 1.3
 
@@ -111,19 +122,19 @@ C++17 functions without Arduino/ESP-IDF/FreeRTOS. It is tested on the host
 ## 2. Units and conventions
 
 - Positions: **mm** in API, JSON and logic interfaces; **steps** inside motion_seq / driver.
-  `STEPS_PER_MM = 200 · 16 / 42 = 76.19` (TMC2209 jumper 1/16).
+  `STEPS_PER_MM = 200 · 16 / 40.77 = 78.49` (TMC2209 jumper 1/16; 40.77 mm per revolution measured, V1.4).
 - Speeds: **mm/s** in API, parameters, `/proc` and display (V1.3); **steps/s (Hz)** towards the driver.
   Range 1 … 20 mm/s; normal speed 10 mm/s; homing 5 mm/s.
 - Time: `uint32_t` milliseconds (`millis()`), all comparisons wrap-around safe.
-- Position 0 = 2 mm in front of the backward end switch (after homing). Axis 0 … 248 mm
-  (forward end switch at 250 mm).
+- Position 0 = 2 mm in front of the backward end switch (after homing). Axis 0 … 242 mm
+  (forward end switch measured at 244.3 mm, V1.4).
 
 | Zone (axis mm) | Range | Shutter | Named position |
 |---|---|---|---|
 | Park zone | 0 … 20 | always closed | park position 2 mm (`PARK`) |
 | Service zone | > 20 … 60 | manual `SHUTTER_OPEN` allowed | `maint_pos`, default 40 mm (`SERVICE`), settable 21 … 60 |
 | Material zone | 90 … 220 (stair body, sensor distance 40 … 65 mm) | opened only by the automation during an acquisition | measuring position 145 mm (`measure_pos`) |
-| Forward end | 248 | – | forward switch at 250 mm |
+| Forward end | 242 | – | forward switch at 244.3 mm (measured) |
 
 (The zone between 60 and 90 mm and beyond 220 mm belongs to the traverse range;
 the automation may open the shutter anywhere outside the park zone.)
@@ -272,10 +283,10 @@ because of a full normal queue (§6.7).
 | Command | Params | Allowed in | Effect |
 |---|---|---|---|
 | `INIT` | – | SAFE_START, READY | homing (run backward to switch, 2 mm pull-off, zero) → READY |
-| `MOVE` | `pos` (req.), `speed` (opt., default 10) | READY, RUNNING | absolute move 0…248 mm, 1…20 mm/s; requires homed |
+| `MOVE` | `pos` (req.), `speed` (opt., default 10) | READY, RUNNING | absolute move 0…242 mm, 1…20 mm/s; requires homed |
 | `PARK` | – | READY, RUNNING | move to the park position 2 mm at 10 mm/s; requires homed; the shutter closes when entering the park zone, HV is not changed |
 | `SERVICE` | – | READY, RUNNING | move to `maint_pos` (service zone) at 10 mm/s; requires homed |
-| `START_MEASURE` | `pos` (opt., default `measure_pos`) | RUNNING | move to pos (20 < pos ≤ 248), then stationary measurement until `STOP`; shutter opens automatically |
+| `START_MEASURE` | `pos` (opt., default `measure_pos`) | RUNNING | move to pos (20 < pos ≤ 242), then stationary measurement until `STOP`; shutter opens automatically |
 | `START_TRAVERSE` | `start`, `end`, `speed` (opt., defaults `traverse_*`) | RUNNING | approach start, traverse to end at speed; shutter opens during the run, closes at the end; HV stays on |
 | `STOP` | – | all | controlled stop; acquisition ends, shutter closes |
 | `GET_STATE` | – | all | heartbeat; reply extra `"state":"READY","sys_err":0,"local":false,"cycle_max_us":312,"period_max_us":1010,"overruns":0,"prio_lat_max_us":1450` (`stateExtraToJson`, §10) |
@@ -518,10 +529,10 @@ switch outside homing) → force stop, reference lost, `MOTOR_FAULT`
 | `interlock` | bool (or 0/1) | false | – | **no** |
 | `cooling_flow` | bool (or 0/1) | false | – | **no** |
 | `temp` | number | 18.0 | −20.0 … 99.9 °C | **no** |
-| `measure_pos` | number | 145.0 | 21 … 248 mm | yes |
+| `measure_pos` | number | 145.0 | 21 … 242 mm | yes |
 | `maint_pos` | number | 40.0 | 21 … 60 mm (service zone, customer-defined) | yes |
-| `traverse_start` | number | 60.0 | 21 … 248 mm | yes |
-| `traverse_end` | number | 240.0 | 21 … 248 mm | yes |
+| `traverse_start` | number | 60.0 | 21 … 242 mm | yes |
+| `traverse_end` | number | 240.0 | 21 … 242 mm | yes |
 | `traverse_speed` | number | 10.0 | 1 … 20 mm/s | yes |
 | `edge_threshold` | number | 3.0 | 0.5 … 100 mm (thickness) | yes |
 | `base_dist` | number | 70.0 | 40 … 300 mm (virtual reference plane) | yes |

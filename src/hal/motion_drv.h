@@ -1,7 +1,7 @@
 /**
  * @file motion_drv.h
  * @brief Adapter between DrvRequest (logic/motion_seq.h) and FastAccelStepper
- *        in I2S_MUX mode (FROZEN CONTRACT V1.3 §11).
+ *        in I2S_MUX mode (FROZEN CONTRACT V1.4 §11).
  *
  * Implementation: src/hal/motion_drv.cpp (Sprint S2.5, from the smoketest).
  * Only the control task calls these functions.
@@ -33,9 +33,17 @@ FastAccelStepperEngine* motionDrvEngine();
  *   MOVE_TO      -> setSpeedInHz(speed_hz); moveTo(target_steps)
  *   RUN_BACKWARD -> setSpeedInHz(speed_hz); runBackward()
  *   STOP         -> stopMove()                         (decelerated)
- *   FORCE_STOP   -> forceStop()
+ *   FORCE_STOP   -> forceStopAndNewPosition(getCurrentPosition())   (V1.4, see below)
  *   ZERO_HERE    -> forceStopAndNewPosition(0)
  *   NONE         -> nothing
+ *
+ * V1.4 (smoketest 0a, 2026-10-11): forceStop() is NOT used. If it arrives before the
+ * stepper task has taken over a pending move (e.g. MOVE_TO in one cycle, FORCE_STOP
+ * in the next), FastAccelStepper drops the immediate stop in favour of the newer
+ * move (RampGenerator::getNextCommand). forceStopAndNewPosition() stops the ramp
+ * generator and empties the queue synchronously. app_logic additionally repeats
+ * FORCE_STOP in every cycle while the driver still runs (step 5) – do not turn this
+ * into a one-shot request.
  */
 void motionDrvApply(const DrvRequest& r);
 

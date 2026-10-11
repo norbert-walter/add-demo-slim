@@ -1,6 +1,6 @@
 /**
  * @file safety_logic.h
- * @brief Pure safety state machine (FROZEN CONTRACT V1.3 §6). No hardware access.
+ * @brief Pure safety state machine (FROZEN CONTRACT V1.4 §6). No hardware access.
  *
  * Implementation: src/logic/safety_logic.cpp (Sprint S2.1).
  * The machine is a pure function: given the current status, one event and the

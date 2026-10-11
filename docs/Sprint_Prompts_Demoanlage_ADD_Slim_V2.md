@@ -633,6 +633,15 @@ Then run the ADD validation (spec §13) against the live device together with me
 
 ---
 
+## Anhang: Contract V1.4 (Smoketest 0a, 11.10.2026)
+
+Keine neuen Prompts – die Prompts verweisen auf die Header, die Werte stehen dort:
+Achse 0 … 242 mm (`MotionConfig::axis_max_mm`), 78,49 Schritte/mm (`MM_PER_REV` 40,77),
+`DIR_POSITIVE_HIGH` = false, Parameterbereiche 21 … 242 mm.
+**S2.5 Review zusätzlich:** `FORCE_STOP` → `forceStopAndNewPosition(getCurrentPosition())`,
+**nicht** `forceStop()` (siehe `motion_drv.h`); der Nothalt wird in jedem Zyklus wiederholt,
+solange der Treiber läuft – nicht zu einem einmaligen Befehl „optimieren“.
+
 ## Anhang: Änderungen V2.2 → V2.3 (Contract V1.3)
 
 | Sprint | Neu |

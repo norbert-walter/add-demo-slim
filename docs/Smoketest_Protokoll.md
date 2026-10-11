@@ -68,7 +68,8 @@ Ergebnis jeder Prüfung eintragen. Werte mit **→ config.h** werden danach in
 | 5.4a | `move 20 1`, `move -20 1` (Minimalgeschwindigkeit 1 mm/s) | gleichmäßig, kein Rattern | |
 | 5.5 | Beschleunigung: ggf. `ACCEL_MM_S2` anpassen | kein Ruckeln | **→ `ACCEL_MM_S2`** = ___ |
 | 5.6 | `home` (5 mm/s) | stoppt am hinteren Endschalter (`reason: home_switch`) | Dauer: ___ ms |
-| 5.6a | Nach `home` (steht am hinteren Schalter): `move 250 10` (`move` ist relativ; 250 mm ab Schalter = Achse 248 mm) | vorderer Endschalter löst **nicht** aus; Abstand zum Schalter ≈ 2 mm | ✅/❌ |
+| 5.6a | Nach `home` (steht am hinteren Schalter): `move 250 20` – fährt bis zum vorderen Schalter | `reason: limit_fwd`, `pos_mm` = Lage des vorderen Schalters ab hinterem Schalter | 0a: **246,34 mm** → Achse 244,3 mm → **`axis_max_mm` = 242** (Contract V1.4) |
+| 5.6b | Kontrolle nach Anpassung: `home`, `move 244 10` (= Achse 242 mm) | vorderer Endschalter löst **nicht** aus; Abstand ≈ 2,3 mm | ✅/❌ |
 | 5.7 | Not-Aus während `move 100 10` | sofortiger Stopp, `reason: estop` | |
 
 ## 6. Display und Touch

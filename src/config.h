@@ -57,16 +57,17 @@
 //   (n)  (31 - (n))  ((n) + 8)  ((n) + 16)  ((n) + 24)
 #define I2SO_TO_SLOT(n)      (n)
 
-#define DIR_POSITIVE_HIGH    true   // VERIFY(0a): DIR level for movement towards +mm
+#define DIR_POSITIVE_HIGH    false  // verified 0a (2026-10-11): DIR level for movement towards +mm
 
 // =========================================================================
-// Stepper drive (TMC2209, microstep jumper 1/16, rack 42 mm per revolution)
-// Axis 0..248 mm (0 = 2 mm in front of the backward switch, forward switch at 250 mm)
+// Stepper drive (TMC2209, microstep jumper 1/16, rack 40.77 mm per revolution, measured 0a)
+// Axis 0..242 mm (0 = 2 mm in front of the backward switch; forward switch measured at
+// 246.3 mm from the backward switch = axis 244.3 mm, smoketest 0a 2026-10-11)
 // =========================================================================
 #define MOTOR_FULL_STEPS     200
 #define MICROSTEPS           16
-#define MM_PER_REV           42.0f
-#define STEPS_PER_MM         ((MOTOR_FULL_STEPS * MICROSTEPS) / MM_PER_REV)   // 76.19
+#define MM_PER_REV           40.77f // verified 0a: 126.2 mm measured for 130 mm with 42.0 (caliper, +-0.1 mm)
+#define STEPS_PER_MM         ((MOTOR_FULL_STEPS * MICROSTEPS) / MM_PER_REV)   // 78.49
 // Motor Nanotec ST4118L0804-A (0.8 A), TMC2209 standalone, current set to 0.8 A (verified)
 #define ACCEL_MM_S2          500.0f // VERIFY(0a): smooth, no step loss
 
