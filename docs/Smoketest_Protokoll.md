@@ -84,7 +84,7 @@ auf dem DLC32 bleibt entfernt, R23 ist der Serienwiderstand zu IO34.
 | # | Aktion | Erwartung | Ergebnis |
 |---|---|---|---|
 | 5.1 | `home`, `move 117 10` (= Achse 115, Mitte Stufe 1), dann 5 × `move 20 10`; an jeder Stufenmitte `adc 10` | `mm` mit Kurve 168,8·V^-1,398 = 65, 60 … 40 mm (±1 mm) | 1972 / 2091 / 2236 / 2403 / 2588 / 2777 mV → max. Abweichung 0,48 mm ✅ · **→ Kurve `k_mm` = 168,8, `exponent` = −1,398, `min_mm` = 35** (Contract V1.4.2) |
-| 5.2 | Multimeter direkt am Sensorausgang vs. `mv` | Abweichung < 50 mV, auch bei 2,8 V (ADC-Rand) | ❌ Stufe 1 (Achse 115): Multimeter 1,73 V, ADC 1972 mV → **242 mV Differenz**, Ursache wird untersucht. Messkette selbst stimmt, weil die Kurve gegen die ADC-Werte kalibriert ist (5.1) |
+| 5.2 | Multimeter direkt am Sensorausgang vs. `mv` | Abweichung < 50 mV, auch bei 2,8 V (ADC-Rand) | ❌ DVM (Vo gegen GND am Sensor) / ESP: 1,743 V / 1,973 V (Stufe 1) und 0,703 V / 0,942 V (neben dem Messgut) → **konstanter Versatz +230…239 mV, Steigung 0,99**. Ein passiver Pfad (11 kΩ, R23 1 kΩ) kann die Spannung am ESP nur senken, nie anheben, und ein Hochziehen über einen Widerstand wäre spannungsabhängig → Verdacht: Umrechnung in `analogReadMilliVolts()` (eFuse-Kalibrierung). Prüfung mit `adcraw` (0a.3). Messkette Abstand → ESP-Wert stimmt trotzdem, da die Kurve gegen die ESP-Werte kalibriert ist (5.1) |
 | 5.3 | Rauschen: `adc 10` an den Stufen | Streuung < ±0,5 mm | σ ≤ 8,4 mV = 0,34 mm ✅ |
 | 5.4 | Neben dem Messgut (Achse 242, Sensor sieht den unteren Ausleger, Boden 60 mm tiefer) | weit außerhalb des Prüfkörpers (≫ 70 mm) | 933 mV ≈ 186 mm ✅ |
 
@@ -120,7 +120,7 @@ Messposition der Produktiv-Firmware 155 mm (`measure_pos`, Contract V1.4.2).
 
 ## Offene Punkte
 
-- 5.2 Abweichung Multimeter ↔ ADC (−242 mV) klären
+- 5.2 Versatz ESP ↔ Multimeter (+235 mV) klären: `adcraw`
 - llama.cpp mit HIP stabil bekommen (derzeit Vulkan, ca. halbe Tokenrate)
 - Resonanz bei 5 mm/s (Homing) – Resonanztest, ggf. Homing-Geschwindigkeit ändern
 - Not-Aus hart verdrahten (wirkt derzeit nur per Software)

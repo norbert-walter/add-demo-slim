@@ -79,6 +79,8 @@
  *  -- distance sensor (section 5) -------------------------------------------------
  *  adc [n]                  n readings (1..200, default 10) every 100 ms:
  *                           mV (median-mean of ADC_SAMPLES) and mm (curve 168.8*V^-1.398)
+ *  adcraw                   raw analogRead() vs analogReadMilliVolts() and the eFuse
+ *                           calibration source (protocol 5.2)
  *
  *  -- display / touch (section 6) -------------------------------------------------
  *  disp                     test pattern: colour bars, frame, four touch targets
@@ -114,7 +116,7 @@
  *    cancelled first, no auto-reconnect, no credentials in NVS, disconnect
  *    reason in the reply.
  * 0a.3 (11.10.2026) – "uptime" (written by Qwen, protocol 8.1); ADC attenuation
- *    set after the first read (boot log error in 0a.2).
+ *    set after the first read (boot log error in 0a.2); "adcraw" for 5.2.
  */
 #include <Arduino.h>
 #include <Preferences.h>
@@ -124,6 +126,7 @@
 #include <esp_partition.h>
 #include <esp_rom_crc.h>
 #include <esp_idf_version.h>
+#include <esp_adc/adc_cali_scheme.h>
 #include <FastAccelStepper.h>
 #include "config.h"
 #include "display/lgfx_config.h"
@@ -330,7 +333,7 @@ static void superviseMotion() {
 
 /// "help": short list of all commands (details: comment at the top of this file).
 static void cmdHelp() {
-    Serial.println("# ver | crc | part | nvs | fs | uptime | in | watch [s] | estop <low|high> | adc [n]");
+    Serial.println("# ver | crc | part | nvs | fs | uptime | in | watch [s] | estop <low|high> | adc [n] | adcraw");
     Serial.println("# scan [ms] | slot <n> <0|1> | beep [ms] | hv <0|1> | shutter <0|1>");
     Serial.println("# stepper | move <mm> <mm/s> | home | pos | stop");
     Serial.println("# disp | touch [s] | wifi | sta <ssid> [pass] | help");
@@ -442,6 +445,25 @@ static void cmdAdc(const char* a1) {
         delay(100);
     }
     Serial.println("{\"done\":true}");
+}
+
+/// "adcraw": raw 12-bit value of analogRead() and analogReadMilliVolts() side
+/// by side (64 samples each, averaged), plus the eFuse calibration source the
+/// IDF line-fitting scheme uses on this chip (protocol 5.2: ESP reads ~235 mV
+/// more than the multimeter at the sensor output, constant over the range).
+/// "efuse": "vref" = per-chip Vref, "tp" = two-point values, "default" = no
+/// eFuse calibration, nominal Vref 1100 mV assumed (can be off by >100 mV).
+static void cmdAdcRaw() {
+    uint32_t raw = 0, mv = 0;
+    for (int i = 0; i < 64; ++i) { raw += analogRead(PIN_SENSOR_ADC); mv += analogReadMilliVolts(PIN_SENSOR_ADC); }
+    adc_cali_line_fitting_efuse_val_t ev;
+    const char* src = "unknown";
+    if (adc_cali_scheme_line_fitting_check_efuse(&ev) == ESP_OK)
+        src = ev == ADC_CALI_LINE_FITTING_EFUSE_VAL_EFUSE_VREF ? "vref"
+            : ev == ADC_CALI_LINE_FITTING_EFUSE_VAL_EFUSE_TP   ? "tp" : "default";
+    Serial.printf("{\"raw\":%lu,\"mv\":%lu,\"mv_linear\":%lu,\"efuse\":\"%s\"}\n",
+                  (unsigned long)(raw / 64), (unsigned long)(mv / 64),
+                  (unsigned long)((raw / 64) * 3100UL / 4095UL), src);
 }
 
 // =============================================================================
@@ -700,7 +722,8 @@ static const CmdInfo CMDS[] = {
     {"part", 0, "part"},          {"nvs", 0, "nvs"},             {"fs", 0, "fs"},
     {"uptime", 0, "uptime"},
     {"in", 0, "in"},              {"watch", 1, "watch [1..120]"}, {"estop", 1, "estop <low|high>"},
-    {"adc", 1, "adc [1..200]"},   {"scan", 1, "scan [100..5000]"}, {"slot", 2, "slot <0..31> <0|1>"},
+    {"adc", 1, "adc [1..200]"},   {"adcraw", 0, "adcraw"},
+    {"scan", 1, "scan [100..5000]"}, {"slot", 2, "slot <0..31> <0|1>"},
     {"beep", 1, "beep [1..5000]"}, {"hv", 1, "hv <0|1>"},        {"shutter", 1, "shutter <0|1>"},
     {"stepper", 0, "stepper"},    {"move", 2, "move <mm> <mm/s>"}, {"home", 0, "home"},
     {"pos", 0, "pos"},            {"disp", 0, "disp"},           {"touch", 1, "touch [1..120]"},
@@ -758,6 +781,7 @@ static void dispatch(char* l) {
     else if (!strcmp(c, "watch"))   cmdWatch(a1);
     else if (!strcmp(c, "estop"))   cmdEstop(a1);
     else if (!strcmp(c, "adc"))     cmdAdc(a1);
+    else if (!strcmp(c, "adcraw"))  cmdAdcRaw();
     else if (!strcmp(c, "scan"))    cmdScan(a1);
     else if (!strcmp(c, "slot"))    cmdSlot(a1, a2);
     else if (!strcmp(c, "beep"))    cmdBeep(a1);
