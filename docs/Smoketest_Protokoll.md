@@ -14,8 +14,8 @@ jetzt die Werte für **unsere** Firmware (Pegel, Slots, Kurve) – Hardwarefehle
 Ergebnis jeder Prüfung eintragen. Werte mit **→ config.h** werden danach in
 `src/config.h` übernommen; erst dann wird `config.h` eingefroren (Sprint 0b).
 
-**Durchführung:** 11.10.2026, Flash-Rechner Dell (`/dev/ttyUSB0`). Abschnitte 1–5 erledigt,
-6–8 offen.
+**Durchführung:** 11.10.2026, Flash-Rechner Dell (`/dev/ttyUSB0`). Abschnitte 1–6 erledigt,
+7–8 offen.
 
 > **Vorfall „move 2010“ (11.10.2026):** Ein Tippfehler (`move 2010` statt `move 20 10`) wurde von
 > Smoketest 0a als 2010 mm interpretiert; die Fahrt lief unüberwacht über Not-Aus und Endschalter
@@ -96,9 +96,9 @@ Messposition der Produktiv-Firmware 155 mm (`measure_pos`, Contract V1.4.2).
 
 | # | Aktion | Erwartung | Ergebnis |
 |---|---|---|---|
-| 6.1 | `disp` | Farbbalken rot/grün/blau in dieser Reihenfolge, Text lesbar | Farben korrekt? **→ `invert`, `rgb_order` in lgfx_config.h** |
-| 6.2 | `touch 20`, vier Kreise antippen | `x/y` liegen auf den Kreisen (±10 px) | raw min/max: X ___/___ Y ___/___ **→ TOUCH_*** |
-| 6.3 | ggf. `offset_rotation` (0…7) in lgfx_config.h anpassen | Touch passt zum Bild | |
+| 6.1 | `disp` | Farbbalken rot/grün/blau in dieser Reihenfolge, Text lesbar Farben, Reihenfolge, Text und Lage korrekt, gelber Rahmen exakt am Displayrand ✅ **→ `invert` = false, `rgb_order` = false** (unverändert) |
+| 6.2 | `touch 20`, vier Kreise antippen | `x/y` liegen auf den Kreisen (±10 px) ❌ zunächst um 180° gedreht (Punkte in der diagonal gegenüberliegenden Ecke). Nach Korrektur: alle vier Kreise auf ≤ 5 px getroffen ✅ **→ `TOUCH_X_MIN/MAX` = 130/3775, `TOUCH_Y_MIN/MAX` = 200/3900** (aus den Ecken auf den Displayrand hochgerechnet) |
+| 6.3 | ggf. `offset_rotation` (0…7) in lgfx_config.h anpassen | Touch passt zum Bild | **→ Touch `offset_rotation` = 2** (Panel bleibt 0) ✅ |
 
 ## 7. WLAN
 
@@ -121,7 +121,7 @@ Messposition der Produktiv-Firmware 155 mm (`measure_pos`, Contract V1.4.2).
 
 ## Offene Punkte
 
-- 5.2 Multimeter-Vergleich, Abschnitte 6–8
+- 5.2 Multimeter-Vergleich, Abschnitte 7–8
 - Resonanz bei 5 mm/s (Homing) – Resonanztest, ggf. Homing-Geschwindigkeit ändern
 - Not-Aus hart verdrahten (wirkt derzeit nur per Software)
 - Motorzucken beim Reset (bekannt, I2S-Register undefiniert bis zur Initialisierung)
@@ -130,7 +130,7 @@ Messposition der Produktiv-Firmware 155 mm (`measure_pos`, Contract V1.4.2).
 
 - [ ] Alle ❌ behoben oder als bekannte Einschränkung dokumentiert
 - [ ] `src/config.h` mit allen **→**-Werten aktualisiert, `VERIFY(0a)`-Kommentare entfernt
-      (erledigt bis auf Display/Touch – folgt mit Abschnitt 6)
+      (erledigt bis auf WLAN – folgt mit Abschnitt 7)
 - [x] `platformio.ini`: LovyanGFX-Version exakt gepinnt (1.2.32)
 - [ ] Commit „Sprint 0a abgeschlossen“ → `config.h` gilt ab jetzt als eingefroren
 

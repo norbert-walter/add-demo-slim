@@ -75,7 +75,7 @@
 // =========================================================================
 // Display MKS TS35R (ST7796 480x320 landscape, touch ADS7843E), VSPI
 // Free GPIOs according to FluidNC DLC32 notes: 5,18,19,22,23,25,26,27,32,33
-// VERIFY(0a) against the TS35R / DLC32 schematic.
+// Verified 0a section 6 (display and touch work with these pins).
 // =========================================================================
 #define PIN_DISP_SCK         18
 #define PIN_DISP_MOSI        23
