@@ -23,6 +23,9 @@ Requirements (German): docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.7.md.
 6. Code, comments and identifiers in English.
 
 ## Commands
+- PlatformIO CLI:   pio  (symlink ~/.local/bin/pio -> ~/.platformio/penv/bin/pio).
+                    Never use /usr/bin/pio, never install platformio via pip or apt.
+                    If "pio" is not found: stop and tell the user (PATH problem).
 - Host tests:       pio test -e native            (single suite: -f native/test_<name>)
 - Quiet build:      pio run -e firmware -s          (complete firmware, from Sprint S2.6 on)
 - Partial build:    pio run -e firmware-partial -s  (Sprints S1..S2.5: missing later modules are ok)

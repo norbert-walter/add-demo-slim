@@ -327,7 +327,7 @@ static void superviseMotion() {
 
 /// "help": short list of all commands (details: comment at the top of this file).
 static void cmdHelp() {
-    Serial.println("# ver | crc | part | nvs | fs | in | watch [s] | estop <low|high> | adc [n]");
+    Serial.println("# ver | crc | part | nvs | fs | uptime | in | watch [s] | estop <low|high> | adc [n]");
     Serial.println("# scan [ms] | slot <n> <0|1> | beep [ms] | hv <0|1> | shutter <0|1>");
     Serial.println("# stepper | move <mm> <mm/s> | home | pos | stop");
     Serial.println("# disp | touch [s] | wifi | sta <ssid> [pass] | help");
@@ -386,6 +386,11 @@ static void cmdFs() {
     bool ok = SPIFFS.begin(true);
     Serial.printf("{\"spiffs\":%s,\"total\":%u,\"used\":%u}\n", tf(ok), ok ? SPIFFS.totalBytes() : 0,
                   ok ? SPIFFS.usedBytes() : 0);
+}
+
+/// "uptime": milliseconds since boot.
+static void cmdUptime() {
+    Serial.printf("{\"uptime_ms\":%lu}\n", (unsigned long)millis());
 }
 
 // =============================================================================
@@ -690,6 +695,7 @@ struct CmdInfo { const char* name; uint8_t max_args; const char* usage; };
 static const CmdInfo CMDS[] = {
     {"help", 0, "help"},          {"ver", 0, "ver"},             {"crc", 0, "crc"},
     {"part", 0, "part"},          {"nvs", 0, "nvs"},             {"fs", 0, "fs"},
+    {"uptime", 0, "uptime"},
     {"in", 0, "in"},              {"watch", 1, "watch [1..120]"}, {"estop", 1, "estop <low|high>"},
     {"adc", 1, "adc [1..200]"},   {"scan", 1, "scan [100..5000]"}, {"slot", 2, "slot <0..31> <0|1>"},
     {"beep", 1, "beep [1..5000]"}, {"hv", 1, "hv <0|1>"},        {"shutter", 1, "shutter <0|1>"},
@@ -744,6 +750,7 @@ static void dispatch(char* l) {
     else if (!strcmp(c, "part"))    cmdPart();
     else if (!strcmp(c, "nvs"))     cmdNvs();
     else if (!strcmp(c, "fs"))      cmdFs();
+    else if (!strcmp(c, "uptime"))   cmdUptime();
     else if (!strcmp(c, "in"))      printInputs();
     else if (!strcmp(c, "watch"))   cmdWatch(a1);
     else if (!strcmp(c, "estop"))   cmdEstop(a1);
