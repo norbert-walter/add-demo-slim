@@ -95,8 +95,8 @@ Messposition der Produktiv-Firmware 155 mm (`measure_pos`, Contract V1.4.2).
 
 | # | Aktion | Erwartung | Ergebnis |
 |---|---|---|---|
-| 6.1 | `disp` | Farbbalken rot/grün/blau in dieser Reihenfolge, Text lesbar Farben, Reihenfolge, Text und Lage korrekt, gelber Rahmen exakt am Displayrand ✅ **→ `invert` = false, `rgb_order` = false** (unverändert) |
-| 6.2 | `touch 20`, vier Kreise antippen | `x/y` liegen auf den Kreisen (±10 px) ❌ zunächst um 180° gedreht (Punkte in der diagonal gegenüberliegenden Ecke). Nach Korrektur: alle vier Kreise auf ≤ 5 px getroffen ✅ **→ `TOUCH_X_MIN/MAX` = 130/3775, `TOUCH_Y_MIN/MAX` = 200/3900** (aus den Ecken auf den Displayrand hochgerechnet) |
+| 6.1 | `disp` | Farbbalken rot/grün/blau in dieser Reihenfolge, Text lesbar Farben, Reihenfolge, Text und Lage korrekt, gelber Rahmen exakt am Displayrand | ✅ **→ `invert` = false, `rgb_order` = false** (unverändert) |
+| 6.2 | `touch 20`, vier Kreise antippen | `x/y` liegen auf den Kreisen (±10 px) ❌ zunächst um 180° gedreht (Punkte in der diagonal gegenüberliegenden Ecke). Nach Korrektur: alle vier Kreise auf ≤ 5 px getroffen |  ✅ **→ `TOUCH_X_MIN/MAX` = 130/3775, `TOUCH_Y_MIN/MAX` = 200/3900** (aus den Ecken auf den Displayrand hochgerechnet) |
 | 6.3 | ggf. `offset_rotation` (0…7) in lgfx_config.h anpassen | Touch passt zum Bild | **→ Touch `offset_rotation` = 2** (Panel bleibt 0) ✅ |
 
 ## 7. WLAN
@@ -134,4 +134,4 @@ Messposition der Produktiv-Firmware 155 mm (`measure_pos`, Contract V1.4.2).
 - [x] `platformio.ini`: LovyanGFX-Version exakt gepinnt (1.2.32)
 - [x] Commit „Sprint 0a abgeschlossen“ (Tag `sprint-0a`) → `config.h` gilt ab jetzt als eingefroren
 
-Datum / Unterschrift: 11.10.2026, ______________________
+Datum / Unterschrift: 11.10.2026, Norbert Walter
