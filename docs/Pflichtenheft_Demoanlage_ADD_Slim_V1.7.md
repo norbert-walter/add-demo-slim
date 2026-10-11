@@ -9,7 +9,7 @@
 
 ## 0. Änderungen
 
-### V1.7.1 → V1.7.2 (Contract V1.4.2, Smoketest 0a Abschnitt 3)
+### V1.7.1 → V1.7.2 (Contract V1.4.2, Smoketest 0a Abschnitt 5 „Abstandssensor“)
 
 | Bereich | V1.7.1 | V1.7.2 |
 |---|---|---|
@@ -212,7 +212,7 @@ Sensorfleck wieder vollständig auf einer Fläche liegt. 70 mm entspricht etwa d
 | Not-Aus | GPIO 22 (PROBE), Pull-up auf dem Board. Verdrahtung per Parameter `estop_nc` (§6): Standard **einfacher Schalter gegen GND, LOW-aktiv, ohne Drahtbrucherkennung** (für die ersten Tests); später Öffner gegen GND, HIGH-aktiv, **mit** Drahtbrucherkennung |
 
 > **Hinweis Sensor:** Im Arbeitsbereich (40–65 mm, 2,63–1,72 V) liegt der ESP32-ADC
-> am oberen Rand; 2,63 V ist noch gut messbar (Smoketest 3.1/3.2 prüfen).
+> am oberen Rand; 2,63 V ist noch gut messbar (Smoketest 5.1/5.2 prüfen).
 > 10 µF direkt am Sensor gegen Versorgungseinbrüche vorsehen.
 
 ### Display
@@ -815,10 +815,10 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 | Bedienvorrang Display, Haltezeit | LOCAL, 30 s | ✅ |
 | Quittierung am Display | eine ACK-Fläche, 1 s halten | ✅ |
 | i2so → Slot-Zuordnung (Buzzer, Enable, Step, Dir) | Smoketest `scan`: Slot = i2so-Nummer (Enable 0, Step 1, Dir 2, Buzzer 7) | ✅ (0a) |
-| Weg pro Umdrehung, Drehrichtung, Verfahrweg | Smoketest 5: 40,77 mm/U, `DIR_POSITIVE_HIGH` = false, Achse 0 … 242 mm | ✅ (0a, Contract V1.4) |
+| Weg pro Umdrehung, Drehrichtung, Verfahrweg | Smoketest 4: 40,77 mm/U, `DIR_POSITIVE_HIGH` = false, Achse 0 … 242 mm | ✅ (0a, Contract V1.4) |
 | **Not-Aus wirkt nur über die Software** | Vorfall 11.10.2026: Fahrt lief unüberwacht, Not-Aus und Endschalter ohne Wirkung, Stopp nur durch Ziehen des Netzsteckers (Ursache im Smoketest behoben, 0a.1). Not-Aus zusätzlich **hart verdrahten** (Motorspannung oder Treiber-Enable direkt unterbrechen) | **Offen – vor dem Demo-Einsatz** |
 | Resonanz des Antriebs | deutlich hörbar bei 5 mm/s (= Referenzfahrt-Geschwindigkeit); Geschwindigkeits-Sweep 3 … 12 mm/s, ggf. Referenzfahrt-Geschwindigkeit verschieben | Offen |
-| Materialzone / Messposition | Prüfkörper 105 … 225 mm, Messposition 155 mm, Kurve neu angepasst (Smoketest 3) | ✅ (V1.7.2) |
+| Materialzone / Messposition | Prüfkörper 105 … 225 mm, Messposition 155 mm, Kurve neu angepasst (Smoketest 5) | ✅ (V1.7.2) |
 | Sensor-Eingang hängt am Anschlag | Ursache: keine Last am Emitterfolger-Ausgang; 11 kΩ Vo–GND am Sensor | ✅ (V1.7.2) |
 | Flash 8 MB statt 4 MB | Projekt nutzt bewusst 4 MB (Partitionen wie spezifiziert); Reserve z. B. für OTA | Info |
 | Motor zuckt bei Reset/Flash | Enable über das I2S-Schieberegister ist bis `setup()` undefiniert; harmlos (max. ein Vollschritt) | Bekannt |

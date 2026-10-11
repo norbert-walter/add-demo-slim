@@ -20,14 +20,15 @@
 #define PIN_SENSOR_ADC       34   // Z- connector: Sharp GP2Y0A41SK0F analog out (ADC1_CH6)
 #define PIN_ESTOP            22   // PROBE connector: E-stop
 
-// Active levels. VERIFY(0a) with the real switches.
+// Active levels. Verified 0a (2026-10-11): both end switches LOW when pressed.
 #define LIMIT_ACTIVE_LEVEL   LOW  // end switch pressed -> LOW
 // E-stop active level is a PARAMETER since V1.3 (params.estop_nc, REST API SET):
 //   estop_nc = false (default): normally-open switch to GND, board pull-up,
 //                               E-stop active LOW, NO wire-break detection.
 //   estop_nc = true:            normally-closed contact to GND, active HIGH,
 //                               a broken wire is detected as E-stop.
-// The smoketest shows the raw level; Smoketest 2.3-2.5 documents the wiring.
+// The smoketest shows the raw level; Smoketest 2.3-2.5 documents the wiring
+// (0a: simple normally-open switch, estop_nc = false).
 
 #define INPUT_DEBOUNCE_MS    5    // limit switches and E-stop
 
@@ -53,7 +54,7 @@
 #define I2SO_BUZZER           7   // BEEPER
 
 // Mapping FluidNC i2so.N -> FastAccelStepper mux slot (0..31).
-// VERIFY(0a): determined with the smoketest command "scan" (buzzer, enable, step). Candidates:
+// Verified 0a (2026-10-11) with "scan": enable slot 0, step 1, dir 2, buzzer 7 -> slot = n. Candidates were:
 //   (n)  (31 - (n))  ((n) + 8)  ((n) + 16)  ((n) + 24)
 #define I2SO_TO_SLOT(n)      (n)
 
@@ -69,7 +70,7 @@
 #define MM_PER_REV           40.77f // verified 0a: 126.2 mm measured for 130 mm with 42.0 (caliper, +-0.1 mm)
 #define STEPS_PER_MM         ((MOTOR_FULL_STEPS * MICROSTEPS) / MM_PER_REV)   // 78.49
 // Motor Nanotec ST4118L0804-A (0.8 A), TMC2209 standalone, current set to 0.8 A (verified)
-#define ACCEL_MM_S2          500.0f // VERIFY(0a): smooth, no step loss
+#define ACCEL_MM_S2          500.0f // verified 0a: smooth, no step loss at 1..20 mm/s
 
 // =========================================================================
 // Display MKS TS35R (ST7796 480x320 landscape, touch ADS7843E), VSPI

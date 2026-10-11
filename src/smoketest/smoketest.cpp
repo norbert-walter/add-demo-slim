@@ -52,11 +52,7 @@
  *                           low  = simple normally-open switch (default, estop_nc=false)
  *                           high = normally-closed switch with wire-break detection
  *
- *  -- distance sensor (section 3) -------------------------------------------------
- *  adc [n]                  n readings (1..200, default 10) every 100 ms:
- *                           mV (median-mean of ADC_SAMPLES) and mm (curve 168.8*V^-1.398)
- *
- *  -- I2S shift register and outputs (section 4) ----------------------------------
+ *  -- I2S shift register and outputs (section 3) ----------------------------------
  *  scan [ms]           (M)  switches slot 0..31 one after another for ms
  *                           (100..5000, default 800) + ms/2 pause; buzzer, enable,
  *                           step can be observed. Afterwards all slots off and the
@@ -68,7 +64,7 @@
  *  hv <0|1>                 HV LED (green, GPIO 4)
  *  shutter <0|1>            shutter LED (red, GPIO 32)
  *
- *  -- drive (section 5) -----------------------------------------------------------
+ *  -- drive (section 4) -----------------------------------------------------------
  *  stepper                  attaches FastAccelStepper (step/dir/enable via I2S mux,
  *                           auto-enable: the driver is only powered while moving)
  *  move <mm> <mm/s>    (M)  RELATIVE move. mm: -250..250 (not 0), mm/s: 1..20.
@@ -78,6 +74,10 @@
  *                           sets position 0 there (timeout 70 s)
  *  pos                      current position in steps and mm
  *  stop                     immediate stop (always allowed)
+ *
+ *  -- distance sensor (section 5) -------------------------------------------------
+ *  adc [n]                  n readings (1..200, default 10) every 100 ms:
+ *                           mV (median-mean of ADC_SAMPLES) and mm (curve 168.8*V^-1.398)
  *
  *  -- display / touch (section 6) -------------------------------------------------
  *  disp                     test pattern: colour bars, frame, four touch targets
@@ -415,11 +415,11 @@ static void cmdEstop(const char* a1) {
 }
 
 // =============================================================================
-// Commands – section 3: distance sensor
+// Commands – section 5: distance sensor
 // =============================================================================
 
 /// "adc [n]": n filtered readings every 100 ms with mV, mm and range flag
-/// (protocol 3.1..3.4).
+/// (protocol 5.1..5.4).
 static void cmdAdc(const char* a1) {
     long n;
     if (!argInt(a1, 1, 200, 10, true, n)) { error("usage: adc [1..200]"); return; }
@@ -433,12 +433,12 @@ static void cmdAdc(const char* a1) {
 }
 
 // =============================================================================
-// Commands – section 4: I2S shift register, outputs
+// Commands – section 3: I2S shift register, outputs
 // =============================================================================
 
 /**
  * "scan [ms]": switches every slot 0..31 on for ms, then off for ms/2, and
- * prints the slot number before switching it (protocol 4.1). Observe:
+ * prints the slot number before switching it (protocol 3.1). Observe:
  * buzzer (i2so.7), driver enable (i2so.0: active LOW, so the motor gets
  * holding torque when this slot goes OFF again), step (i2so.1, one microstep).
  * Afterwards all slots are off and the driver is disabled (as after setup()).
@@ -463,7 +463,7 @@ static void cmdScan(const char* a1) {
 }
 
 /**
- * "slot <n> <0|1>": sets one shift register slot directly (protocol 4.x,
+ * "slot <n> <0|1>": sets one shift register slot directly (protocol 3.x,
  * manual checks). Both arguments are required. Slot 0 is the driver enable,
  * ACTIVE LOW: "slot 0 0" powers the driver, "slot 0 1" switches it off.
  */
@@ -475,7 +475,7 @@ static void cmdSlot(const char* a1, const char* a2) {
     Serial.printf("{\"slot\":%ld,\"state\":%ld}\n", n, v);
 }
 
-/// "beep [ms]": buzzer (I2S slot i2so.7) on for ms (protocol 4.3).
+/// "beep [ms]": buzzer (I2S slot i2so.7) on for ms (protocol 3.3).
 static void cmdBeep(const char* a1) {
     long ms;
     if (!argInt(a1, 1, 5000, 200, true, ms)) { error("usage: beep [1..5000]"); return; }
@@ -485,7 +485,7 @@ static void cmdBeep(const char* a1) {
     Serial.println("{\"done\":true}");
 }
 
-/// "hv <0|1>": green HV LED on GPIO 4 (protocol 4.4).
+/// "hv <0|1>": green HV LED on GPIO 4 (protocol 3.4).
 static void cmdHv(const char* a1) {
     long v;
     if (!argInt(a1, 0, 1, 0, false, v)) { error("usage: hv <0|1>"); return; }
@@ -493,7 +493,7 @@ static void cmdHv(const char* a1) {
     Serial.printf("{\"hv\":%ld}\n", v);
 }
 
-/// "shutter <0|1>": red shutter LED on GPIO 32 (protocol 4.4).
+/// "shutter <0|1>": red shutter LED on GPIO 32 (protocol 3.4).
 static void cmdShutter(const char* a1) {
     long v;
     if (!argInt(a1, 0, 1, 0, false, v)) { error("usage: shutter <0|1>"); return; }
@@ -502,13 +502,13 @@ static void cmdShutter(const char* a1) {
 }
 
 // =============================================================================
-// Commands – section 5: drive
+// Commands – section 4: drive
 // =============================================================================
 
 /**
  * "stepper": connects FastAccelStepper to the I2S mux slots from config.h
  * (step, dir, enable active LOW) with auto-enable (driver powered only while
- * moving) and the acceleration ACCEL_MM_S2. Idempotent. Protocol 5.1.
+ * moving) and the acceleration ACCEL_MM_S2. Idempotent. Protocol 4.1.
  */
 static void cmdStepper() {
     if (!i2s_ok) { error("i2s mux not initialised"); return; }
@@ -526,7 +526,7 @@ static void cmdStepper() {
 }
 
 /**
- * "move <mm> <mm/s>": RELATIVE move (protocol 5.2..5.7). Both arguments are
+ * "move <mm> <mm/s>": RELATIVE move (protocol 4.2..4.7). Both arguments are
  * required; mm in -250..250 without 0, speed 1..20 mm/s (V1.3). Refused if the
  * E-stop is pressed or the limit switch in the direction of travel is already
  * active. Blocks until the end of the move (waitMotion, timeout 120 s).
@@ -554,7 +554,7 @@ static void cmdMove(const char* a1, const char* a2) {
  * "home": runs backward at 5 mm/s (V1.3 homing speed) until the backward
  * switch and sets position 0 THERE (the real firmware pulls off 2 mm and sets
  * 0 there). If the switch is already pressed: position 0 at once.
- * Timeout 70 s (= 350 mm at 5 mm/s). Protocol 5.6.
+ * Timeout 70 s (= 350 mm at 5 mm/s). Protocol 4.6.
  */
 static void cmdHome() {
     if (!stepper) { error("run 'stepper' first"); return; }

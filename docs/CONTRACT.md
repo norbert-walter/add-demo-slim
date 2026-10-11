@@ -3,7 +3,7 @@
 **Version:** 1.4.2 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-11
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.1
 
-### Changes 1.4.1 → 1.4.2 (smoketest 0a section 3, 2026-10-11, §14: hardware measurement)
+### Changes 1.4.1 → 1.4.2 (smoketest 0a section 5 "distance sensor", 2026-10-11, §14: hardware measurement)
 
 | # | Change | Where |
 |---|---|---|
