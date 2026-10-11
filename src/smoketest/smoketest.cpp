@@ -44,6 +44,7 @@
  *  nvs                      write + read back a float and a string in NVS
  *                           (namespace "smoketest", cleared afterwards)
  *  fs                       mount SPIFFS (formats it on the first call)
+ *  uptime                   milliseconds since boot (added by Qwen, protocol 8.1)
  *
  *  -- inputs (section 2) ----------------------------------------------------------
  *  in                       limit switches and E-stop once: logical + raw level
@@ -112,6 +113,8 @@
  *    because an earlier attempt was still retrying. Now: earlier attempt
  *    cancelled first, no auto-reconnect, no credentials in NVS, disconnect
  *    reason in the reply.
+ * 0a.3 (11.10.2026) – "uptime" (written by Qwen, protocol 8.1); ADC attenuation
+ *    set after the first read (boot log error in 0a.2).
  */
 #include <Arduino.h>
 #include <Preferences.h>
@@ -336,7 +339,7 @@ static void cmdHelp() {
 
 /// "ver": versions and key figures (protocol 1.3). i2s_mux must be true.
 static void cmdVer() {
-    Serial.printf("{\"fw\":\"smoketest-0a.2\",\"arduino\":\"%d.%d.%d\",\"idf\":\"%s\",\"chip_rev\":%d,"
+    Serial.printf("{\"fw\":\"smoketest-0a.3\",\"arduino\":\"%d.%d.%d\",\"idf\":\"%s\",\"chip_rev\":%d,"
                   "\"cpu_mhz\":%lu,\"flash_mb\":%lu,\"heap\":%lu,\"i2s_mux\":%s,\"steps_per_mm\":%.3f}\n",
                   ESP_ARDUINO_VERSION_MAJOR, ESP_ARDUINO_VERSION_MINOR, ESP_ARDUINO_VERSION_PATCH,
                   esp_get_idf_version(), ESP.getChipRevision(), (unsigned long)ESP.getCpuFreqMHz(),
@@ -788,6 +791,11 @@ void setup() {
     digitalWrite(PIN_HV_LED, LOW);
     pinMode(PIN_HEARTBEAT_LED, OUTPUT);
     digitalWrite(PIN_HEARTBEAT_LED, LOW);
+    // Arduino 3.x: the pin must be registered as an ADC channel (first read)
+    // before its attenuation can be set, otherwise "__analogChannelConfig():
+    // Pin is not configured as analog channel" (0a.2 boot log). 11 dB is also
+    // the default, so the measurements of 0a.1/0a.2 are valid.
+    (void)analogReadMilliVolts(PIN_SENSOR_ADC);
     analogSetPinAttenuation(PIN_SENSOR_ADC, ADC_11db);
 
     engine.init(STEPPER_TASK_CORE);

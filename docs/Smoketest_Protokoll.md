@@ -1,6 +1,6 @@
 # Sprint 0a – Smoketest-Protokoll
 
-**Anlage:** ADD Demo System (Slim) · **Firmware:** `pio run -e smoketest -t upload` (Smoketest 0a.1; aktuell 0a.2)
+**Anlage:** ADD Demo System (Slim) · **Firmware:** `pio run -e smoketest -t upload` (Smoketest 0a.1; aktuell 0a.3)
 **Bedienung:** `pio device monitor -e smoketest` (interaktiv) oder
 `python scripts/serial_cmd.py "<befehl>"` (skriptfähig, auch für Cline)
 
@@ -14,8 +14,7 @@ jetzt die Werte für **unsere** Firmware (Pegel, Slots, Kurve) – Hardwarefehle
 Ergebnis jeder Prüfung eintragen. Werte mit **→ config.h** werden danach in
 `src/config.h` übernommen; erst dann wird `config.h` eingefroren (Sprint 0b).
 
-**Durchführung:** 11.10.2026, Flash-Rechner Dell (`/dev/ttyUSB0`). Abschnitte 1–7 erledigt,
-8 offen.
+**Durchführung:** 11.10.2026, Flash-Rechner Dell (`/dev/ttyUSB0`). Abschnitte 1–8 erledigt bis auf 5.2 (Abweichung, wird untersucht).
 
 > **Vorfall „move 2010“ (11.10.2026):** Ein Tippfehler (`move 2010` statt `move 20 10`) wurde von
 > Smoketest 0a als 2010 mm interpretiert; die Fahrt lief unüberwacht über Not-Aus und Endschalter
@@ -85,7 +84,7 @@ auf dem DLC32 bleibt entfernt, R23 ist der Serienwiderstand zu IO34.
 | # | Aktion | Erwartung | Ergebnis |
 |---|---|---|---|
 | 5.1 | `home`, `move 117 10` (= Achse 115, Mitte Stufe 1), dann 5 × `move 20 10`; an jeder Stufenmitte `adc 10` | `mm` mit Kurve 168,8·V^-1,398 = 65, 60 … 40 mm (±1 mm) | 1972 / 2091 / 2236 / 2403 / 2588 / 2777 mV → max. Abweichung 0,48 mm ✅ · **→ Kurve `k_mm` = 168,8, `exponent` = −1,398, `min_mm` = 35** (Contract V1.4.2) |
-| 5.2 | Multimeter direkt am Sensorausgang vs. `mv` | Abweichung < 50 mV, auch bei 2,8 V (ADC-Rand) | offen |
+| 5.2 | Multimeter direkt am Sensorausgang vs. `mv` | Abweichung < 50 mV, auch bei 2,8 V (ADC-Rand) | ❌ Stufe 1 (Achse 115): Multimeter 1,73 V, ADC 1972 mV → **242 mV Differenz**, Ursache wird untersucht. Messkette selbst stimmt, weil die Kurve gegen die ADC-Werte kalibriert ist (5.1) |
 | 5.3 | Rauschen: `adc 10` an den Stufen | Streuung < ±0,5 mm | σ ≤ 8,4 mV = 0,34 mm ✅ |
 | 5.4 | Neben dem Messgut (Achse 242, Sensor sieht den unteren Ausleger, Boden 60 mm tiefer) | weit außerhalb des Prüfkörpers (≫ 70 mm) | 933 mV ≈ 186 mm ✅ |
 
@@ -112,23 +111,24 @@ Messposition der Produktiv-Firmware 155 mm (`measure_pos`, Contract V1.4.2).
 
 | # | Aktion | Erwartung | Ergebnis |
 |---|---|---|---|
-| 8.1 | Cline-Task: *„Füge im Smoketest den Befehl `uptime` hinzu, der `{"uptime_ms":…}` ausgibt. Bring `pio run -e smoketest -s` grün. Nicht flashen."* | Cline liest Dateien, editiert, baut, sieht Compilerausgabe | ✅ / ❌ |
-| 8.2 | Kontextanzeige in Cline nach 8.1 | < 50 % von 64k | ___ % |
-| 8.3 | `python scripts/serial_cmd.py "ver"` aus Cline heraus (nach manuellem Flashen) | Cline liest die JSON-Antwort | |
-| 8.4 | Geschwindigkeit (Tokens/s) im LLM-Server-Log | – | ___ t/s |
+| 8.1 | Cline-Task: *„Füge im Smoketest den Befehl `uptime` hinzu, der `{"uptime_ms":…}` ausgibt. Bring `pio run -e smoketest -s` grün. Nicht flashen."* | Cline liest Dateien, editiert, baut, sieht Compilerausgabe | ✅ Funktion, Eintrag in `CMDS`, Dispatcher und Help-Text korrekt und im Stil der Datei; Build grün (Exit-Code 0 eigens geprüft). Nur die Befehlsübersicht im Dateikopf fehlte (nachgetragen in 0a.3). Ablauf: Erster Task brach nach dem Editieren am Build ab – auf dem Dell fand Cline das kaputte apt-Paket `/usr/bin/pio` 4.3.4; Qwen grenzte das sinnvoll ein und fragte vor `pip install` um Freigabe (abgelehnt). Behoben: apt-Paket entfernt, Symlinks `~/.local/bin/pio`, Hinweis in `.clinerules`. Der zweite Task hielt die eigene, nicht committete Änderung für „bereits vorhanden“ (frischer Task ohne Gedächtnis) |
+| 8.2 | Kontextanzeige in Cline nach 8.1 | < 50 % von 64k | 17,0k von 65,5k = **26 %** ✅; Kontexttiefe im Server < 30k, keine Verdichtung |
+| 8.3 | `python scripts/serial_cmd.py "uptime"` aus Cline heraus (nach manuellem Flashen) | Cline liest die JSON-Antwort | ✅ `{"uptime_ms":48570}`. Erster Aufruf fiel in den Boot nach dem Flashen (nur Boot-Log); Qwen erkannte das und wiederholte richtig |
+| 8.4 | Geschwindigkeit (Tokens/s) im LLM-Server-Log | – | **18 t/s** (konstant), llama.cpp mit **Vulkan**-Backend. HIP/ROCm lief nicht stabil; mit HIP ca. 50 % schneller erwartet – später klären |
 
 ---
 
 ## Offene Punkte
 
-- 5.2 Multimeter-Vergleich, Abschnitt 8
+- 5.2 Abweichung Multimeter ↔ ADC (−242 mV) klären
+- llama.cpp mit HIP stabil bekommen (derzeit Vulkan, ca. halbe Tokenrate)
 - Resonanz bei 5 mm/s (Homing) – Resonanztest, ggf. Homing-Geschwindigkeit ändern
 - Not-Aus hart verdrahten (wirkt derzeit nur per Software)
 - Motorzucken beim Reset (bekannt, I2S-Register undefiniert bis zur Initialisierung)
 
 ## Freigabe
 
-- [x] Alle ❌ behoben oder als bekannte Einschränkung dokumentiert
+- [ ] Alle ❌ behoben oder als bekannte Einschränkung dokumentiert (offen: 5.2)
 - [x] `src/config.h` mit allen **→**-Werten aktualisiert, `VERIFY(0a)`-Kommentare entfernt
       (erledigt)
 - [x] `platformio.ini`: LovyanGFX-Version exakt gepinnt (1.2.32)
