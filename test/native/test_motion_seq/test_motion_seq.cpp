@@ -1,6 +1,7 @@
 // FROZEN TESTS (Contract V1.3) – speeds in mm/s – Sprint S2.3 must make these pass. Do not modify.
 // Covers: src/logic/motion_seq.cpp (CONTRACT §8)
 #include <unity.h>
+#include <math.h>
 #include "logic/motion_seq.h"
 #include "../fake_axis.h"
 
@@ -294,6 +295,26 @@ void test_move_to_axis_max_does_not_hit_forward_switch() {
     TEST_ASSERT_FALSE(A.limitFwd());
     TEST_ASSERT_EQUAL_INT32(mmToSteps(242.0f, C), A.drvPos());
 }
+// V1.4.1: non-finite values (NaN, +-Inf) are rejected and never reach the driver.
+// A plain "pos < 0 || pos > max" check lets NaN through (all comparisons with NaN
+// are false) and lroundf(NaN) yields an arbitrary target -> uncontrolled move.
+void test_non_finite_inputs_rejected() {
+    home();
+    const float bad[] = {NAN, INFINITY, -INFINITY};
+    for (float b : bad) {
+        DrvRequest r;
+        API(ApiError::BAD_PARAM, motionStartMove(S, b, 10, A.inputs(now), C, r));        OP(DrvOp::NONE, r.op);
+        API(ApiError::BAD_PARAM, motionStartMove(S, 100, b, A.inputs(now), C, r));       OP(DrvOp::NONE, r.op);
+        API(ApiError::BAD_PARAM, motionStartTraverse(S, b, 100, 10, A.inputs(now), C, r)); OP(DrvOp::NONE, r.op);
+        API(ApiError::BAD_PARAM, motionStartTraverse(S, 60, b, 10, A.inputs(now), C, r));  OP(DrvOp::NONE, r.op);
+        API(ApiError::BAD_PARAM, motionStartTraverse(S, 60, 100, b, A.inputs(now), C, r)); OP(DrvOp::NONE, r.op);
+        API(ApiError::BAD_PARAM, motionStartMeasure(S, b, A.inputs(now), C, r));          OP(DrvOp::NONE, r.op);
+        TEST_ASSERT_TRUE(S.phase == SeqPhase::IDLE);
+        TEST_ASSERT_TRUE(S.mode == OpMode::NONE);
+    }
+    DrvRequest r;
+    API(ApiError::OK, motionStartMove(S, 100, 10, A.inputs(now), C, r));   // still usable afterwards
+}
 void test_static_limit_without_motion_is_no_fault() {
     home();
     A.phys_steps = A.fwd_limit_steps + 5;  // switch active, but nothing runs
@@ -336,6 +357,7 @@ int main(int, char**) {
     RUN_TEST(test_fwd_limit_during_move_is_motor_fault);
     RUN_TEST(test_bwd_limit_during_traverse_is_motor_fault_and_ends_acq);
     RUN_TEST(test_move_to_axis_max_does_not_hit_forward_switch);
+    RUN_TEST(test_non_finite_inputs_rejected);
     RUN_TEST(test_static_limit_without_motion_is_no_fault);
     RUN_TEST(test_successful_start_clears_error_latched);
     return UNITY_END();

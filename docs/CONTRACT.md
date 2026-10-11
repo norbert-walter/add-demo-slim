@@ -1,7 +1,20 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.4 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-11
+**Version:** 1.4.1 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-11
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.1
+
+### Additions 1.4.1 (2026-10-11): nonsense values are tested
+
+Every float input must be **finite**. NaN or ±Inf → `BAD_PARAM` in `motionStart*`
+(range checks written as `!(lo <= x && x <= hi)`, because `x < lo || x > hi` lets NaN
+through and `lroundf(NaN)` gives an arbitrary target), in `paramSet` and in
+`apiParseRequest` (a JSON number such as `1e39` becomes +Inf as float; `NaN` /
+`Infinity` literals are not JSON → `BAD_JSON`). New tests:
+`test_non_finite_inputs_rejected` (motion_seq), `test_numbers_must_be_finite` (api_parse),
+`test_nan_rejected` extended to ±Inf for all numeric keys (params),
+`test_non_finite_command_values_rejected` (app_logic, end to end: the axis does not move).
+Reference implementation re-run: 13 suites, **263/263**; mutants with a naive range
+check or without the finiteness check are caught.
 
 ### Changes 1.3 → 1.4 (smoketest 0a 2026-10-11, §14: hardware measurement)
 

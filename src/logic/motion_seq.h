@@ -98,6 +98,8 @@ uint32_t mmPerSecToHz(float mm_s, const MotionConfig& c);       ///< lroundf(mm_
 
 // ---- commands (each returns OK or an ApiError and fills `out`) ------------
 // `out` is reset to NONE first. On error the sequencer state is unchanged.
+// V1.4.1: every float argument must be finite; NaN or +-Inf -> BAD_PARAM (write range
+// checks as !(lo <= x && x <= hi) so that NaN fails them).
 // Every successful start clears error_latched.
 /**
  * Homing. BUSY if phase != IDLE. Sets homed = false, error_latched = false,

@@ -120,6 +120,13 @@ void test_unknown_key_and_null() {
 }
 void test_nan_rejected() {
     BAD(setNum("measure_pos", 0.0 / 0.0));
+    // V1.4.1: +-Inf as well, for every numeric key (SET value 1e999 arrives as +inf)
+    const char* keys[] = {"temp", "measure_pos", "maint_pos", "traverse_start", "traverse_end",
+                          "traverse_speed", "edge_threshold", "base_dist", "calib_near_ref", "calib_far_ref"};
+    const double bad[] = {0.0 / 0.0, 1.0 / 0.0, -1.0 / 0.0};
+    for (const char* k : keys)
+        for (double v : bad) BAD(setNum(k, v));
+    TEST_ASSERT_EQUAL_FLOAT(145.0f, P.measure_pos);   // defaults untouched
 }
 void test_wifi_ssid() {
     OK(setStr("wifi_ssid", "MyNet")); TEST_ASSERT_EQUAL_STRING("MyNet", P.wifi_ssid); TEST_ASSERT_TRUE(persist);

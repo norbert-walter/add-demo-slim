@@ -90,6 +90,21 @@ void test_start_measure() {
     API(ApiError::OK, parse("{\"cmd\":\"START_MEASURE\"}"));
     TEST_ASSERT_FALSE(Cm.has_pos);
 }
+// V1.4.1: a number must be a finite float. 1e39 is valid JSON but +inf as float.
+// NaN / Infinity are not JSON at all.
+void test_numbers_must_be_finite() {
+    API(ApiError::BAD_PARAM, parse("{\"cmd\":\"MOVE\",\"params\":{\"pos\":1e39}}"));
+    API(ApiError::BAD_PARAM, parse("{\"cmd\":\"MOVE\",\"params\":{\"pos\":-1e39}}"));
+    API(ApiError::BAD_PARAM, parse("{\"cmd\":\"MOVE\",\"params\":{\"pos\":10,\"speed\":1e39}}"));
+    API(ApiError::BAD_PARAM, parse("{\"cmd\":\"START_TRAVERSE\",\"params\":{\"start\":1e39}}"));
+    API(ApiError::BAD_PARAM, parse("{\"cmd\":\"START_TRAVERSE\",\"params\":{\"end\":-1e39}}"));
+    API(ApiError::BAD_PARAM, parse("{\"cmd\":\"START_TRAVERSE\",\"params\":{\"speed\":1e999}}"));
+    API(ApiError::BAD_PARAM, parse("{\"cmd\":\"START_MEASURE\",\"params\":{\"pos\":1e39}}"));
+    API(ApiError::BAD_JSON, parse("{\"cmd\":\"MOVE\",\"params\":{\"pos\":NaN}}"));
+    API(ApiError::BAD_JSON, parse("{\"cmd\":\"MOVE\",\"params\":{\"pos\":Infinity}}"));
+    API(ApiError::OK, parse("{\"cmd\":\"MOVE\",\"params\":{\"pos\":1.2e2}}"));   // exponent notation is fine
+    TEST_ASSERT_EQUAL_FLOAT(120.0f, Cm.pos);
+}
 
 // ---- SET ---------------------------------------------------------------------------------------
 void test_set_number() {
@@ -166,6 +181,7 @@ int main(int, char**) {
     RUN_TEST(test_move_pos_required_and_typed);
     RUN_TEST(test_start_traverse_optional_params);
     RUN_TEST(test_start_measure);
+    RUN_TEST(test_numbers_must_be_finite);
     RUN_TEST(test_set_number);
     RUN_TEST(test_set_integer_is_number);
     RUN_TEST(test_set_bool);

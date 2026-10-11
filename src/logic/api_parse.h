@@ -20,6 +20,8 @@
  *      CALIB          action (string, REQUIRED, near|far|base|save|reset)
  *      all others     params ignored (incl. PARK, SERVICE – V1.2)
  *      Wrong type, missing required, unknown action, too long -> BAD_PARAM.
+ *      V1.4.1: numbers must be finite after conversion to float (1e39 -> +inf)
+ *      -> BAD_PARAM. NaN / Infinity literals are not JSON -> BAD_JSON.
  * On success `out` is fully reset first, then filled (id, has_*, values,
  * vtype/num/b/str, calib). source = API, want_reply = true, seq = 0 (caller sets).
  * On error `out` may be partially filled; only out.id may be used (it is set as

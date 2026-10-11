@@ -66,7 +66,7 @@ void paramsDefaults(Params& p);
  * @param vtype/num/b/str  value as delivered by api_parse (Command fields)
  * @param persist          set to true if the key is persisted (caller saves NVS),
  *                         false otherwise; untouched on error
- * @return OK, or BAD_PARAM (unknown key, wrong type, out of range, too long)
+ * @return OK, or BAD_PARAM (unknown key, wrong type, out of range incl. NaN and +-Inf (V1.4.1), too long)
  */
 ApiError paramSet(Params& p, SafetyFlags& f, const char* key,
                   ValueType vtype, double num, bool b, const char* str, bool* persist);

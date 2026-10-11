@@ -831,6 +831,29 @@ void test_speeds_mm_per_s() {
     API(ApiError::OK, send(m));
 }
 
+// V1.4.1: nonsense values from the API never move the axis (end to end).
+void test_non_finite_command_values_rejected() {
+    running();
+    int32_t pos0 = A.drvPos();
+    const float bad[] = {NAN, INFINITY, -INFINITY};
+    for (float b : bad) {
+        Command m = mk(CmdId::MOVE); m.has_pos = true; m.pos = b;
+        API(ApiError::BAD_PARAM, send(m));
+        m.pos = 100; m.has_speed = true; m.speed = b;
+        API(ApiError::BAD_PARAM, send(m));
+        API(ApiError::BAD_PARAM, traverse(b, 100, 10));
+        API(ApiError::BAD_PARAM, traverse(60, b, 10));
+        API(ApiError::BAD_PARAM, traverse(60, 100, b));
+        Command s = mk(CmdId::START_MEASURE); s.has_pos = true; s.pos = b;
+        API(ApiError::BAD_PARAM, send(s));
+        API(ApiError::BAD_PARAM, setNum("measure_pos", b));
+    }
+    run(500);
+    TEST_ASSERT_FALSE(A.running);
+    TEST_ASSERT_EQUAL_INT32(pos0, A.drvPos());
+    STATE(SafetyState::RUNNING);                                   // no fault, nothing changed
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_boot_state);
@@ -888,5 +911,6 @@ int main(int, char**) {
     RUN_TEST(test_heartbeat_half_hertz);
     RUN_TEST(test_estop_nc_only_while_idle_and_hv_off);
     RUN_TEST(test_speeds_mm_per_s);
+    RUN_TEST(test_non_finite_command_values_rejected);
     return UNITY_END();
 }
