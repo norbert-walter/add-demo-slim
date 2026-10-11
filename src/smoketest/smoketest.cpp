@@ -54,7 +54,7 @@
  *
  *  -- distance sensor (section 3) -------------------------------------------------
  *  adc [n]                  n readings (1..200, default 10) every 100 ms:
- *                           mV (median-mean of ADC_SAMPLES) and mm (curve 121.5*V^-1.142)
+ *                           mV (median-mean of ADC_SAMPLES) and mm (curve 168.8*V^-1.398)
  *
  *  -- I2S shift register and outputs (section 4) ----------------------------------
  *  scan [ms]           (M)  switches slot 0..31 one after another for ms
@@ -107,7 +107,7 @@
  *    checked the E-stop or the forward switch any more.
  *  - Now: limits checked per direction, race-free stopNow(), supervisor in
  *    loop(), strict argument checks for all commands (move, slot, scan, ...),
- *    scan leaves the driver disabled, sensor curve per CONTRACT V1.2.
+ *    scan leaves the driver disabled, sensor curve per CONTRACT V1.4.2.
  */
 #include <Arduino.h>
 #include <Preferences.h>
@@ -144,12 +144,13 @@ static float medianMean(uint16_t* s, size_t n, size_t d) {
     return (float)(sum / (n - 2 * d));
 }
 
-/// Sharp GP2Y0A41SK0F curve fitted to the demo (CONTRACT §7.1): mm = 121.5 * V^-1.142.
+/// Sharp GP2Y0A41SK0F curve fitted to the demo (CONTRACT §7.1, V1.4.2): mm = 168.8 * V^-1.398.
+/// Requires the 11 kOhm load Vo-GND at the sensor (without it the input hangs at full scale).
 /// Returns 9999 for "no signal" (<= 1 mV).
-static float sensorMvToMm(float mv) { return mv > 1.0f ? 121.5f * powf(mv / 1000.0f, -1.142f) : 9999.0f; }
+static float sensorMvToMm(float mv) { return mv > 1.0f ? 168.8f * powf(mv / 1000.0f, -1.398f) : 9999.0f; }
 
 /// Valid measuring range of the sensor.
-static bool sensorInRange(float mm) { return mm >= 40.0f && mm <= 300.0f; }
+static bool sensorInRange(float mm) { return mm >= 35.0f && mm <= 300.0f; }   // V1.4.2
 
 // =============================================================================
 // Global state (single task: everything runs in the Arduino loop task)

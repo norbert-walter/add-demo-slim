@@ -15,13 +15,15 @@
 #include "types.h"
 
 /// Sharp GP2Y0A41SK0F: dist_mm = k_mm * V^exponent with V in volt.
-/// V1.2: fitted to the six measured points of the demo (40..65 mm at 2.63..1.72 V,
-/// max. error 0.6 mm). Datasheet fit 120.8 * V^-1.058 was ~3 mm too high there.
-/// Outside 40..65 mm the curve is only indicative (135 mm reads ~189 mm).
+/// V1.4.2: fitted to the six stair steps measured in smoketest 0a (2026-10-11) with the
+/// final wiring (11 kOhm load Vo-GND and 47 uF Vcc-GND at the sensor, R20 removed):
+/// 1.972 V/65 mm, 2.091/60, 2.236/55, 2.403/50, 2.588/45, 2.777 V/40 mm, max. error
+/// 0.48 mm. (V1.2 curve 121.5 * V^-1.142 read 2..9 mm too short with the load.)
+/// Outside 40..65 mm the curve is only indicative (lower boom: 0.93 V reads ~186 mm).
 struct SensorCurve {
-    float k_mm     = 121.5f;
-    float exponent = -1.142f;
-    float min_mm   = 40.0f;   ///< valid range of the sensor
+    float k_mm     = 168.8f;
+    float exponent = -1.398f;
+    float min_mm   = 35.0f;   ///< V1.4.2: valid range of the sensor (40 mm step must not sit on the limit)
     float max_mm   = 300.0f;
 };
 

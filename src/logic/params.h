@@ -8,7 +8,7 @@
  *   interlock       bool    false   -                    no  (safety flag)
  *   cooling_flow    bool    false   -                    no  (safety flag)
  *   temp            number  18.0    -20.0 .. 99.9 °C     no  (safety flag)
- *   measure_pos     number  145.0   21.0 .. 242.0 mm     yes  (outside the park zone)
+ *   measure_pos     number  155.0   21.0 .. 242.0 mm     yes  (V1.4.2: centre of step 3)
  *   maint_pos       number  40.0    21.0 .. 60.0 mm      yes  (V1.2: service position, service zone)
  *   traverse_start  number  60.0    21.0 .. 242.0 mm     yes
  *   traverse_end    number  240.0   21.0 .. 242.0 mm     yes
@@ -39,7 +39,7 @@
 #include "measure_logic.h"
 
 struct Params {
-    float       measure_pos    = 145.0f;
+    float       measure_pos    = 155.0f;    ///< V1.4.2: centre of step 3 (145 was a step edge)
     float       maint_pos      = 40.0f;
     float       traverse_start = 60.0f;
     float       traverse_end   = 240.0f;
@@ -73,7 +73,7 @@ ApiError paramSet(Params& p, SafetyFlags& f, const char* key,
 
 /**
  * Writes the configuration as ONE JSON member (no surrounding braces), exactly:
- *   "config":{"measure_pos":145.0,"maint_pos":40.0,"traverse_start":60.0,
+ *   "config":{"measure_pos":155.0,"maint_pos":40.0,"traverse_start":60.0,
  *   "traverse_end":240.0,"traverse_speed":10.0,"edge_threshold":3.0,"base_dist":70.0,
  *   "calib_near_raw":40.0,"calib_near_ref":40.0,"calib_far_raw":65.0,
  *   "calib_far_ref":65.0,"calib_valid":true,"interlock":false,

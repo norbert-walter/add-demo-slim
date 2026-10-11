@@ -42,10 +42,15 @@ Ergebnis jeder Prüfung eintragen. Werte mit **→ config.h** werden danach in
 
 | # | Aktion | Erwartung | Ergebnis |
 |---|---|---|---|
-| 3.1 | Nach `home` mit relativen `move` auf die Kalibrierpositionen (Achse 105 … 205 mm = 107 … 207 mm ab hinterem Schalter), je `adc 10` | `mv` ≈ Vortest (1,72 … 2,63 V); `mm` mit Kurve 121,5·V^-1,142 ≈ 65 … 40 mm (±1 mm) | 105: ___ 125: ___ 145: ___ 165: ___ 185: ___ 205: ___ |
-| 3.2 | Multimeter direkt am Sensorausgang vs. `mv` (R20 entfernt) | Abweichung < 50 mV, auch bei 2,63 V (ADC-Rand) | |
-| 3.3 | Rauschen: `adc 20` bei 145 mm | Streuung < ±0,5 mm | |
-| 3.4 | Neben dem Messgut (z. B. 40 mm) | ≈ 0,68 V (unterer Ausleger) | ___ V |
+Voraussetzung (V1.7.2): am Sensor **11 kΩ Vo–GND** (sonst hängt der Eingang nach den ersten
+Messungen am Anschlag) und 47 µF Vcc–GND.
+
+| # | Aktion | Erwartung | Ergebnis |
+|---|---|---|---|
+| 3.1 | `home`, `move 117 10` (= Achse 115, Mitte Stufe 1), dann 5 × `move 20 10`; an jeder Stufenmitte `adc 10` | `mm` mit Kurve 168,8·V^-1,398 = 65, 60 … 40 mm (±1 mm) | 0a: 1972 / 2091 / 2236 / 2403 / 2588 / 2777 mV → max. Abweichung 0,48 mm ✅ |
+| 3.2 | Multimeter direkt am Sensorausgang vs. `mv` | Abweichung < 50 mV, auch bei 2,8 V (ADC-Rand) | |
+| 3.3 | Rauschen: `adc 10` an den Stufen | Streuung < ±0,5 mm | 0a: σ ≤ 8,4 mV = 0,34 mm ✅ |
+| 3.4 | Neben dem Messgut (Achse 242, unterer Ausleger) | weit außerhalb des Prüfkörpers (≫ 70 mm) | 0a: 933 mV ≈ 186 mm ✅ |
 
 ## 4. I2S-Schieberegister (wichtigster Teil)
 

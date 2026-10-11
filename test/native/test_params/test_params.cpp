@@ -19,7 +19,7 @@ static ApiError setStr(const char* k, const char* v) { persist = false; return p
 
 void test_defaults() {
     Params p; p.measure_pos = 1; paramsDefaults(p);
-    TEST_ASSERT_EQUAL_FLOAT(145.0f, p.measure_pos);
+    TEST_ASSERT_EQUAL_FLOAT(155.0f, p.measure_pos);
     TEST_ASSERT_EQUAL_FLOAT(40.0f, p.maint_pos);
     TEST_ASSERT_EQUAL_FLOAT(60.0f, p.traverse_start);
     TEST_ASSERT_EQUAL_FLOAT(240.0f, p.traverse_end);
@@ -126,7 +126,7 @@ void test_nan_rejected() {
     const double bad[] = {0.0 / 0.0, 1.0 / 0.0, -1.0 / 0.0};
     for (const char* k : keys)
         for (double v : bad) BAD(setNum(k, v));
-    TEST_ASSERT_EQUAL_FLOAT(145.0f, P.measure_pos);   // defaults untouched
+    TEST_ASSERT_EQUAL_FLOAT(155.0f, P.measure_pos);   // defaults untouched
 }
 void test_wifi_ssid() {
     OK(setStr("wifi_ssid", "MyNet")); TEST_ASSERT_EQUAL_STRING("MyNet", P.wifi_ssid); TEST_ASSERT_TRUE(persist);
@@ -149,7 +149,7 @@ void test_config_json_exact_defaults() {
     char buf[600];
     int n = paramsToJsonMember(P, F, buf, sizeof(buf));
     TEST_ASSERT_EQUAL_STRING(
-        "\"config\":{\"measure_pos\":145.0,\"maint_pos\":40.0,\"traverse_start\":60.0,"
+        "\"config\":{\"measure_pos\":155.0,\"maint_pos\":40.0,\"traverse_start\":60.0,"
         "\"traverse_end\":240.0,\"traverse_speed\":10.0,\"edge_threshold\":3.0,\"base_dist\":70.0,"
         "\"calib_near_raw\":40.0,\"calib_near_ref\":40.0,\"calib_far_raw\":65.0,"
         "\"calib_far_ref\":65.0,\"calib_valid\":true,\"interlock\":false,"

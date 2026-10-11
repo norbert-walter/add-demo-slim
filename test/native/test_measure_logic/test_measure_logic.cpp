@@ -8,18 +8,19 @@ void setUp() { C = SensorCurve{}; }
 void tearDown() {}
 
 // ---- sensor curve (millimetre, NOT centimetre) ------------------------------
-// V1.2: default curve fitted to the demo hardware: 121.5 * V^-1.142
-void test_curve_1v_is_121_5_mm() { TEST_ASSERT_FLOAT_WITHIN(0.05f, 121.5f, sensorMvToMm(1000.0f, C)); }
-void test_curve_2v() { TEST_ASSERT_FLOAT_WITHIN(0.2f, 55.06f, sensorMvToMm(2000.0f, C)); }
+// V1.4.2: default curve fitted to the demo hardware (smoketest 0a): 168.8 * V^-1.398
+void test_curve_1v_is_168_8_mm() { TEST_ASSERT_FLOAT_WITHIN(0.05f, 168.8f, sensorMvToMm(1000.0f, C)); }
+void test_curve_2v() { TEST_ASSERT_FLOAT_WITHIN(0.2f, 64.05f, sensorMvToMm(2000.0f, C)); }
 void test_curve_matches_measured_demo_points() {
-    // measured on the demo axis (Vortest 2026-10-09): volt -> distance in mm
-    const float v[] = {1.72f, 1.85f, 2.02f, 2.18f, 2.39f, 2.63f};
+    // measured on the demo axis (smoketest 0a 2026-10-11, step centres 115..215 mm,
+    // 11 kOhm load at the sensor output): volt -> distance in mm
+    const float v[] = {1.972f, 2.091f, 2.236f, 2.403f, 2.588f, 2.777f};
     const float d[] = {65.0f, 60.0f, 55.0f, 50.0f, 45.0f, 40.0f};
     for (int i = 0; i < 6; ++i) TEST_ASSERT_FLOAT_WITHIN(1.0f, d[i], sensorMvToMm(v[i] * 1000.0f, C));
 }
 void test_curve_far_end_0v4_out_of_range() {
     float mm = sensorMvToMm(400.0f, C);
-    TEST_ASSERT_FLOAT_WITHIN(0.5f, 345.96f, mm);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 607.70f, mm);
     TEST_ASSERT_FALSE(sensorInRange(mm, C));
 }
 void test_curve_monotonic_decreasing() {
@@ -36,9 +37,10 @@ void test_curve_no_signal() {
     TEST_ASSERT_EQUAL_FLOAT(SENSOR_NO_SIGNAL_MM, sensorMvToMm(-5.0f, C));
 }
 void test_range() {
+    TEST_ASSERT_TRUE(sensorInRange(35.0f, C));     // V1.4.2: 35 mm (was 40)
     TEST_ASSERT_TRUE(sensorInRange(40.0f, C));
     TEST_ASSERT_TRUE(sensorInRange(300.0f, C));
-    TEST_ASSERT_FALSE(sensorInRange(39.9f, C));
+    TEST_ASSERT_FALSE(sensorInRange(34.9f, C));
     TEST_ASSERT_FALSE(sensorInRange(300.1f, C));
     TEST_ASSERT_FALSE(sensorInRange(SENSOR_NO_SIGNAL_MM, C));
 }
@@ -184,7 +186,7 @@ void test_stats_reset_and_empty() {
 
 int main(int, char**) {
     UNITY_BEGIN();
-    RUN_TEST(test_curve_1v_is_121_5_mm);
+    RUN_TEST(test_curve_1v_is_168_8_mm);
     RUN_TEST(test_curve_2v);
     RUN_TEST(test_curve_matches_measured_demo_points);
     RUN_TEST(test_curve_far_end_0v4_out_of_range);

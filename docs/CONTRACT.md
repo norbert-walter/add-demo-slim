@@ -1,7 +1,17 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.4.1 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-11
+**Version:** 1.4.2 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-11
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.1
+
+### Changes 1.4.1 → 1.4.2 (smoketest 0a section 3, 2026-10-11, §14: hardware measurement)
+
+| # | Change | Where |
+|---|---|---|
+| 1 | Sensor wiring: **11 kΩ load Vo–GND** and 47 µF Vcc–GND directly at the sensor (R20 stays removed). Without a load the emitter-follower output cannot discharge the input; after the first ADC samples the reading hung at full scale (3145 mV) | Pflichtenheft §3 |
+| 2 | Sensor curve **`168.8 · V^-1.398`** fitted to the six step centres with this wiring (max. error 0.48 mm; the V1.2 curve read 2 … 9 mm too short) | §7.1, `measure_logic.h` |
+| 3 | Sensor range **35 … 300 mm** (was 40): the 40 mm step reads 40.5 mm and must not sit on the limit | §5.1, §7.1, `measure_logic.h` |
+| 4 | Stair body **105 … 225 mm**, step centres 115, 135 … 215 mm (65 … 40 mm); **`measure_pos` 155** (145 was the edge between two steps) | §2, §9, `params.h` |
+| 5 | Tests: new curve and measured points, range limit, simulated stair geometry in `test_app_logic` (start position axis 110 = step 1, measuring position 155) | `test/native` |
 
 ### Additions 1.4.1 (2026-10-11): nonsense values are tested
 
@@ -146,10 +156,10 @@ C++17 functions without Arduino/ESP-IDF/FreeRTOS. It is tested on the host
 |---|---|---|---|
 | Park zone | 0 … 20 | always closed | park position 2 mm (`PARK`) |
 | Service zone | > 20 … 60 | manual `SHUTTER_OPEN` allowed | `maint_pos`, default 40 mm (`SERVICE`), settable 21 … 60 |
-| Material zone | 90 … 220 (stair body, sensor distance 40 … 65 mm) | opened only by the automation during an acquisition | measuring position 145 mm (`measure_pos`) |
+| Material zone | 105 … 225 (stair body, six 20 mm steps centred at 115 … 215, sensor distance 65 … 40 mm) | opened only by the automation during an acquisition | measuring position 155 mm (`measure_pos`, centre of step 3) |
 | Forward end | 242 | – | forward switch at 244.3 mm (measured) |
 
-(The zone between 60 and 90 mm and beyond 220 mm belongs to the traverse range;
+(The zone between 60 and 105 mm and beyond 225 mm belongs to the traverse range;
 the automation may open the shutter anywhere outside the park zone.)
 
 ---
@@ -263,7 +273,7 @@ Exact member order, one line, floats with one decimal:
 | `measure.thick` | `base_dist − dist`, never negative |
 | `measure.on_material` | `thick > edge_threshold` |
 | `measure.valid` | **only true while the shutter is open** (simulates: no radiation → no measurement) |
-| `measure.in_range` | sensor reading within 40 … 300 mm |
+| `measure.in_range` | sensor reading within 35 … 300 mm (V1.4.2) |
 | `measure.avg`, `n` | mean thickness over valid on-material samples of the current/last acquisition |
 | `safety.hv_ok` | HV enable conditions met right now |
 | `safety.temp_ok` | `temp ≤ 30.0 °C` |
@@ -316,7 +326,7 @@ because of a full normal queue (§6.7).
 ### 5.3 `GET_CONFIG` extra member
 
 ```
-"config":{"measure_pos":145.0,"maint_pos":40.0,"traverse_start":60.0,"traverse_end":240.0,
+"config":{"measure_pos":155.0,"maint_pos":40.0,"traverse_start":60.0,"traverse_end":240.0,
 "traverse_speed":200.0,"edge_threshold":3.0,"base_dist":70.0,"calib_near_raw":40.0,
 "calib_near_ref":40.0,"calib_far_raw":65.0,"calib_far_ref":65.0,"calib_valid":true,"interlock":false,
 "cooling_flow":false,"temp":18.0,"wifi_ssid":"","wifi_pass_set":false}
@@ -483,12 +493,12 @@ radiation source; HV and shutter are LEDs.
 ### 7.1 Chain (50 Hz)
 
 16 × `analogReadMilliVolts()` → sort, drop 4 lowest + 4 highest, mean →
-`dist_raw = 121.5 · V^-1.142` (V in volt; **mm**; V1.2 fit to the demo's six measured
-points 1.72 V/65 mm … 2.63 V/40 mm, max. error 0.6 mm; far values only indicative –
-the lower boom at 135 mm reads ≈ 189 mm) → IIR (α = 0.8, first value
+`dist_raw = 168.8 · V^-1.398` (V in volt; **mm**; V1.4.2 fit to the six step centres measured
+in smoketest 0a with an 11 kΩ load at the sensor output: 1.972 V/65 mm … 2.777 V/40 mm,
+max. error 0.48 mm; far values only indicative – the lower boom reads ≈ 186 mm) → IIR (α = 0.8, first value
 initialises) → 2-point calibration → `thick = max(0, base_dist − dist)` →
 `on_material = thick > edge_threshold`.
-Outside 40 … 300 mm: `in_range = false`, IIR reset, thickness 0.
+Outside 35 … 300 mm (V1.4.2): `in_range = false`, IIR reset, thickness 0.
 
 ### 7.2 Geometry
 
@@ -542,7 +552,7 @@ switch outside homing) → force stop, reference lost, `MOTOR_FAULT`
 | `interlock` | bool (or 0/1) | false | – | **no** |
 | `cooling_flow` | bool (or 0/1) | false | – | **no** |
 | `temp` | number | 18.0 | −20.0 … 99.9 °C | **no** |
-| `measure_pos` | number | 145.0 | 21 … 242 mm | yes |
+| `measure_pos` | number | 155.0 | 21 … 242 mm | yes |
 | `maint_pos` | number | 40.0 | 21 … 60 mm (service zone, customer-defined) | yes |
 | `traverse_start` | number | 60.0 | 21 … 242 mm | yes |
 | `traverse_end` | number | 240.0 | 21 … 242 mm | yes |

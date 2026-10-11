@@ -2,14 +2,23 @@
 
 **Stand:** 2026-10-11
 **Autor:** Norbert Walter
-**Version:** 1.7.1 (Contract V1.4, Ergebnisse Smoketest 0a)
+**Version:** 1.7.2 (Contract V1.4.2, Ergebnisse Smoketest 0a)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
 
-### V1.7 → V1.7.1 (Contract V1.4, Smoketest 0a vom 11.10.2026)
+### V1.7.1 → V1.7.2 (Contract V1.4.2, Smoketest 0a Abschnitt 3)
+
+| Bereich | V1.7.1 | V1.7.2 |
+|---|---|---|
+| Sensorbeschaltung | R20 entfernt, sonst nichts | **11 kΩ zwischen Vo und GND** und **47 µF zwischen Vcc und GND**, beide direkt am Sensor angelötet. Ohne Last blieb der Eingang nach den ersten ADC-Messungen am Anschlag hängen (3145 mV) |
+| Sensorkurve | `121,5·V^-1,142` | **`168,8·V^-1,398`**, angepasst an die sechs Stufenmitten (max. 0,48 mm) |
+| Messbereich der Firmware | 40 … 300 mm | **35 … 300 mm** (die 40-mm-Stufe misst 40,5 mm und darf nicht auf der Grenze liegen) |
+| Prüfkörper | 90 … 220 mm, Kalibrierpositionen 105 … 205 | **105 … 225 mm**, sechs Stufen à 20 mm, **Messpunkte in den Stufenmitten 115 … 215** |
+| Messposition | 145 mm (Stufenkante) | **155 mm** (Mitte Stufe 3, 55 mm → 15 mm Dicke) |
+
 
 | Bereich | V1.7 | V1.7.1 |
 |---|---|---|
@@ -169,21 +178,23 @@ optischen Abstandssensor ersetzt. Die Firmware wird agentenbasiert entwickelt
 | Parkposition | 2 mm | Ziel von **PARK** |
 | Wartungszone | 20 … 60 mm | Shutter darf manuell geöffnet werden (Prüfung der Quelle); vom Kunden vorgegeben |
 | Wartungsposition | 40 mm (Parameter `maint_pos`, 21 … 60 mm) | Ziel von **SERV** |
-| Messgutbereich | 90 … 220 mm | Stufenkörper, Messwerte 40 … 65 mm; Shutter nur automatisch während einer Messung |
-| Messposition | 145 mm (Messwert 55 mm) | Normalposition, Ziel von **MEAS** |
+| Messgutbereich | 105 … 225 mm | Stufenkörper, sechs Stufen à 20 mm, Messwerte 65 … 40 mm; Shutter nur automatisch während einer Messung |
+| Messposition | 155 mm (Mitte Stufe 3, Messwert 55 mm) | Normalposition, Ziel von **MEAS** |
 | Profilfahrt | 60 → 240 mm | Standard für **TRAV** |
 
-### Kalibrierpunkte (Vortest)
+### Kalibrierpunkte (Smoketest 0a, 11.10.2026, mit 11 kΩ Last am Sensor)
 
-| Position | Messwert | Spannung |
-|---|---|---|
-| 105 mm | 65 mm | 1,72 V |
-| 125 mm | 60 mm | 1,85 V |
-| 145 mm | 55 mm | 2,02 V |
-| 165 mm | 50 mm | 2,18 V |
-| 185 mm | 45 mm | 2,39 V |
-| 205 mm | 40 mm | 2,63 V |
-| neben dem Messgut | 135 mm (unterer Ausleger) | 0,68 V |
+| Position (Stufenmitte) | Abstand (Soll) | Spannung (Mittel aus 10) | σ | Kurve `168,8·V^-1,398` |
+|---|---|---|---|---|
+| 115 mm | 65 mm | 1,972 V | 1,2 mV | 65,32 mm |
+| 135 mm | 60 mm | 2,091 V | 8,4 mV | 60,20 mm |
+| 155 mm | 55 mm | 2,236 V | 8,0 mV | 54,81 mm |
+| 175 mm | 50 mm | 2,403 V | 1,7 mV | 49,55 mm |
+| 195 mm | 45 mm | 2,588 V | 2,0 mV | 44,66 mm |
+| 215 mm | 40 mm | 2,777 V | 1,6 mV | 40,48 mm |
+| 242 mm (neben dem Messgut) | unterer Ausleger | 0,933 V | 2,5 mV | ≈ 186 mm (nur Richtwert) |
+
+(Vortest 09.10.2026 ohne Last: 1,72 … 2,63 V – die Werte sind mit der neuen Beschaltung nicht mehr gültig.)
 
 An den Messgutkanten springt der Messwert nicht, sondern ändert sich stetig, bis der
 Sensorfleck wieder vollständig auf einer Fläche liegt. 70 mm entspricht etwa der Kante.
@@ -192,8 +203,8 @@ Sensorfleck wieder vollständig auf einer Fläche liegt. 70 mm entspricht etwa d
 
 | Komponente | Spezifikation |
 |---|---|
-| Abstandssensor | Sharp GP2Y0A41SK0F, 40–300 mm, Versorgung 5 V, Ausgang ca. 0,4–3,1 V |
-| ADC | GPIO 34 (ADC1_CH6, 11 dB), `analogReadMilliVolts()` (eFuse-kalibriert), Pull-up R20 4k7 **entfernt**, Serienwiderstand R23 1k |
+| Abstandssensor | Sharp GP2Y0A41SK0F, Firmware-Messbereich 35–300 mm, Versorgung 5 V, Ausgang ca. 0,4–3,1 V; **am Sensor angelötet: 11 kΩ Vo–GND (Last, zwingend) und 47 µF Vcc–GND** |
+| ADC | GPIO 34 (ADC1_CH6, 11 dB), `analogReadMilliVolts()` (eFuse-kalibriert), Pull-up R20 4k7 **entfernt**, Serienwiderstand R23 1k, Lastwiderstand 11 kΩ am Sensor (V1.7.2) |
 | LED Grün | HV eingeschaltet, **GPIO 4**, HIGH aktiv, 20 mA |
 | LED Rot | Shutter offen, GPIO 32, HIGH aktiv, 20 mA |
 | Buzzer | i2so.7, **aktiver Summer** (feste Tonhöhe, nur Ein/Aus) – Signale unterscheiden sich im Rhythmus (§5.11) |
@@ -299,7 +310,7 @@ scripts/                     serial_cmd.py, add_client.py
 ### 5.3 Betriebsmodi
 
 **Stehende Messung (`START_MEASURE`)** – nur in RUNNING
-- Fährt mit 10 mm/s an die Messposition (20 < pos ≤ 242 mm, Standard 145 mm)
+- Fährt mit 10 mm/s an die Messposition (20 < pos ≤ 242 mm, Standard 155 mm)
 - Shutter öffnet automatisch, Messung bis `STOP`
 - Mittelwert und Anzahl gültiger Werte in `/proc` (`avg`, `n`)
 
@@ -405,7 +416,7 @@ Neuzeichnen nur geänderter Zonen. **Sprache: Englisch.**
 │ ADD DEMO           [ READY ]            ● HV      ▮ SHUTTER      │ h=32
 ├───────────┬───────────┬───────────┬──────────────────────────────┤ y=34
 │ POS       │ SPEED     │ DIST      │ THICK                        │
-│ 145.0     │ 200       │ 55.0      │ 15.0                         │ h=72
+│ 155.0     │ 10.0      │ 55.0      │ 15.0                         │ h=72
 │ mm        │ mm/s      │ mm        │ mm                           │
 ├───────────┴───────────┴───────────┴──────────────────────────────┤ y=110
 │ POS |PP▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|  242         │ h=24
@@ -470,7 +481,7 @@ nur noch eine mögliche Handlung:
 ### 5.9 Messkette
 
 16 × `analogReadMilliVolts()` alle 20 ms → 4 kleinste und 4 größte verwerfen →
-Mittelwert → `dist = 121,5 · V^-1,142` mm (angepasst an die Kalibrierpunkte) → IIR α = 0,8 →
+Mittelwert → `dist = 168,8 · V^-1,398` mm (angepasst an die Kalibrierpunkte, V1.7.2) → IIR α = 0,8 →
 2-Punkt-Kalibrierung → `thick = max(0, base_dist − dist)` mit `base_dist` = 70 mm
 (virtuelle Bezugsebene an der Messgutkante, Stufen 5 … 30 mm). Der Sharp-Sensor liefert nur etwa alle 16,5 ms
 einen neuen Wert; 50 Hz Abtastung genügen.
@@ -726,7 +737,7 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 - [ ] Buzzer: Startsignal nach dem Booten, Quittungs-Piep bei Display-Tasten, Not-Aus 4 s Dauerton, andere Fehler 3 Pieps, Referenzfahrt-Ende ein Piep, Reboot-Signal vor dem Neustart
 - [ ] Blaue LED blinkt mit 0,5 Hz (1 s an, 1 s aus); steht still, wenn die Steuerschleife hängt (Watchdog-Reset folgt)
 - [ ] Endschalter in `/proc` korrekt
-- [ ] Abstand plausibel 40–300 mm (±5 %)
+- [ ] Abstand plausibel 35–300 mm (±5 %); Stufen 65 … 40 mm auf ±1 mm
 - [ ] Not-Aus mit `estop_nc = false` (einfacher Schalter): Drücken löst aus
 - [ ] Nach Umstellung auf Öffner (`estop_nc = true`): Drücken **und** Drahtbruch lösen aus; falsche Einstellung zeigt Dauer-Not-Aus
 - [ ] Umschalten von `estop_nc` bei nicht gedrücktem Not-Aus: falsche Polarität löst **sofort** Not-Aus aus (On-Target-Test `test_estop_polarity_change`; nutzt die gespeicherte Verdrahtung `estop_nc`, Voraussetzung: Not-Aus nicht gedrückt)
@@ -807,12 +818,13 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 | Weg pro Umdrehung, Drehrichtung, Verfahrweg | Smoketest 5: 40,77 mm/U, `DIR_POSITIVE_HIGH` = false, Achse 0 … 242 mm | ✅ (0a, Contract V1.4) |
 | **Not-Aus wirkt nur über die Software** | Vorfall 11.10.2026: Fahrt lief unüberwacht, Not-Aus und Endschalter ohne Wirkung, Stopp nur durch Ziehen des Netzsteckers (Ursache im Smoketest behoben, 0a.1). Not-Aus zusätzlich **hart verdrahten** (Motorspannung oder Treiber-Enable direkt unterbrechen) | **Offen – vor dem Demo-Einsatz** |
 | Resonanz des Antriebs | deutlich hörbar bei 5 mm/s (= Referenzfahrt-Geschwindigkeit); Geschwindigkeits-Sweep 3 … 12 mm/s, ggf. Referenzfahrt-Geschwindigkeit verschieben | Offen |
-| Materialzone / Messposition | wurden mit der alten Skalierung (42 mm/U, 3 % zu kurz) bestimmt; im Smoketest 3 mit `adc` prüfen, ob 90 … 220 mm und 145 mm noch auf dem Treppenkörper liegen | Offen (0a, Abschnitt 3) |
+| Materialzone / Messposition | Prüfkörper 105 … 225 mm, Messposition 155 mm, Kurve neu angepasst (Smoketest 3) | ✅ (V1.7.2) |
+| Sensor-Eingang hängt am Anschlag | Ursache: keine Last am Emitterfolger-Ausgang; 11 kΩ Vo–GND am Sensor | ✅ (V1.7.2) |
 | Flash 8 MB statt 4 MB | Projekt nutzt bewusst 4 MB (Partitionen wie spezifiziert); Reserve z. B. für OTA | Info |
 | Motor zuckt bei Reset/Flash | Enable über das I2S-Schieberegister ist bis `setup()` undefiniert; harmlos (max. ein Vollschritt) | Bekannt |
 | Not-Aus-Verdrahtung | Parameter `estop_nc`, Standard einfacher Schalter | ✅ – Umstellung auf Öffner mit Drahtbrucherkennung vor dem Demo-Einsatz empfohlen |
 | Geometrie, Zonen, Sensorkurve | Hardware-Vortest 09.10.2026 | ✅ (V1.6) |
 | Display-/Touch-Pins, Farbreihenfolge | Smoketest (mit CNC-Firmware funktionsfähig) | Werte für LovyanGFX offen (0a) |
-| ADC am Z--Eingang (Pull-up?) | R20 4k7 entfernt (Vortest) | ✅, Smoketest 3.2 bestätigt |
+| ADC am Z--Eingang (Pull-up?) | R20 4k7 entfernt (Vortest), 11 kΩ Last + 47 µF am Sensor (Smoketest) | ✅ |
 | Autonomy-Level im ADD | konzeptionell Level 2, Scores in S6 | Offen (S6) |
 | Python-Demo-Skripte | S6 | Offen |

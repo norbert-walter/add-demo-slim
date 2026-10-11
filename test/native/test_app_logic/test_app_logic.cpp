@@ -18,13 +18,13 @@ static HwOutputs last_out;
 static int       beeps, persists;   // beeps = HOMED/FAULT/ESTOP patterns started
 static int       snd[8];           // V1.3: started patterns per Sound
 
-// ---- simulated sensor = demo geometry (Vortest 2026-10-09, axis coordinates) -------------
-// Stair body 95..215 mm, six 20 mm steps centred at 105, 125 ... 205 mm with sensor
+// ---- simulated sensor = demo geometry (V1.4.2, smoketest 0a 2026-10-11, axis coordinates) --
+// Stair body 105..225 mm, six 20 mm steps centred at 115, 135 ... 215 mm with sensor
 // distances 65, 60 ... 40 mm. Beside the material the sensor sees the lower boom at 135 mm.
 // Thickness with base_dist 70: 5, 10 ... 30 mm.
 static float distAt(float axis_mm) {
-    if (axis_mm < 95.0f || axis_mm >= 215.0f) return 135.0f;
-    return 65.0f - 5.0f * (float)(int)((axis_mm - 95.0f) / 20.0f);
+    if (axis_mm < 105.0f || axis_mm >= 225.0f) return 135.0f;
+    return 65.0f - 5.0f * (float)(int)((axis_mm - 105.0f) / 20.0f);
 }
 static float mvForDist(float d) { return 1000.0f * powf(d / C.sensor.k_mm, 1.0f / C.sensor.exponent); }
 // axis 0 = phys 2 mm (home pull-off); the sensor moves with the carriage
@@ -98,7 +98,7 @@ static ProcData proc() { ProcData p; appFillProc(S, C, hw(), p); return p; }
 
 void setUp() {
     C = AppConfig{}; appInit(S); A = FakeAxis{};
-    A.phys_steps = 100.0 * C.motion.steps_per_mm;
+    A.phys_steps = 112.0 * C.motion.steps_per_mm;   // V1.4.2: axis 110 = first step
     now = 10000; estop = false; last_rx = 0; heartbeat = true; beeps = 0; persists = 0;
     for (int& x : snd) x = 0;
     run(100);
@@ -107,7 +107,7 @@ void tearDown() {}
 
 static void homeAndReady() {
     API(ApiError::OK, send(CmdId::INIT));
-    run(25000);                                  // ~98 mm at 5 mm/s
+    run(25000);                                  // ~110 mm at 5 mm/s
     STATE(SafetyState::READY);
     TEST_ASSERT_TRUE(S.seq.homed);
 }
@@ -127,7 +127,7 @@ void test_boot_state() {
     TEST_ASSERT_FALSE(p.motion.homed);
     TEST_ASSERT_TRUE(p.motion.state == MotionState::IDLE);
     TEST_ASSERT_TRUE(p.measure.in_range);
-    TEST_ASSERT_FLOAT_WITHIN(1.0f, 65.0f, p.measure.dist);    // axis at ~98 mm: first step (65 mm)
+    TEST_ASSERT_FLOAT_WITHIN(1.0f, 65.0f, p.measure.dist);    // axis at ~110 mm: first step (65 mm)
     TEST_ASSERT_FLOAT_WITHIN(0.5f, 5.0f, p.measure.thick);
     TEST_ASSERT_FALSE(p.measure.valid);
     TEST_ASSERT_FALSE(p.safety.comm_armed);
@@ -298,9 +298,9 @@ void test_stop_during_traverse_closes_shutter() {
 }
 void test_measure_mode_holds_and_averages() {
     running();
-    Command m = mk(CmdId::START_MEASURE); m.has_pos = true; m.pos = 145;   // normal position: 55 mm -> 15 mm
+    Command m = mk(CmdId::START_MEASURE); m.has_pos = true; m.pos = 155;   // V1.4.2 normal position: 55 mm -> 15 mm
     API(ApiError::OK, send(m));
-    run(20000);                                               // 145 mm at 10 mm/s + settling
+    run(20000);                                               // ~45 mm at 10 mm/s + settling
     ProcData p = proc();
     TEST_ASSERT_TRUE(p.motion.mode == OpMode::MEASURE);
     TEST_ASSERT_TRUE(p.measure.valid);
