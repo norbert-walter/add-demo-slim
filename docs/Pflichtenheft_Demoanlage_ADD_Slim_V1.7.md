@@ -49,6 +49,7 @@ Shutter bei jedem Durchgang – das geht auf die Lebensdauer des Shutters.
 | Prüfkörper | 90 … 220 mm, Kalibrierpositionen 105 … 205 | **105 … 225 mm**, sechs Stufen à 20 mm, **Messpunkte in den Stufenmitten 115 … 215** |
 | Messposition | 145 mm (Stufenkante) | **155 mm** (Mitte Stufe 3, 55 mm → 15 mm Dicke) |
 
+### V1.7 → V1.7.1 (Contract V1.4 / V1.4.1, Smoketest 0a Abschnitt 4 „Antrieb“, 11.10.2026)
 
 | Bereich | V1.7 | V1.7.1 |
 |---|---|---|
@@ -184,7 +185,7 @@ optischen Abstandssensor ersetzt. Die Firmware wird agentenbasiert entwickelt
 |---|---|
 | Steuerboard | Makerbase MKS DLC32 V2.1 |
 | MCU | ESP32 (ESP32-WROOM-32U), Dual-Core 240 MHz |
-| Flash | 4 MB (App 2944 KB, SPIFFS 1088 KB, NVS 20 KB) |
+| Flash | 8 MB auf dem Modul (Smoketest 0a); das Projekt nutzt bewusst 4 MB (App 2944 KB, SPIFFS 1088 KB, NVS 20 KB) |
 | RAM | 520 kB SRAM |
 | Kommunikation | WiFi 802.11b/g/n: eigener AP (immer an) + optional Verbindung zum Router |
 | USB/UART | CH340C (Flashen + Konsole) |
@@ -208,10 +209,10 @@ optischen Abstandssensor ersetzt. Die Firmware wird agentenbasiert entwickelt
 | Parkposition | 2 mm | Ziel von **PARK** |
 | Wartungszone | > 20 … 60 mm | Shutter **nur manuell** (Prüfung der Quelle); ein automatisch geöffneter Shutter schließt beim Einfahren; vom Kunden vorgegeben |
 | Wartungsposition | 40 mm (Parameter `maint_pos`, 21 … 60 mm) | Ziel von **SERV** |
-| **Messzone** (V1.5) | > 60 … 242 mm | Shutter **nur durch die Automatik** während eines Messprogramms; alle Mess- und Profilpositionen liegen hier (61 … 242 mm) |
+| **Messzone** (V1.7.5) | > 60 … 242 mm | Shutter **nur durch die Automatik** während eines Messprogramms; alle Mess- und Profilpositionen liegen hier (61 … 242 mm) |
 | Messgutbereich | 105 … 225 mm | Stufenkörper, sechs Stufen à 20 mm, Messwerte 65 … 40 mm |
 | Messposition | 155 mm (Mitte Stufe 3, Messwert 55 mm) | Normalposition, Ziel von **MEAS** |
-| Profilfahrt | 80 → 240 mm (V1.5) | Standard für **TRAV** |
+| Profilfahrt | 80 → 240 mm (V1.7.5) | Standard für **TRAV** |
 
 Die Zonen gelten in **Maschinenkoordinaten**; der Nullpunkt liegt immer auf der Parkseite
 (Referenzschalter). Die Wartungszone liegt damit immer zwischen Park- und Messzone. Wird
@@ -254,9 +255,9 @@ Sensorfleck wieder vollständig auf einer Fläche liegt. 70 mm entspricht etwa d
 | LED Blau | Herzschlag, **GPIO 2** (Board-LED), HIGH aktiv, 0,5 Hz |
 | Not-Aus | GPIO 22 (PROBE), Pull-up auf dem Board. Verdrahtung per Parameter `estop_nc` (§6): Standard **einfacher Schalter gegen GND, LOW-aktiv, ohne Drahtbrucherkennung** (für die ersten Tests); später Öffner gegen GND, HIGH-aktiv, **mit** Drahtbrucherkennung |
 
-> **Hinweis Sensor:** Im Arbeitsbereich (40–65 mm, 2,63–1,72 V) liegt der ESP32-ADC
-> am oberen Rand; 2,63 V ist noch gut messbar (Smoketest 5.1/5.2 prüfen).
-> 10 µF direkt am Sensor gegen Versorgungseinbrüche vorsehen.
+> **Hinweis Sensor:** Im Arbeitsbereich (40–65 mm) liefert der ADC 2,78–1,97 V (ESP-Werte,
+> Smoketest 5.1); 2,78 V liegt noch sicher unter dem Ende des 11-dB-Bereichs (≈ 3,1 V).
+> 47 µF direkt am Sensor gegen Versorgungseinbrüche sind eingebaut (V1.7.2).
 
 ### Display
 
@@ -275,7 +276,7 @@ Sensorfleck wieder vollständig auf einer Fläche liegt. 70 mm entspricht etwa d
 
 ## 4. Pin- und Slot-Belegung
 
-Verbindlich in `src/config.h`. Werte mit `VERIFY(0a)` werden im Smoketest bestätigt.
+Verbindlich in `src/config.h`. Alle Werte sind im Smoketest 0a bestätigt; `config.h` ist seitdem eingefroren.
 
 | Signal | Anschluss | Bemerkung |
 |---|---|---|
@@ -290,7 +291,7 @@ Verbindlich in `src/config.h`. Werte mit `VERIFY(0a)` werden im Smoketest bestä
 | Enable / Step / Dir | i2so.0 / .1 / .2 | Enable aktiv LOW |
 | Buzzer | i2so.7 | |
 
-Die Zuordnung FluidNC-Bit `i2so.N` → FastAccelStepper-Slot ermittelt der Smoketest (`scan`).
+Die Zuordnung FluidNC-Bit `i2so.N` → FastAccelStepper-Slot hat der Smoketest (`scan`) ermittelt: Slot = N (`I2SO_TO_SLOT(n) = n`).
 
 ### Simulierte Sicherheitsflags (nur per `/api SET`)
 
@@ -366,14 +367,15 @@ scripts/                     serial_cmd.py, add_client.py
   Endposition mit konstanter Geschwindigkeit `speed` (mit Messung); danach steht die Achse
   an der Endposition. Start und Ende in der Messzone (> 60 mm), Abstand ≥ 1 mm, Rückwärts erlaubt
 - Shutter öffnet in der Fahrt und **bleibt nach dem Ende `shutter_hold` (3 s) offen**
-  (V1.5). Startet der Client in dieser Zeit die nächste Fahrt (z. B. Start und Ende
+  (V1.7.5). Startet der Client in dieser Zeit die nächste Fahrt (z. B. Start und Ende
   vertauscht), bleibt er offen – kontinuierliche Hin- und Rückfahrt ohne Shutter-Spiel.
   Ohne Folgefahrt schließt er nach der Nachlaufzeit; `STOP` schließt sofort. HV bleibt an
 - Mehrere Durchgänge, Endlos-Querprofil oder kantengeführter Scan: Ablauf im Client
   (Python/KI), Ende einer Fahrt erkennbar an `motion.mode == "none"` in `/proc`
 - Kantenerkennung: Messgut, wenn `thick > edge_threshold`
 - Statistik nur über gültige Werte auf Messgut (Lücken ignoriert)
-- Messwerte für Profile holt der Client per `/proc`-Polling (z. B. 200 ms)
+- Messwerte für Profile holt der Client per `/proc`-Polling (z. B. 100–200 ms); bei per API
+  gestarteter Fahrt zusätzlich `GET_STATE` mindestens alle 4 s (Watchdog, `/proc` zählt nicht)
 
 ### 5.4 REST-API
 
@@ -448,7 +450,7 @@ im AP-Modus gibt es kein Internet), Fallback `sans-serif` / `monospace`.
 
 **Seite 2 – Settings (`/settings`)**
 - Werte beim Laden per `GET_CONFIG`
-- Messposition, Wartungsposition `maint_pos` (21 … 60 mm), Profilfahrt (Start/Ende/Geschwindigkeit), Shutter-Nachlaufzeit `shutter_hold` (V1.5), Kantenschwelle, `base_dist`
+- Messposition, Wartungsposition `maint_pos` (21 … 60 mm), Profilfahrt (Start/Ende/Geschwindigkeit), Shutter-Nachlaufzeit `shutter_hold` (V1.7.5), Kantenschwelle, `base_dist`
 - Sicherheitsflags (Toggle Interlock, Toggle Cooling, Temperatur)
 - Kalibrierung: Referenzwerte Nah/Fern (`SET calib_near_ref/far_ref`),
   Tasten Capture Near / Capture Far / Capture Base / Save / Reset (`CALIB`)
@@ -546,8 +548,9 @@ Messwerte per `CALIB near/far` (nur bei stabilem Signal, 500 ms innerhalb ±0,5 
 ```ini
 lib_deps =
     https://github.com/gin66/FastAccelStepper.git#96459ed15a3c7d9927f561d2edb72cc7edbbbe8a
-    lovyan03/LovyanGFX    @ ^1.2.0   ; nach Smoketest exakt pinnen
-    bblanchon/ArduinoJson @ ^7.4.2
+    lovyan03/LovyanGFX    @ 1.2.32   ; im Smoketest 0a exakt gepinnt
+    bblanchon/ArduinoJson @ 7.4.3
+; platform = pioarduino 55.03.312-1 (siehe platformio.ini)
 ```
 
 ### 5.11 Akustische Signale (aktiver Summer)
@@ -584,7 +587,7 @@ Reboot > Start > Referenzfahrt > Tastenquittung).
 
 ## 6. Sicherheitskonzept
 
-Vollständig: **CONTRACT §6** und `src/logic/safety_logic.h` (Regeln R1–R7, Invarianten I1–I6).
+Vollständig: **CONTRACT §6** und `src/logic/safety_logic.h` (Regeln R1–R7, Invarianten I1–I8).
 
 > **Sicherheitshinweis.** Dies ist eine Demonstrationsanlage. Die Auswertung des
 > Not-Aus in Software und die Sicherheitslogik sind **keine Sicherheitsfunktion**
@@ -616,7 +619,7 @@ Reaktion im selben Zyklus: Shutter zu → Motor Not-Halt → HV aus → FAULT �
 ### Shutter
 Öffnen nur in RUNNING und außerhalb der Parkzone (> 20 mm). **Manuell** nur in der
 Wartungszone (20 … 60 mm); in der **Messzone (> 60 mm)** öffnet nur die Automatik während
-einer Messung (V1.5). Jeder Shutter schließt bei HV-Abfall, `HV_OFF`, jedem Fehler,
+einer Messung (V1.7.5). Jeder Shutter schließt bei HV-Abfall, `HV_OFF`, jedem Fehler,
 Einfahrt in die Parkzone und `SHUTTER_CLOSE`. Der **automatische** Shutter bleibt über
 das Messprogramm offen und schließt zusätzlich beim Einfahren in die Wartungszone, bei
 `STOP` und nach der Nachlaufzeit `shutter_hold` ohne Messmodus. Ein in der Wartungszone
@@ -638,8 +641,8 @@ den Watchdog nicht; ein Display-Befehl während einer Fernoperation schaltet ihn
 ### Bedienvorrang (LOCAL)
 Der Mensch an der Anlage ist schneller als jeder Fernzugriff, daher hat das Display
 Vorrang. Jeder Display-Befehl setzt `local = true`. Solange `local` aktiv ist, werden
-von der API abgelehnt (`LOCAL_CONTROL`): INIT, MOVE, START_MEASURE, START_TRAVERSE,
-HV_ON, SHUTTER_OPEN, CALIB, ACK, REBOOT. Erlaubt bleiben STOP, HV_OFF, SHUTTER_CLOSE
+von der API abgelehnt (`LOCAL_CONTROL`): INIT, MOVE, PARK, SERVICE, START_MEASURE,
+START_TRAVERSE, HV_ON, SHUTTER_OPEN, CALIB, ACK, REBOOT. Erlaubt bleiben STOP, HV_OFF, SHUTTER_CLOSE
 (sichere Richtung), SET (Fehlersimulation) und Abfragen. `local` endet, wenn die Achse
 steht, HV aus ist und seit dem letzten Display-Befehl 30 s vergangen sind.
 
@@ -728,7 +731,7 @@ des Style Guides. **Kein** eigener Top-Level-Block `live_data` – `/proc` wird 
 | `test_api_parse` | api_parse | Parser, Typen, Fehlerfälle |
 
 Alle Tests sind **eingefroren** und gegen eine Referenzimplementierung geprüft
-(260 Testfälle, alle grün, `test_command_queue` zusätzlich mit ThreadSanitizer geprüft; Mutationstests bestätigen die Trennschärfe).
+(274 Testfälle, alle grün (Contract V1.5), `test_command_queue` zusätzlich mit ThreadSanitizer geprüft; Mutationstests bestätigen die Trennschärfe).
 
 **Regressionsregel (DoD jedes Sprints):** Alle Suiten, die vor dem Sprint grün waren,
 sind danach weiterhin grün (`pio test -e native` vollständig, nicht nur die Sprint-Suite).
@@ -810,8 +813,8 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 - [ ] Nach ACK kein automatischer Wiederanlauf; nach Not-Aus in Fahrt erneutes INIT nötig
 - [ ] Shutter öffnet nie in der Parkzone (≤ 20 mm)
 - [ ] `SHUTTER_OPEN` manuell nur in der Wartungszone; bei 145 mm → `PRECONDITION`
-- [ ] V1.5: Automatischer Shutter nie in der Wartungszone (≤ 60 mm); schließt beim Einfahren
-- [ ] V1.5: Hin- und Rückfahrt mit Folgebefehl innerhalb von 3 s → Shutter bleibt offen; 3 s nach der letzten Fahrt zu; `STOP` schließt sofort
+- [ ] V1.7.5: Automatischer Shutter nie in der Wartungszone (≤ 60 mm); schließt beim Einfahren
+- [ ] V1.7.5: Hin- und Rückfahrt mit Folgebefehl innerhalb von 3 s → Shutter bleibt offen; 3 s nach der letzten Fahrt zu; `STOP` schließt sofort
 - [ ] Fahrt auf 242 mm löst den vorderen Endschalter nicht aus
 - [ ] Not-Aus und `cooling_flow = false` gleichzeitig → `FAULT ESTOP`
 - [ ] STOP per API während Profilfahrt: Antwort < 150 ms, Achse steht < 1 s (`stress_api.py latency`)
@@ -866,7 +869,8 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 | Toolchain | pioarduino | ✅ |
 | Mikroschritt | 1/16 | ✅ |
 | Architektur | Single-Writer, reine Logik | ✅ |
-| /proc-Schema, API, CRC, Fehlercodes | CONTRACT V1.4 | ✅ |
+| /proc-Schema, API, CRC, Fehlercodes | CONTRACT V1.5 | ✅ |
+| Zonen, Shutter über das Messprogramm | drei getrennte Zonen, Nachlaufzeit `shutter_hold`, Messzone > 60 mm | ✅ (V1.7.5, Contract V1.5) |
 | Geschwindigkeiten, Signale, WLAN, Herzschlag | V1.7 | ✅ |
 | Bedienvorrang Display, Haltezeit | LOCAL, 30 s | ✅ |
 | Quittierung am Display | eine ACK-Fläche, 1 s halten | ✅ |
@@ -879,7 +883,7 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 | Flash 8 MB statt 4 MB | Projekt nutzt bewusst 4 MB (Partitionen wie spezifiziert); Reserve z. B. für OTA | Info |
 | Motor zuckt bei Reset/Flash | Enable über das I2S-Schieberegister ist bis `setup()` undefiniert; harmlos (max. ein Vollschritt) | Bekannt |
 | Not-Aus-Verdrahtung | Parameter `estop_nc`, Standard einfacher Schalter | ✅ – Umstellung auf Öffner mit Drahtbrucherkennung vor dem Demo-Einsatz empfohlen |
-| Geometrie, Zonen, Sensorkurve | Hardware-Vortest 09.10.2026 | ✅ (V1.6) |
+| Geometrie, Zonen, Sensorkurve | Hardware-Vortest 09.10.2026 (V1.6), ersetzt durch Smoketest 0a (Kurve, Prüfkörper V1.7.2) und Contract V1.5 (Zonen) | ✅ |
 | Display-/Touch-Pins, Farbreihenfolge | Smoketest 6: Farben korrekt, Touch 180° gedreht → `offset_rotation` = 2, Kalibrierung X 130 … 3775, Y 200 … 3900 | ✅ (0a) |
 | ADC am Z--Eingang (Pull-up?) | R20 4k7 entfernt (Vortest), 11 kΩ Last + 47 µF am Sensor (Smoketest) | ✅ |
 | ADC-Versatz ESP ↔ DVM (+235 mV) | Bekannte Einschränkung (Smoketest 5.2), Kurve gegen ESP-Werte kalibriert. **Option:** Zweipunkt-Kalibrierung des ESP-ADC mit Referenzquelle oder parallel messendem DVM (z. B. als Service-Funktion mit zwei Korrekturparametern) | Option, später |

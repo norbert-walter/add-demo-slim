@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-12
+**Version:** 1.5.1 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-12
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.5
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -15,6 +15,11 @@
 | 6 | New persisted parameter **`shutter_hold`** 0.0 … 10.0 s, default 3.0 (0 = close at the end of every run); in `GET_CONFIG` after `traverse_speed`; NVS key `shold`, schema version 4 | §5.3, §9, §12, `params.h`, `nvs_config.h` |
 | 7 | Fix: the `GET_CONFIG` example showed `"traverse_speed":200.0` (pre-V1.3 unit) and lacked `estop_nc` | §5.3 |
 | 8 | Tests: safety (zones, take-over, every way of closing clears `shutter_auto`, hold time), motion (measuring zone), params (ranges, `shutter_hold`, JSON), app_logic (continuous profile without closing, hold parameter, long approach, closing when entering the service zone, STOP during the hold time, manual shutter not closed by the hold time). Reference implementation: 13 suites, **274/274**; mutants without hold time, with the old zone limits, without take-over, without STOP closing or without the service-zone rule are caught | `test/native` |
+
+**Clarifications 1.5.1 (consistency review 2026-10-12, no behaviour change):** display texts
+are English as required by the Pflichtenheft (§13, `display.h`: `FAULT:`, `CAUSE ACTIVE`,
+`ACK - HOLD 1 s`); calibration procedure uses the step centres 215/115 (§7.3); slot mapping
+`I2SO_TO_SLOT(n) = n` (§11); lower-boom reading (§7.2).
 
 **Scope note:** plant coordinates for several gauges (offset/sign transformation at the
 API boundary, common time base) are an extension idea for later (Pflichtenheft §11.1);
@@ -543,7 +548,8 @@ Outside 35 … 300 mm (V1.4.2): `in_range = false`, IIR reset, thickness 0.
 ### 7.2 Geometry
 
 `thick = max(0, base_dist − dist)`. On the demo the sensor sees no support surface
-next to the material (only the lower boom at 135 mm), so `base_dist` is a
+next to the material (only the lower boom: simulated at 135 mm in the tests, the real
+reading is ≈ 186 mm – the curve is fitted only for 40 … 65 mm), so `base_dist` is a
 **virtual reference plane at the material edge: 70 mm** (V1.2). The stair steps
 (65, 60 … 40 mm) then read 5, 10 … 30 mm; next to the material the thickness is 0.
 At the edges the reading changes continuously (the sensor spot is partly on the
@@ -560,8 +566,9 @@ normally set with `SET`.
 | `save` | calibration valid (raw span ≥ 5, ref span ≥ 5, refs 40…300) | persist all parameters |
 | `reset` | idle | identity calibration (40/40, 65/65), not persisted until `save` |
 
-Typical procedure on the demo: MOVE 205 (40 mm step) → `CALIB near`; MOVE 105
-(65 mm step) → `CALIB far`; `SET calib_near_ref 40`, `calib_far_ref 65` (defaults); `CALIB save`.
+Typical procedure on the demo: MOVE 215 (centre of the 40 mm step) → `CALIB near`;
+MOVE 115 (centre of the 65 mm step) → `CALIB far`; `SET calib_near_ref 40`,
+`calib_far_ref 65` (defaults); `CALIB save`. (Step centres V1.4.2; 105 and 205 are step edges.)
 
 ---
 
@@ -670,7 +677,7 @@ The publication of the statistics itself (< 2 µs) is not part of `cycle_max_us`
   All output setters write the hardware **only when the value changes** (cached
   last value), so buzzer and heartbeat add no I2S/GPIO work in most cycles.
 - Stepper: FastAccelStepper `DRIVER_I2S_MUX`, step/dir/enable as mux slots
-  (`slot | PIN_I2S_FLAG`). Slot mapping `I2SO_TO_SLOT(n)` determined in Sprint 0a.
+  (`slot | PIN_I2S_FLAG`). Slot mapping `I2SO_TO_SLOT(n) = n` (determined in smoketest 0a).
 - Reaction time E-stop → motor stop: ≤ 2 ms (1 ms cycle + driver); outputs off in the same cycle.
 
 ### 11.1 Buzzer signals (`src/logic/sound_logic.h`)
@@ -725,11 +732,11 @@ Layout details: Pflichtenheft §5.8.
 |---|---|---|
 | NORMAL | SAFE_START, READY, RUNNING, RECOVER | status, 7 buttons at y = 260, h = 60: `INIT` · `HV` (toggle) · `MEAS` · `TRAV` · `PARK` · `SERV` (64 px each) · `STOP` (96 px); `LOCAL` badge; flags marked `SIM`; speed in mm/s; `ESTOP(NO)` warning if `estop_nc` is false; IP line AP + station |
 | FAULT | FAULT (1 cycle) | fault banner, **no buttons** |
-| ACK | WAIT_ACK | fault banner `FEHLER: <name>` + remedy; **all normal buttons hidden**; one ACK area 480 × 60 px at y = 260 |
+| ACK | WAIT_ACK | fault banner `FAULT: <name>` + remedy (English, Pflichtenheft §5.8); **all normal buttons hidden**; one ACK area 480 × 60 px at y = 260 |
 
 ACK area (`ackCauseActive`, `ackPressUpdate`):
-- cause still active (E-stop pressed, temp > 32 °C) → grey, "Ursache aktiv: … – erst beheben", no command;
-- otherwise yellow "ACK – 1 s halten" with progress bar; ACK is sent once after
+- cause still active (E-stop pressed, temp > 32 °C) → grey, "CAUSE ACTIVE: … - RELEASE FIRST", no command;
+- otherwise yellow "ACK - HOLD 1 s" with progress bar; ACK is sent once after
   1000 ms continuous press; the press must **start** on the ACK screen
   (touch-down edge), so a finger still lying on STOP from before the fault never
   acknowledges. Nothing else can be operated in WAIT_ACK – nothing can move

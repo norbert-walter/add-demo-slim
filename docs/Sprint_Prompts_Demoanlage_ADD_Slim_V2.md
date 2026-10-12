@@ -1,7 +1,7 @@
-# Sprint-Prompts – Demoanlage ADD (Slim) · V2.3
+# Sprint-Prompts – Demoanlage ADD (Slim) · V2.4
 
-**Stand:** 2026-10-08 · **Autor:** Norbert Walter
-**Basis:** Pflichtenheft V1.7, `docs/CONTRACT.md` V1.3
+**Stand:** 2026-10-12 · **Autor:** Norbert Walter
+**Basis:** Pflichtenheft V1.7.5, `docs/CONTRACT.md` V1.5 (Änderungen seit V1.3: Anhänge am Ende)
 **Werkzeuge:** code-server + Cline, Modell Qwen3.6-35B-A3B (64k Kontext), Review mit Claude
 
 ---
@@ -27,7 +27,9 @@ und die genannten Header/Tests mit in den Prompt kopieren.
 3. Cline berichtet. Du prüfst mit der **Review-Checkliste** des Sprints.
    **Regressionsregel:** `pio test -e native` komplett laufen lassen – jede Suite, die vor
    dem Sprint grün war, muss danach noch grün sein (steht auch in `.clinerules`).
-4. Frozen-Check und Commit:
+4. README-Status prüfen: Cline hat die Statuszeile des Sprints aktualisiert (Implementierung
+   und grüne Suiten, DoD Punkt 4 in `.clinerules`) – stimmt sie mit dem Testlauf überein?
+5. Frozen-Check und Commit:
    ```bash
    git diff --exit-code -- src/config.h ':(glob)src/**/*.h' test docs/CONTRACT.md
    git add -A && git commit -m "Sprint S2.1: types, crc32, safety_logic"
@@ -60,10 +62,10 @@ und die genannten Header/Tests mit in den Prompt kopieren.
 
 ## Sprint 0a – Smoketest (du, an der Hardware)
 
-Ablauf und Protokoll: `docs/Smoketest_Protokoll.md`. Am Ende werden die
-`VERIFY(0a)`-Werte in `src/config.h` eingetragen und eingefroren.
+Ablauf und Protokoll: `docs/Smoketest_Protokoll.md`. **Erledigt** (11.10.2026, Tag `sprint-0a`):
+alle Werte in `src/config.h` bestätigt, `config.h` eingefroren.
 
-### PROMPT S0a-Probe (Agenten-Probelauf, Protokoll Punkt 8.1)
+### PROMPT S0a-Probe (Agenten-Probelauf, Protokoll Punkt 8.1) – erledigt
 
 ```
 Add a serial command "uptime" to src/smoketest/smoketest.cpp that prints exactly one
@@ -80,7 +82,7 @@ Fix all errors until the build is clean. Do NOT flash. Report the files you chan
 Bereits erledigt in diesem Paket. **Review-Checkliste:**
 
 - [ ] `docs/CONTRACT.md` §6 (Sicherheitslogik) fachlich korrekt? Insbesondere: kein automatischer Wiederanlauf, HV-Abfall ohne Fehler (30–32 °C), Parkzone, Watchdog-Regeln
-- [ ] `src/logic/safety_logic.h` Regeln R1–R7 und Invarianten I1–I6 entsprechen deiner Sicherheitsphilosophie
+- [ ] `src/logic/safety_logic.h` Regeln R1–R7 und Invarianten I1–I8 entsprechen deiner Sicherheitsphilosophie
 - [ ] Befehlsmatrix (`test_safety_logic.cpp` → `test_cmd_gate_matrix`) passt
 - [ ] Szenarien in `test_app_logic.cpp` spiegeln die gewünschten Abläufe
 - [ ] Parameterbereiche (`params.h`) sinnvoll
@@ -111,7 +113,7 @@ Implement these files (and nothing else):
                                 esp_reset_reason().
 0. src/logic/wifi_logic.cpp   – pure C++ (like all of src/logic), rules exactly as in wifi_logic.h.
                                 DoD: pio test -e native -f native/test_wifi_logic green.
-2. src/system/nvs_config.cpp  – Preferences, keys exactly as listed in nvs_config.h, "ver" = 3.
+2. src/system/nvs_config.cpp  – Preferences, keys exactly as listed in nvs_config.h, "ver" = 4.
                                 nvsLoadParams: start from paramsDefaults(), read each key, replace any
                                 value outside the CONTRACT §9 range by its default. Never store flags.
 3. src/comm/wifi_manager.cpp  – as documented: WiFi.mode(WIFI_AP_STA), softAP always on,
@@ -152,7 +154,7 @@ Report: files, decisions, anything in the headers that was unclear.
 - [ ] NVS: Bereichsprüfung beim Laden, Flags nie gespeichert
 - [ ] `wifiLoop` blockiert nicht (kein `WiFi.begin` mit Warteschleife im Loop)
 - [ ] AP bleibt aktiv, auch während der Station-Versuche und in der 2-min-Pause
-- [ ] NVS `ver` = 3, Schlüssel `estnc` vorhanden
+- [ ] NVS `ver` = 4, Schlüssel `estnc` und `shold` vorhanden (V1.5)
 - [ ] Persist/Reboot nur im Netzwerk-Task
 - [ ] Nach S2.6 am Gerät: Boot-Banner, AP sichtbar, Startsignal, Reboot über `REBOOT` (Signal, dann Neustart)
 - [ ] Router-Login: `SET wifi_ssid/wifi_pass`, `REBOOT` → IP im Log; Router aus → 3 Versuche, 2 min Pause
@@ -226,7 +228,8 @@ Implement exactly:
 - src/logic/params.cpp
 
 Hints:
-- Sensor curve gives MILLIMETRES: dist_mm = k_mm * powf(mv / 1000.0f, exponent), k_mm = 120.8.
+- Sensor curve gives MILLIMETRES: dist_mm = c.k_mm * powf(mv / 1000.0f, c.exponent). Use the
+  SensorCurve fields (defaults 168.8 / -1.398, V1.4.2) – never hard-code the constants.
 - medianMean sorts in place (std::sort from <algorithm> is allowed, it does not allocate).
 - params: table-driven implementation recommended (array of {key, member pointer, lo, hi}).
   On ANY error nothing changes and *persist stays untouched.
@@ -356,7 +359,7 @@ Sprint S2.5. Hardware layer. Read first:
 
 Implement exactly:
 - src/hal/motion_drv.cpp – engine/stepper setup as in the header comment, motionDrvApply
-  mapping exactly as documented, speed conversion |getCurrentSpeedInMilliHz()| / 1000 / STEPS_PER_MM * 60.
+  mapping exactly as documented, speed conversion |getCurrentSpeedInMilliHz()| / 1000 / STEPS_PER_MM (mm/s).
 - src/hal/hal_io.cpp     – inputs with debounce (limit switches both directions,
   E-stop: activation immediate, release after INPUT_DEBOUNCE_MS), outputs, non-blocking
   halSetBuzzer(on) via engine->i2sMuxSetBit(I2SO_TO_SLOT(I2SO_BUZZER), on) (the pattern
@@ -449,7 +452,7 @@ python scripts/add_client.py cmd SET key=interlock value=true
 python scripts/add_client.py cmd SET key=cooling_flow value=true
 python scripts/add_client.py cmd INIT
 python scripts/add_client.py cmd HV_ON
-python scripts/add_client.py cmd START_TRAVERSE start=10 end=230 speed=600
+python scripts/add_client.py cmd START_TRAVERSE start=80 end=240 speed=10   # V1.5: Messzone > 60 mm, mm/s
 # innerhalb von 5 s: GET_STATE als Heartbeat, sonst COMM_TIMEOUT (gewollt!)
 
 # V1.1 – Last und Zykluszeit (keine Bewegung):
@@ -606,7 +609,8 @@ Task 1 – data/add.json (served at /add, max. 32 KB, valid JSON):
   doc_url "/doc" with doc_url_note.
 - security: network_scope "local", authentication "none", remote_access false, and an
   "enforcement" text listing everything the device enforces itself (CONTRACT §5.2 gate,
-  ranges, park zone, HV conditions, comm watchdog, fail-safe flags).
+  ranges, zones park/service/measuring and shutter rules incl. hold time, HV conditions,
+  comm watchdog, fail-safe flags).
 - interfaces: one HTTP interface with data entries /proc, /api, /add, /add.html, /llms.txt,
   /doc, /log, /, /settings. Describe the CRC frame rule (CONTRACT §4) in the interface
   description, including the two test vectors.
@@ -631,8 +635,10 @@ error codes and their remedies, calibration procedure.
 
 Task 3 – scripts/demo_traverse.py (stdlib only, reuse scripts/add_client.py functions):
 scenario: SET flags, INIT (wait homed), HV_ON, START_TRAVERSE, poll /proc every 200 ms
-with GET_STATE heartbeat every 2 s, record pos/dist/thick/on_material/valid, HV_OFF at the
-end, detect material edges, print step thicknesses and write profile.csv.
+with GET_STATE heartbeat every 2 s, record ts/pos/dist/thick/on_material/valid (only samples
+with motion.mode == "traverse"), HV_OFF at the end, detect material edges, print step
+thicknesses and write profile.csv. Option --passes N: back-and-forth runs (start/end swapped,
+next START_TRAVERSE within shutter_hold, so the shutter stays open – CONTRACT §6.4).
 
 Task 4 – scripts/demo_safety.py: traverse, then SET temp=31 (HV drop, no fault),
 SET temp=35 (fault), show ACK rejected, SET temp=18, ACK, show state SAFE_START/READY.

@@ -28,11 +28,12 @@
  *          Flags interlock / cooling_flow / temp are labelled "SIM" (simulated).
  *  FAULT   (state FAULT, one cycle): button row hidden, fault banner only.
  *  ACK     (state WAIT_ACK): ALL normal buttons hidden. Shows
- *          - fault banner: "FEHLER: <errorCodeName>" (large, red) + one-line remedy
+ *          - fault banner: "FAULT: <errorCodeName>" (large, red) + one-line remedy (English,
+ *            texts in Pflichtenheft §5.8)
  *          - ONE ACK area across the full width (x 0..479, y 260..319):
  *            cause still active (estop, temp > 32 °C) -> grey, text
- *              "Ursache aktiv: <name> – erst beheben", touch ignored;
- *            cause gone -> yellow, "ACK – 1 s halten"; a progress bar fills while
+ *              "CAUSE ACTIVE: <name> - RELEASE FIRST", touch ignored;
+ *            cause gone -> yellow, "ACK - HOLD 1 s"; a progress bar fills while
  *              pressed; ACK is sent ONCE after 1000 ms continuous press; release
  *              before that cancels. After sending, the area is locked until the
  *              state has left WAIT_ACK (no repeated ACKs).
