@@ -1,4 +1,4 @@
-# ADD Demo System – Interface Contract
+disp# ADD Demo System – Interface Contract
 
 **Version:** 1.4.2 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-11
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.1
