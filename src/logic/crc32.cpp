@@ -111,6 +111,7 @@ static bool isHexDigit(char c) {
 
 bool crcFrameVerify(const char* body, size_t len) {
     if (!body || len == 0) return false;
+    if (len < 8) return false;
 
     // Find the LAST occurrence of ,"crc":"
     const char* marker = ",\"crc\":\"";
