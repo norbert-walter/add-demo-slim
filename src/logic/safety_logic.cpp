@@ -37,7 +37,59 @@ ErrorCode safetyFaultCause(const SafetyInputs& in, const SafetyConfig& cfg) {
 SafetyResult safetyStep(const SafetyStatus& cur, SafetyEvent ev, const SafetyInputs& in, const SafetyConfig& cfg) {
     SafetyStatus n = cur;  // copy current state
 
-    // ===== R1: fault detection (applies in every state except FAULT/WAIT_ACK) =====
+    // ===== INIT_DONE handling =====
+    if (ev == SafetyEvent::INIT_DONE &&
+        cur.state != SafetyState::FAULT && cur.state != SafetyState::WAIT_ACK) {
+        n.err = ErrorCode::NONE;
+
+        if (cur.state == SafetyState::RUNNING) {
+            // V1.5: INIT_DONE from RUNNING stays RUNNING if conditions ok,
+            // otherwise drops to READY with outputs off.
+            if (safetyHvConditionsOk(in, cfg)) {
+                // Stay RUNNING — keep existing outputs, just clear err.
+                SafetyResult r{};
+                r.next   = n;
+                r.motor_stop = false;
+                r.api    = ApiError::OK;
+                return r;
+            }
+            // Condition loss -> drop to READY with outputs off.
+            n.state = SafetyState::READY;
+            n.hv_on       = false;
+            n.shutter_open    = false;
+            n.shutter_auto    = false;
+        } else {
+            // SAFE_START, READY, RECOVER -> go to READY unconditionally.
+            n.state = SafetyState::READY;
+            n.hv_on       = false;
+            n.shutter_open    = false;
+            n.shutter_auto    = false;
+        }
+
+        SafetyResult r{};
+        r.next   = n;
+        r.motor_stop = false;  // READY is a safe state
+        r.api    = ApiError::OK;
+        return r;
+    }
+
+    // ===== TICK in FAULT: transition to WAIT_ACK (R2) =====
+    // Must be checked before any state-specific logic.
+    if (ev == SafetyEvent::TICK && cur.state == SafetyState::FAULT) {
+        n.state = SafetyState::WAIT_ACK;  // keep same err
+        // Outputs forced off when leaving FAULT.
+        n.hv_on       = false;
+        n.shutter_open    = false;
+        n.shutter_auto    = false;
+
+        SafetyResult r{};
+        r.next   = n;
+        r.motor_stop = true;  // R2: motor_stop on every event in FAULT/WAIT_ACK
+        r.api    = ApiError::OK;
+        return r;
+    }
+
+    // ===== Fault detection on any non-TICK event (applies in every state except FAULT/WAIT_ACK) =====
     ErrorCode fault = safetyFaultCause(in, cfg);
 
     if (fault != ErrorCode::NONE && cur.state != SafetyState::FAULT && cur.state != SafetyState::WAIT_ACK) {
@@ -98,22 +150,23 @@ SafetyResult safetyStep(const SafetyStatus& cur, SafetyEvent ev, const SafetyInp
 
         // ---- R2: FAULT -------------------------------------------------------
         case SafetyState::FAULT: {
-            if (ev == SafetyEvent::TICK) {
-                n.state = SafetyState::WAIT_ACK;  // keep same err, outputs already off
+            // TICK is handled at top-level (transition to WAIT_ACK).
+            if (ev == SafetyEvent::HV_OFF || ev == SafetyEvent::SHUTTER_CLOSE) {
+                // Benign events in FAULT — stay in FAULT, motor stays stopped.
+                n.hv_on       = false;
+                n.shutter_open    = false;
                 n.shutter_auto    = false;
                 SafetyResult r{};
                 r.next   = n; r.motor_stop = true; r.api = ApiError::OK;
                 return r;
             }
-            if (ev == SafetyEvent::HV_OFF || ev == SafetyEvent::SHUTTER_CLOSE) {
-                SafetyResult r{};
-                r.next   = n; r.motor_stop = false; r.api = ApiError::OK;
-                return r;
-            }
-            // Everything else → STATE
+            // All other events → stay in FAULT, STATE.
+            n.hv_on       = false;
+            n.shutter_open    = false;
+            n.shutter_auto    = false;
             {
                 SafetyResult r{};
-                r.next   = n; r.motor_stop = false; r.api = ApiError::STATE;
+                r.next   = n; r.motor_stop = true; r.api = ApiError::STATE;
                 return r;
             }
         }
@@ -125,30 +178,39 @@ SafetyResult safetyStep(const SafetyStatus& cur, SafetyEvent ev, const SafetyInp
                 if (cause == ErrorCode::NONE) {
                     n.state = SafetyState::RECOVER;
                     n.err   = ErrorCode::NONE;
+                    // Outputs forced off when leaving WAIT_ACK.
+                    n.hv_on       = false;
+                    n.shutter_open    = false;
+                    n.shutter_auto    = false;
                     SafetyResult r{};
                     r.next   = n; r.motor_stop = true; r.api = ApiError::OK;
                     return r;
                 } else {
+                    // Fault still present → reject, stay in WAIT_ACK.
                     SafetyResult r{};
-                    r.next   = n; r.motor_stop = false; r.api = ApiError::PRECONDITION;
+                    r.next   = n; r.motor_stop = true; r.api = ApiError::PRECONDITION;
                     return r;
                 }
             }
-            if (ev == SafetyEvent::TICK) {
-                // Stay in WAIT_ACK — error persists, keep motor stopped.
+
+            // R3: non-ACK events → stay in WAIT_ACK regardless of fault state.
+            // Only ACK checks whether fault has cleared.
+            if (ev == SafetyEvent::HV_ON) {
+                // HV_ON is always rejected in WAIT_ACK.
+                n.hv_on       = false;
+                n.shutter_open    = false;
+                n.shutter_auto    = false;
+                SafetyResult r{};
+                r.next   = n; r.motor_stop = true; r.api = ApiError::STATE;
+                return r;
+            }
+            // All other non-ACK events → stay in WAIT_ACK.
+            {
+                n.hv_on       = false;
+                n.shutter_open    = false;
+                n.shutter_auto    = false;
                 SafetyResult r{};
                 r.next   = n; r.motor_stop = true; r.api = ApiError::OK;
-                return r;
-            }
-            if (ev == SafetyEvent::HV_OFF || ev == SafetyEvent::SHUTTER_CLOSE) {
-                SafetyResult r{};
-                r.next   = n; r.motor_stop = false; r.api = ApiError::OK;
-                return r;
-            }
-            // Everything else → STATE
-            {
-                SafetyResult r{};
-                r.next   = n; r.motor_stop = false; r.api = ApiError::STATE;
                 return r;
             }
         }
@@ -158,16 +220,19 @@ SafetyResult safetyStep(const SafetyStatus& cur, SafetyEvent ev, const SafetyInp
             if (ev == SafetyEvent::TICK) {
                 n.state = in.homed ? SafetyState::READY : SafetyState::SAFE_START;
                 n.err   = ErrorCode::NONE;
+                // Outputs forced off when leaving RECOVER.
+                n.hv_on       = false;
+                n.shutter_open    = false;
+                n.shutter_auto    = false;
                 SafetyResult r{};
                 r.next   = n; r.motor_stop = true; r.api = ApiError::OK;
                 return r;
             }
-            if (ev == SafetyEvent::HV_OFF || ev == SafetyEvent::SHUTTER_CLOSE) {
-                SafetyResult r{};
-                r.next   = n; r.motor_stop = false; r.api = ApiError::OK;
-                return r;
-            }
-            // Everything else → STATE
+            // Non-TICK events in RECOVER → stay in RECOVER.
+            // "Outputs forced off outside RUNNING" — clear all outputs.
+            n.hv_on       = false;
+            n.shutter_open    = false;
+            n.shutter_auto    = false;
             {
                 SafetyResult r{};
                 r.next   = n; r.motor_stop = false; r.api = ApiError::STATE;
@@ -177,18 +242,21 @@ SafetyResult safetyStep(const SafetyStatus& cur, SafetyEvent ev, const SafetyInp
 
         // ---- R5: SAFE_START ----------------------------------------------------
         case SafetyState::SAFE_START: {
-            if (ev == SafetyEvent::INIT_DONE) {
-                n.state = in.homed ? SafetyState::READY : SafetyState::SAFE_START;
-                SafetyResult r{};
-                r.next   = n; r.motor_stop = false; r.api = ApiError::OK;
-                return r;
-            }
+            // INIT_DONE is handled above (unconditional → READY).
             if (ev == SafetyEvent::TICK || ev == SafetyEvent::HV_OFF || ev == SafetyEvent::SHUTTER_CLOSE) {
+                // Outputs forced off outside RUNNING.
+                n.hv_on       = false;
+                n.shutter_open    = false;
+                n.shutter_auto    = false;
                 SafetyResult r{};
                 r.next   = n; r.motor_stop = false; r.api = ApiError::OK;
                 return r;
             }
-            // Everything else → STATE
+            // Non-TICK events in SAFE_START → stay in SAFE_START.
+            // "Outputs forced off outside RUNNING" — clear all outputs.
+            n.hv_on       = false;
+            n.shutter_open    = false;
+            n.shutter_auto    = false;
             {
                 SafetyResult r{};
                 r.next   = n; r.motor_stop = false; r.api = ApiError::STATE;
@@ -206,18 +274,43 @@ SafetyResult safetyStep(const SafetyStatus& cur, SafetyEvent ev, const SafetyInp
                     r.next   = n; r.motor_stop = false; r.api = ApiError::OK;
                     return r;
                 } else {
-                    // Conditions not met → stay READY, PRECONDITION
+                    // Conditions not met → stay READY, PRECONDITION. Outputs forced off.
+                    n.hv_on       = false;
+                    n.shutter_open    = false;
+                    n.shutter_auto    = false;
                     SafetyResult r{};
                     r.next   = n; r.motor_stop = false; r.api = ApiError::PRECONDITION;
                     return r;
                 }
             }
             if (ev == SafetyEvent::INIT_DONE || ev == SafetyEvent::TICK || ev == SafetyEvent::HV_OFF || ev == SafetyEvent::SHUTTER_CLOSE) {
+                // Stay in READY — outputs forced off outside RUNNING.
+                n.hv_on       = false;
+                n.shutter_open    = false;
+                n.shutter_auto    = false;
                 SafetyResult r{};
                 r.next   = n; r.motor_stop = false; r.api = ApiError::OK;
                 return r;
             }
-            // SHUTTER_OPEN, ACK → STATE (not allowed in READY)
+            // SHUTTER_OPEN, ACK → STATE (not allowed in READY).
+            if (ev == SafetyEvent::SHUTTER_OPEN || ev == SafetyEvent::ACK) {
+                n.hv_on       = false;
+                n.shutter_open    = false;
+                n.shutter_auto    = false;
+                SafetyResult r{};
+                r.next   = n; r.motor_stop = false; r.api = ApiError::STATE;
+                return r;
+            }
+            // SHUTTER_AUTO_OPEN → STATE in READY (not allowed outside RUNNING).
+            if (ev == SafetyEvent::SHUTTER_AUTO_OPEN) {
+                n.hv_on       = false;
+                n.shutter_open    = false;
+                n.shutter_auto    = false;
+                SafetyResult r{};
+                r.next   = n; r.motor_stop = false; r.api = ApiError::STATE;
+                return r;
+            }
+            // Unhandled events in READY → STATE.
             {
                 SafetyResult r{};
                 r.next   = n; r.motor_stop = false; r.api = ApiError::STATE;
