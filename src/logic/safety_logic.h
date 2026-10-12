@@ -1,6 +1,6 @@
 /**
  * @file safety_logic.h
- * @brief Pure safety state machine (FROZEN CONTRACT V1.5.2 §6). No hardware access.
+ * @brief Pure safety state machine (FROZEN CONTRACT V1.5.3 §6). No hardware access.
  *
  * Implementation: src/logic/safety_logic.cpp (Sprint S2.1).
  * The machine is a pure function: given the current status, one event and the
@@ -100,6 +100,9 @@ ErrorCode safetyFaultCause(const SafetyInputs& in, const SafetyConfig& cfg);
  *    safetyFaultCause(in) != NONE  ->  FAULT, err = cause, hv off, shutter closed,
  *    motor_stop = true. Same for event INIT_FAILED (err = HOMING_FAILED) in any
  *    state except FAULT/WAIT_ACK.
+ *    V1.5.3: R1 is checked FIRST, for EVERY event (including INIT_DONE), before any
+ *    other rule. If a fault cause is active together with INIT_FAILED, the fault
+ *    cause wins (err = cause, not HOMING_FAILED).
  *    api: OK for TICK, HV_OFF, SHUTTER_CLOSE; STATE for all other events.
  *
  * V1.5.2: in every state except RUNNING the result has hv_on = false,
