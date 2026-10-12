@@ -1,6 +1,6 @@
 /**
  * @file motion_seq.h
- * @brief Pure, non-blocking motion sequencer (FROZEN CONTRACT V1.4 §8).
+ * @brief Pure, non-blocking motion sequencer (FROZEN CONTRACT V1.5 §8).
  *
  * V1.3: ALL speeds are mm/s (API, parameters, /proc, MotionConfig).
  *
@@ -29,7 +29,9 @@
 struct MotionConfig {
     float    steps_per_mm      = 3200.0f / 40.77f; ///< V1.4: 200 steps * 16 microsteps / 40.77 mm (measured)
     float    axis_max_mm       = 242.0f;  ///< V1.4: forward end switch at axis 244.3 mm (measured), 2.3 mm margin
-    float    park_pos_mm       = 20.0f;   ///< V1.2: park zone limit; measuring positions must be > park
+    float    park_pos_mm       = 20.0f;   ///< V1.2: park zone limit
+    float    measure_min_mm    = 60.0f;   ///< V1.5: measuring zone starts above the service zone;
+                                          ///< START_MEASURE/START_TRAVERSE positions must be > measure_min_mm
     float    park_target_mm    = 2.0f;    ///< V1.2: destination of the PARK command
     float    homing_speed      = 5.0f;    ///< mm/s (V1.3), also pull-off
     float    pulloff_mm        = 2.0f;
@@ -118,7 +120,7 @@ ApiError motionStartMove(MotionSeq& s, float pos_mm, float speed_mm_s,
 
 /**
  * Traverse start -> end at speed. Checks: BUSY, PRECONDITION (not homed),
- * BAD_PARAM if start or end not in (park_pos_mm, axis_max_mm], |end - start| < 1 mm,
+ * BAD_PARAM if start or end not in (measure_min_mm, axis_max_mm] (V1.5), |end - start| < 1 mm,
  * or speed out of range.
  * OK: mode TRAVERSE, phase TRAV_APPROACH, out = MOVE_TO(start, approach_speed).
  */
@@ -127,7 +129,7 @@ ApiError motionStartTraverse(MotionSeq& s, float start_mm, float end_mm, float s
 
 /**
  * Stationary measurement at pos. Checks: BUSY, PRECONDITION, BAD_PARAM if pos not
- * in (park_pos_mm, axis_max_mm]. OK: mode MEASURE, phase MEAS_APPROACH,
+ * in (measure_min_mm, axis_max_mm] (V1.5). OK: mode MEASURE, phase MEAS_APPROACH,
  * out = MOVE_TO(pos, approach_speed).
  */
 ApiError motionStartMeasure(MotionSeq& s, float pos_mm,

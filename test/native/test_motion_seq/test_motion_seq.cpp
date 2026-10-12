@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.3) – speeds in mm/s – Sprint S2.3 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5) – speeds in mm/s – Sprint S2.3 must make these pass. Do not modify.
 // Covers: src/logic/motion_seq.cpp (CONTRACT §8)
 #include <unity.h>
 #include <math.h>
@@ -163,24 +163,29 @@ void test_traverse_param_checks() {
     DrvRequest r;
     API(ApiError::BAD_PARAM, motionStartTraverse(S, 20.0f, 100, 10, A.inputs(now), C, r));  // start in park zone (<= 20)
     API(ApiError::BAD_PARAM, motionStartTraverse(S, 100, 20.0f, 10, A.inputs(now), C, r));  // end in park zone
-    API(ApiError::BAD_PARAM, motionStartTraverse(S, 25, 242.5f, 10, A.inputs(now), C, r));
+    // V1.5: start and end must lie in the measuring zone (> 60 mm), not in the service zone
+    API(ApiError::BAD_PARAM, motionStartTraverse(S, 60.0f, 100, 10, A.inputs(now), C, r));  // start = service zone limit
+    API(ApiError::BAD_PARAM, motionStartTraverse(S, 100, 60.0f, 10, A.inputs(now), C, r));  // end = service zone limit
+    API(ApiError::BAD_PARAM, motionStartTraverse(S, 25, 100, 10, A.inputs(now), C, r));     // start in service zone
+    API(ApiError::BAD_PARAM, motionStartTraverse(S, 65, 242.5f, 10, A.inputs(now), C, r));
     API(ApiError::BAD_PARAM, motionStartTraverse(S, 100, 100.5f, 10, A.inputs(now), C, r)); // < 1 mm
-    API(ApiError::BAD_PARAM, motionStartTraverse(S, 25, 230, 0.5f, A.inputs(now), C, r));  // < 1 mm/s
-    API(ApiError::BAD_PARAM, motionStartTraverse(S, 25, 230, 20.5f, A.inputs(now), C, r)); // > 20 mm/s
+    API(ApiError::BAD_PARAM, motionStartTraverse(S, 65, 230, 0.5f, A.inputs(now), C, r));  // < 1 mm/s
+    API(ApiError::BAD_PARAM, motionStartTraverse(S, 65, 230, 20.5f, A.inputs(now), C, r)); // > 20 mm/s
     TEST_ASSERT_TRUE(S.mode == OpMode::NONE);
     MotionSeq unhomed;
-    API(ApiError::PRECONDITION, motionStartTraverse(unhomed, 60, 240, 10, A.inputs(now), C, r));
+    API(ApiError::PRECONDITION, motionStartTraverse(unhomed, 80, 240, 10, A.inputs(now), C, r));
+    API(ApiError::OK, motionStartTraverse(S, 60.1f, 242.0f, 10, A.inputs(now), C, r));     // boundaries ok
 }
 void test_traverse_full_run() {
     home();
     DrvRequest r;
-    API(ApiError::OK, motionStartTraverse(S, 25.0f, 75.0f, 10.0f, A.inputs(now), C, r));
+    API(ApiError::OK, motionStartTraverse(S, 65.0f, 115.0f, 10.0f, A.inputs(now), C, r));
     OP(DrvOp::MOVE_TO, r.op);
-    TEST_ASSERT_EQUAL_INT32(mmToSteps(25.0f, C), r.target_steps);
+    TEST_ASSERT_EQUAL_INT32(mmToSteps(65.0f, C), r.target_steps);
     TEST_ASSERT_EQUAL_UINT32(mmPerSecToHz(C.approach_speed, C), r.speed_hz);
     TEST_ASSERT_TRUE(S.mode == OpMode::TRAVERSE);
     A.apply(r);
-    MotionEvents e = runFor(3000);   // approach 25 mm at 10 mm/s = 2.5 s
+    MotionEvents e = runFor(7000);   // approach 65 mm at 10 mm/s = 6.5 s
     TEST_ASSERT_TRUE(e.acq_started);
     TEST_ASSERT_TRUE(S.phase == SeqPhase::TRAV_RUN);
     TEST_ASSERT_TRUE(motionAcquiring(S));
@@ -190,15 +195,15 @@ void test_traverse_full_run() {
     TEST_ASSERT_TRUE(S.phase == SeqPhase::IDLE);
     TEST_ASSERT_TRUE(S.mode == OpMode::NONE);
     TEST_ASSERT_FALSE(motionAcquiring(S));
-    TEST_ASSERT_EQUAL_INT32(mmToSteps(75.0f, C), A.drvPos());
+    TEST_ASSERT_EQUAL_INT32(mmToSteps(115.0f, C), A.drvPos());
 }
 void test_traverse_backwards_allowed() {
     home();
     DrvRequest r;
-    start(ApiError::OK, motionStartTraverse(S, 80.0f, 30.0f, 20.0f, A.inputs(now), C, r), r);
-    MotionEvents e = runFor(12000);  // approach 80 mm at 10 mm/s + 50 mm at 20 mm/s = 10.5 s
+    start(ApiError::OK, motionStartTraverse(S, 130.0f, 80.0f, 20.0f, A.inputs(now), C, r), r);
+    MotionEvents e = runFor(16000);  // approach 130 mm at 10 mm/s + 50 mm at 20 mm/s = 15.5 s
     TEST_ASSERT_TRUE(e.acq_ended);
-    TEST_ASSERT_EQUAL_INT32(mmToSteps(30.0f, C), A.drvPos());
+    TEST_ASSERT_EQUAL_INT32(mmToSteps(80.0f, C), A.drvPos());
 }
 
 // ---- measure -------------------------------------------------------------------------------
@@ -206,10 +211,12 @@ void test_measure_holds_until_stop() {
     home();
     DrvRequest r;
     API(ApiError::BAD_PARAM, motionStartMeasure(S, 20.0f, A.inputs(now), C, r));   // park zone boundary
+    API(ApiError::BAD_PARAM, motionStartMeasure(S, 50.0f, A.inputs(now), C, r));   // V1.5: service zone
+    API(ApiError::BAD_PARAM, motionStartMeasure(S, 60.0f, A.inputs(now), C, r));   // V1.5: service zone limit
     API(ApiError::BAD_PARAM, motionStartMeasure(S, 242.1f, A.inputs(now), C, r));
-    start(ApiError::OK, motionStartMeasure(S, 50.0f, A.inputs(now), C, r), r);
+    start(ApiError::OK, motionStartMeasure(S, 70.0f, A.inputs(now), C, r), r);
     TEST_ASSERT_TRUE(S.mode == OpMode::MEASURE);
-    MotionEvents e = runFor(7000);   // 50 mm at 10 mm/s
+    MotionEvents e = runFor(8000);   // 70 mm at 10 mm/s
     TEST_ASSERT_TRUE(e.acq_started);
     TEST_ASSERT_TRUE(S.phase == SeqPhase::MEAS_HOLD);
     e = runFor(5000);
@@ -240,8 +247,8 @@ void test_stop_during_homing_leaves_unhomed() {
 void test_emergency_while_moving_loses_reference() {
     home();
     DrvRequest r;
-    start(ApiError::OK, motionStartTraverse(S, 25, 200, 10, A.inputs(now), C, r), r);
-    runFor(3000);
+    start(ApiError::OK, motionStartTraverse(S, 65, 200, 10, A.inputs(now), C, r), r);
+    runFor(8000);                         // approach 6.5 s, then running
     TEST_ASSERT_TRUE(motionAcquiring(S));
     motionEmergencyStop(S, A.inputs(now), r);
     OP(DrvOp::FORCE_STOP, r.op);
@@ -274,8 +281,8 @@ void test_fwd_limit_during_move_is_motor_fault() {
 void test_bwd_limit_during_traverse_is_motor_fault_and_ends_acq() {
     home();
     DrvRequest r;
-    start(ApiError::OK, motionStartTraverse(S, 60, 25, 20, A.inputs(now), C, r), r);
-    runFor(7000);                         // approach done, running towards 25 mm
+    start(ApiError::OK, motionStartTraverse(S, 110, 65, 20, A.inputs(now), C, r), r);
+    runFor(12000);                        // approach done, running towards 65 mm
     TEST_ASSERT_TRUE(S.phase == SeqPhase::TRAV_RUN || S.phase == SeqPhase::IDLE);
     S.phase = SeqPhase::TRAV_RUN; S.mode = OpMode::TRAVERSE;   // force acquiring state
     A.running = true; A.phys_steps = -100;  // slipped onto the backward switch
@@ -306,8 +313,8 @@ void test_non_finite_inputs_rejected() {
         API(ApiError::BAD_PARAM, motionStartMove(S, b, 10, A.inputs(now), C, r));        OP(DrvOp::NONE, r.op);
         API(ApiError::BAD_PARAM, motionStartMove(S, 100, b, A.inputs(now), C, r));       OP(DrvOp::NONE, r.op);
         API(ApiError::BAD_PARAM, motionStartTraverse(S, b, 100, 10, A.inputs(now), C, r)); OP(DrvOp::NONE, r.op);
-        API(ApiError::BAD_PARAM, motionStartTraverse(S, 60, b, 10, A.inputs(now), C, r));  OP(DrvOp::NONE, r.op);
-        API(ApiError::BAD_PARAM, motionStartTraverse(S, 60, 100, b, A.inputs(now), C, r)); OP(DrvOp::NONE, r.op);
+        API(ApiError::BAD_PARAM, motionStartTraverse(S, 70, b, 10, A.inputs(now), C, r));  OP(DrvOp::NONE, r.op);
+        API(ApiError::BAD_PARAM, motionStartTraverse(S, 70, 100, b, A.inputs(now), C, r)); OP(DrvOp::NONE, r.op);
         API(ApiError::BAD_PARAM, motionStartMeasure(S, b, A.inputs(now), C, r));          OP(DrvOp::NONE, r.op);
         TEST_ASSERT_TRUE(S.phase == SeqPhase::IDLE);
         TEST_ASSERT_TRUE(S.mode == OpMode::NONE);

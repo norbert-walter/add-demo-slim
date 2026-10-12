@@ -1,6 +1,6 @@
 /**
  * @file proc_json.h
- * @brief Serialisation of /proc and /api responses (FROZEN CONTRACT V1.4 §5).
+ * @brief Serialisation of /proc and /api responses (FROZEN CONTRACT V1.5 §5).
  *
  * Implementation: src/logic/proc_json.cpp (Sprint S3). snprintf only, no
  * heap, no ArduinoJson. Output is framed with crcFrameAppend().

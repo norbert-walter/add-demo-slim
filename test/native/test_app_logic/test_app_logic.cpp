@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.3) – speeds in mm/s – Sprint S2.4 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5) – speeds in mm/s – Sprint S2.4 must make these pass. Do not modify.
 // Covers: src/logic/app_logic.cpp (CONTRACT §10) – complete scenarios with a
 // simulated axis (fake_axis.h) and a simulated distance sensor.
 #include <unity.h>
@@ -249,21 +249,25 @@ void test_park_and_service_gate_and_local() {
 // ---- traverse scenario --------------------------------------------------------------------
 void test_traverse_auto_shutter_and_statistics() {
     running();
-    API(ApiError::OK, traverse(60, 240, 20));                 // default profile, max speed
+    API(ApiError::OK, traverse(80, 240, 20));                 // default profile (V1.5), max speed
     TEST_ASSERT_TRUE(proc().motion.mode == OpMode::TRAVERSE);
-    bool sawOpen = false, sawOpenInPark = false;
-    for (int i = 0; i < 20000; ++i) {                         // 6 s approach + 9 s run
+    bool sawOpen = false, sawOpenOutsideMeasZone = false;
+    for (int i = 0; i < 20000; ++i) {                         // 8 s approach + 8 s run
         cycle();
         if (last_out.shutter_open) {
             sawOpen = true;
-            if (proc().motion.pos <= C.safety.park_pos_mm) sawOpenInPark = true;
+            if (proc().motion.pos <= C.safety.maint_max_mm) sawOpenOutsideMeasZone = true;
         }
         if (S.seq.mode == OpMode::NONE && i > 100) break;
     }
     run(5);
     TEST_ASSERT_TRUE(sawOpen);
-    TEST_ASSERT_FALSE(sawOpenInPark);
-    TEST_ASSERT_FALSE(last_out.shutter_open);    // closed after the run
+    TEST_ASSERT_FALSE(sawOpenOutsideMeasZone);   // V1.5: automatic shutter only in the measuring zone
+    TEST_ASSERT_TRUE(last_out.shutter_open);     // V1.5: still open during the hold time (3 s)
+    run(2900);
+    TEST_ASSERT_TRUE(last_out.shutter_open);
+    run(200);
+    TEST_ASSERT_FALSE(last_out.shutter_open);    // closed after the hold time
     TEST_ASSERT_TRUE(last_out.hv_on);            // HV stays on
     ProcData p = proc();
     TEST_ASSERT_TRUE(p.motion.mode == OpMode::NONE);
@@ -274,23 +278,132 @@ void test_traverse_auto_shutter_and_statistics() {
 }
 void test_traverse_uses_param_defaults() {
     running();
-    API(ApiError::OK, setNum("traverse_start", 30));
-    API(ApiError::OK, setNum("traverse_end", 40));
+    API(ApiError::BAD_PARAM, setNum("traverse_start", 60));   // V1.5: service zone not allowed
+    API(ApiError::OK, setNum("traverse_start", 70));
+    API(ApiError::OK, setNum("traverse_end", 80));
     API(ApiError::OK, setNum("traverse_speed", 20));
     API(ApiError::OK, send(CmdId::START_TRAVERSE));
-    run(5000);
-    TEST_ASSERT_FLOAT_WITHIN(0.1f, 40.0f, proc().motion.pos);
+    run(9000);                                                // approach 7 s + 0.5 s
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 80.0f, proc().motion.pos);
 }
 void test_traverse_rejected_in_ready() {
     homeAndReady();
-    API(ApiError::STATE, traverse(30, 240, 200));
+    API(ApiError::STATE, traverse(70, 240, 200));
+}
+void test_traverse_and_measure_outside_measuring_zone_rejected() {   // V1.5
+    running();
+    API(ApiError::BAD_PARAM, traverse(60, 240, 10));
+    API(ApiError::BAD_PARAM, traverse(240, 40, 10));
+    Command m = mk(CmdId::START_MEASURE); m.has_pos = true; m.pos = 60;
+    API(ApiError::BAD_PARAM, send(m));
+    TEST_ASSERT_TRUE(proc().motion.mode == OpMode::NONE);
+}
+// V1.5: continuous back-and-forth profile - the shutter stays open over all runs
+static bool runUntilIdle(uint32_t max_ms, int& closings) {
+    bool was_open = last_out.shutter_open;
+    for (uint32_t i = 0; i < max_ms; ++i) {
+        cycle();
+        if (was_open && !last_out.shutter_open) closings++;
+        was_open = last_out.shutter_open;
+        if (S.seq.mode == OpMode::NONE && i > 5) return true;
+    }
+    return false;
+}
+void test_continuous_profile_keeps_shutter_open() {
+    running();
+    int closings = 0;
+    API(ApiError::OK, traverse(80, 240, 20));
+    TEST_ASSERT_TRUE(runUntilIdle(20000, closings));
+    TEST_ASSERT_TRUE(last_out.shutter_open);
+    for (int pass = 0; pass < 4; ++pass) {                    // client turns around within ~0.3 s
+        run(300);
+        const bool fwd = (pass % 2) == 1;
+        API(ApiError::OK, traverse(fwd ? 80.0f : 240.0f, fwd ? 240.0f : 80.0f, 20));
+        TEST_ASSERT_TRUE(runUntilIdle(12000, closings));
+        TEST_ASSERT_TRUE(proc().measure.n > 50);              // every run has its own statistics
+    }
+    TEST_ASSERT_EQUAL_INT(0, closings);                       // never closed between the runs
+    TEST_ASSERT_TRUE(last_out.shutter_open);
+    run(3100);
+    TEST_ASSERT_FALSE(last_out.shutter_open);                 // programme ended -> hold time -> closed
+}
+void test_shutter_hold_parameter() {
+    running();
+    API(ApiError::OK, setNum("shutter_hold", 0));
+    API(ApiError::OK, traverse(80, 100, 20));
+    int closings = 0;
+    TEST_ASSERT_TRUE(runUntilIdle(12000, closings));
+    run(2);
+    TEST_ASSERT_FALSE(last_out.shutter_open);                 // hold 0: closes at the end of the run
+    API(ApiError::OK, setNum("shutter_hold", 1.0));
+    API(ApiError::OK, traverse(100, 80, 20));
+    TEST_ASSERT_TRUE(runUntilIdle(12000, closings));
+    run(950);
+    TEST_ASSERT_TRUE(last_out.shutter_open);
+    run(100);
+    TEST_ASSERT_FALSE(last_out.shutter_open);
+    API(ApiError::BAD_PARAM, setNum("shutter_hold", 10.1));
+}
+// V1.5: the approach of the next run belongs to the programme - no closing even if it
+// takes longer than the hold time (axis stays in the measuring zone)
+void test_shutter_stays_open_during_long_approach() {
+    running();
+    API(ApiError::OK, traverse(200, 240, 20));
+    int closings = 0;
+    TEST_ASSERT_TRUE(runUntilIdle(30000, closings));
+    TEST_ASSERT_TRUE(last_out.shutter_open);
+    API(ApiError::OK, traverse(80, 240, 20));                 // approach 160 mm at 10 mm/s = 16 s
+    for (int i = 0; i < 10000; ++i) { cycle(); if (!last_out.shutter_open) closings++; }
+    TEST_ASSERT_TRUE(S.seq.phase == SeqPhase::TRAV_APPROACH);
+    TEST_ASSERT_EQUAL_INT(0, closings);
+}
+// V1.5: the automatic shutter closes when the axis enters the service zone (<= 60 mm)
+void test_auto_shutter_closes_entering_service_zone() {
+    running();
+    API(ApiError::OK, setNum("shutter_hold", 10));
+    API(ApiError::OK, traverse(100, 80, 20));
+    int closings = 0;
+    TEST_ASSERT_TRUE(runUntilIdle(15000, closings));
+    TEST_ASSERT_TRUE(last_out.shutter_open);                  // hold time running
+    Command m = mk(CmdId::MOVE); m.has_pos = true; m.pos = 30; m.has_speed = true; m.speed = 20;
+    API(ApiError::OK, send(m));
+    bool openInServiceZone = false;
+    for (int i = 0; i < 3000; ++i) {
+        cycle();
+        if (last_out.shutter_open && proc().motion.pos <= C.safety.maint_max_mm) openInServiceZone = true;
+    }
+    TEST_ASSERT_FALSE(openInServiceZone);
+    TEST_ASSERT_FALSE(last_out.shutter_open);
+    TEST_ASSERT_TRUE(last_out.hv_on);
+}
+// V1.5: STOP ends the measuring programme - the shutter closes at once, also during the hold time
+void test_stop_closes_shutter_during_hold_time() {
+    running();
+    API(ApiError::OK, traverse(80, 100, 20));
+    int closings = 0;
+    TEST_ASSERT_TRUE(runUntilIdle(12000, closings));
+    TEST_ASSERT_TRUE(last_out.shutter_open);
+    API(ApiError::OK, send(CmdId::STOP));
+    TEST_ASSERT_FALSE(last_out.shutter_open);                 // in the same cycle ("OK" = outputs set)
+}
+// V1.5: a manually opened shutter (service zone) is not closed by the hold time
+void test_manual_shutter_not_closed_by_hold_time() {
+    running();
+    API(ApiError::OK, send(CmdId::SERVICE));
+    run(5000);
+    API(ApiError::OK, send(CmdId::SHUTTER_OPEN));
+    run(5000);
+    TEST_ASSERT_TRUE(last_out.shutter_open);
+    API(ApiError::OK, send(CmdId::STOP));                     // STOP without a programme: manual shutter stays
+    TEST_ASSERT_TRUE(last_out.shutter_open);
 }
 void test_stop_during_traverse_closes_shutter() {
     running();
-    API(ApiError::OK, traverse(30, 240, 10));
-    run(4000);                                       // approach 30 mm at 10 mm/s = 3 s
+    API(ApiError::OK, traverse(70, 240, 10));
+    run(8000);                                       // approach 70 mm at 10 mm/s = 7 s
     TEST_ASSERT_TRUE(last_out.shutter_open);
     API(ApiError::OK, send(CmdId::STOP));
+    TEST_ASSERT_FALSE(last_out.shutter_open);        // V1.5: closed in the STOP cycle itself
     run(2);
     TEST_ASSERT_FALSE(last_out.shutter_open);
     TEST_ASSERT_TRUE(proc().motion.mode == OpMode::NONE);
@@ -312,8 +425,8 @@ void test_measure_mode_holds_and_averages() {
 // ---- safety scenarios ------------------------------------------------------------------------
 void test_estop_during_traverse() {
     running();
-    API(ApiError::OK, traverse(30, 240, 10));
-    run(4000);                                       // approach 30 mm at 10 mm/s = 3 s
+    API(ApiError::OK, traverse(70, 240, 10));
+    run(8000);                                       // approach 70 mm at 10 mm/s = 7 s
     int fs = A.force_stops;
     estop = true;
     run(1);
@@ -348,8 +461,8 @@ void test_temp_fault_while_idle_keeps_reference() {
 }
 void test_temp_warning_band_drops_hv_and_stops_traverse() {
     running();
-    API(ApiError::OK, traverse(30, 240, 10));
-    run(4000);                                       // approach 30 mm at 10 mm/s = 3 s
+    API(ApiError::OK, traverse(70, 240, 10));
+    run(8000);                                       // approach 70 mm at 10 mm/s = 7 s
     API(ApiError::OK, setNum("temp", 31.0));
     run(3);
     STATE(SafetyState::READY);
@@ -360,8 +473,8 @@ void test_temp_warning_band_drops_hv_and_stops_traverse() {
 }
 void test_hv_off_during_traverse_stops_motion() {
     running();
-    API(ApiError::OK, traverse(30, 240, 10));
-    run(4000);                                       // approach 30 mm at 10 mm/s = 3 s
+    API(ApiError::OK, traverse(70, 240, 10));
+    run(8000);                                       // approach 70 mm at 10 mm/s = 7 s
     API(ApiError::OK, send(CmdId::HV_OFF));
     run(3);
     STATE(SafetyState::READY);
@@ -370,7 +483,7 @@ void test_hv_off_during_traverse_stops_motion() {
 }
 void test_comm_timeout_without_heartbeat() {
     running();
-    API(ApiError::OK, traverse(30, 240, 5));
+    API(ApiError::OK, traverse(70, 240, 5));
     heartbeat = false;
     run(5100);
     TEST_ASSERT_TRUE(S.safety.state == SafetyState::FAULT || S.safety.state == SafetyState::WAIT_ACK);
@@ -383,7 +496,7 @@ void test_comm_timeout_without_heartbeat() {
 }
 void test_heartbeat_keeps_traverse_alive() {
     running();
-    API(ApiError::OK, traverse(30, 240, 10));
+    API(ApiError::OK, traverse(70, 240, 10));
     run(15000);                                      // heartbeat every second
     STATE(SafetyState::RUNNING);
     TEST_ASSERT_EQUAL_INT(0, (int)proc().err);
@@ -517,7 +630,7 @@ void test_local_command_blocks_api_start_commands() {
     API(ApiError::LOCAL_CONTROL, send(CmdId::INIT));
     API(ApiError::LOCAL_CONTROL, send(moveCmd(50, 10, CmdSource::API)));
     API(ApiError::LOCAL_CONTROL, send(CmdId::START_MEASURE));
-    API(ApiError::LOCAL_CONTROL, traverse(30, 240, 10));
+    API(ApiError::LOCAL_CONTROL, traverse(70, 240, 10));
     API(ApiError::LOCAL_CONTROL, send(CmdId::SHUTTER_OPEN));
     API(ApiError::LOCAL_CONTROL, calib(CalibAction::RESET));
     API(ApiError::LOCAL_CONTROL, send(CmdId::REBOOT));
@@ -574,7 +687,7 @@ void test_local_held_until_local_motion_ends() {
 }
 void test_local_takes_over_remote_operation() {
     running();
-    API(ApiError::OK, traverse(30, 240, 5));
+    API(ApiError::OK, traverse(70, 240, 5));
     TEST_ASSERT_TRUE(S.comm_armed);
     run(1000);
     API(ApiError::OK, send(CmdId::STOP, CmdSource::LOCAL));
@@ -583,7 +696,7 @@ void test_local_takes_over_remote_operation() {
     heartbeat = false;
     run(6000);
     TEST_ASSERT_EQUAL_INT(0, (int)proc().err);
-    API(ApiError::LOCAL_CONTROL, traverse(30, 240, 5));
+    API(ApiError::LOCAL_CONTROL, traverse(70, 240, 5));
 }
 void test_api_stop_allowed_during_local_operation() {
     running();
@@ -611,7 +724,7 @@ void test_local_ack_in_fault() {
 void test_stop_executes_in_first_cycle_during_traverse() {
     running();
     for (int k = 0; k < 25; ++k) {                           // STOP at many different sequencer phases
-        API(ApiError::OK, traverse(30, 240, 20));
+        API(ApiError::OK, traverse(70, 240, 20));
         run((uint32_t)(k * 211));
         Command c = mk(CmdId::STOP); ApiError r = ApiError::UNKNOWN_CMD;
         TEST_ASSERT_TRUE_MESSAGE(cycle(&c, &r), "STOP deferred");   // never waits for a free cycle
@@ -644,7 +757,7 @@ static bool cycleStopOnRequest(bool& executed, ApiError& res, DrvOp& tick_op, Dr
 }
 void test_stop_executed_in_cycle_with_driver_request() {
     running();
-    API(ApiError::OK, traverse(30, 240, 20));
+    API(ApiError::OK, traverse(70, 240, 20));
     bool executed = false; ApiError r = ApiError::UNKNOWN_CMD; DrvOp t = DrvOp::NONE, f = DrvOp::NONE;
     bool hit = false;
     for (int i = 0; i < 20000 && !hit; ++i) hit = cycleStopOnRequest(executed, r, t, f);
@@ -660,7 +773,7 @@ void test_stop_executed_in_cycle_with_driver_request() {
 }
 void test_stop_overrides_pending_move_request() {
     running();
-    API(ApiError::OK, traverse(30, 240, 10));
+    API(ApiError::OK, traverse(70, 240, 10));
     run(500);
     HwOutputs out; out.drv.op = DrvOp::MOVE_TO; out.drv.target_steps = 12345;
     API(ApiError::OK, appCommand(S, mk(CmdId::STOP), hw(), C, out));
@@ -716,8 +829,8 @@ void test_prio_latch_order_coalesce_and_source() {
 // All pending priority commands in ONE cycle (control task step 3a).
 void test_all_priority_commands_in_one_cycle() {
     running();
-    API(ApiError::OK, traverse(30, 240, 10));
-    run(4000);                                       // approach 30 mm at 10 mm/s = 3 s
+    API(ApiError::OK, traverse(70, 240, 10));
+    run(8000);                                       // approach 70 mm at 10 mm/s = 7 s
     TEST_ASSERT_TRUE(last_out.shutter_open);
     now++; A.step(1);
     HwOutputs out = appTick(S, hw(), C);
@@ -737,8 +850,8 @@ void test_all_priority_commands_in_one_cycle() {
 // ---- V1.1: concurrent faults -------------------------------------------------------------
 void test_estop_and_cooling_loss_simultaneous() {
     running();
-    API(ApiError::OK, traverse(30, 240, 10));
-    run(4000);                                       // approach 30 mm at 10 mm/s = 3 s
+    API(ApiError::OK, traverse(70, 240, 10));
+    run(8000);                                       // approach 70 mm at 10 mm/s = 7 s
     estop = true;
     S.flags.cooling_flow = false;                            // same cycle (only the test may do this)
     run(1);
@@ -842,8 +955,8 @@ void test_non_finite_command_values_rejected() {
         m.pos = 100; m.has_speed = true; m.speed = b;
         API(ApiError::BAD_PARAM, send(m));
         API(ApiError::BAD_PARAM, traverse(b, 100, 10));
-        API(ApiError::BAD_PARAM, traverse(60, b, 10));
-        API(ApiError::BAD_PARAM, traverse(60, 100, b));
+        API(ApiError::BAD_PARAM, traverse(70, b, 10));
+        API(ApiError::BAD_PARAM, traverse(70, 100, b));
         Command s = mk(CmdId::START_MEASURE); s.has_pos = true; s.pos = b;
         API(ApiError::BAD_PARAM, send(s));
         API(ApiError::BAD_PARAM, setNum("measure_pos", b));
@@ -870,6 +983,13 @@ int main(int, char**) {
     RUN_TEST(test_traverse_uses_param_defaults);
     RUN_TEST(test_traverse_rejected_in_ready);
     RUN_TEST(test_stop_during_traverse_closes_shutter);
+    RUN_TEST(test_traverse_and_measure_outside_measuring_zone_rejected);
+    RUN_TEST(test_continuous_profile_keeps_shutter_open);
+    RUN_TEST(test_shutter_hold_parameter);
+    RUN_TEST(test_shutter_stays_open_during_long_approach);
+    RUN_TEST(test_auto_shutter_closes_entering_service_zone);
+    RUN_TEST(test_stop_closes_shutter_during_hold_time);
+    RUN_TEST(test_manual_shutter_not_closed_by_hold_time);
     RUN_TEST(test_measure_mode_holds_and_averages);
     RUN_TEST(test_estop_during_traverse);
     RUN_TEST(test_temp_fault_while_idle_keeps_reference);

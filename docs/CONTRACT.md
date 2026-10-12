@@ -1,7 +1,24 @@
-disp# ADD Demo System – Interface Contract
+# ADD Demo System – Interface Contract
 
-**Version:** 1.4.2 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-11
-**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.1
+**Version:** 1.5 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-12
+**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.5
+
+### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
+
+| # | Change | Where |
+|---|---|---|
+| 1 | **Three separate zones** in machine coordinates (origin always on the park side = homing switch): park 0 … 20 (shutter always closed), service > 20 … 60 (shutter only manual), **measuring zone > 60 … 242** (shutter only by the automation). A mirrored installation is handled by `DIR_POSITIVE_HIGH` and the choice of the homing switch (new smoketest sections 2 and 4), never by mirroring the zones | §2, §6.1, `safety_logic.h` |
+| 2 | **Shutter stays open over a measuring programme.** The end of a traverse run no longer closes the shutter. The automatic shutter closes only: after the **hold time** `shutter_hold` (default 3 s) without a measuring mode · on `STOP` (immediately, in the STOP cycle) · when the axis enters the service zone (pos ≤ 60) · on HV loss / `HV_OFF` · on any fault · on `SHUTTER_CLOSE`. A continuous back-and-forth scan (client sends the next `START_TRAVERSE` within the hold time) keeps it open | §5.2, §6.1, §6.4, `safety_logic.h`, `app_logic.h` |
+| 3 | `SafetyStatus::shutter_auto` (automatic vs. manual shutter); invariants **I7** `shutter_auto ⇒ shutter_open`, **I8** automatic shutter ⇒ pos > 60. `SHUTTER_AUTO_OPEN` only at pos > 60 and also **takes over** a manually opened shutter during an acquisition; a manual shutter is never closed by the hold time | `safety_logic.h` |
+| 4 | New signature `safetyShutterAutomation(acquiring, program_active, idle_ms, hold_ms, status, pos, cfg)`; `AppState::prog_active_ms` | `safety_logic.h`, `app_logic.h` |
+| 5 | `START_MEASURE` / `START_TRAVERSE` positions **> 60 mm** (`MotionConfig::measure_min_mm`); parameter ranges `measure_pos`, `traverse_start`, `traverse_end` **61 … 242 mm**; default `traverse_start` **80 mm** (was 60 = service zone limit) | §5.2, §8, §9, `motion_seq.h`, `params.h` |
+| 6 | New persisted parameter **`shutter_hold`** 0.0 … 10.0 s, default 3.0 (0 = close at the end of every run); in `GET_CONFIG` after `traverse_speed`; NVS key `shold`, schema version 4 | §5.3, §9, §12, `params.h`, `nvs_config.h` |
+| 7 | Fix: the `GET_CONFIG` example showed `"traverse_speed":200.0` (pre-V1.3 unit) and lacked `estop_nc` | §5.3 |
+| 8 | Tests: safety (zones, take-over, every way of closing clears `shutter_auto`, hold time), motion (measuring zone), params (ranges, `shutter_hold`, JSON), app_logic (continuous profile without closing, hold parameter, long approach, closing when entering the service zone, STOP during the hold time, manual shutter not closed by the hold time). Reference implementation: 13 suites, **274/274**; mutants without hold time, with the old zone limits, without take-over, without STOP closing or without the service-zone rule are caught | `test/native` |
+
+**Scope note:** plant coordinates for several gauges (offset/sign transformation at the
+API boundary, common time base) are an extension idea for later (Pflichtenheft §11.1);
+they do not touch the safety logic.
 
 ### Changes 1.4.1 → 1.4.2 (smoketest 0a section 5 "distance sensor", 2026-10-11, §14: hardware measurement)
 
@@ -155,12 +172,15 @@ C++17 functions without Arduino/ESP-IDF/FreeRTOS. It is tested on the host
 | Zone (axis mm) | Range | Shutter | Named position |
 |---|---|---|---|
 | Park zone | 0 … 20 | always closed | park position 2 mm (`PARK`) |
-| Service zone | > 20 … 60 | manual `SHUTTER_OPEN` allowed | `maint_pos`, default 40 mm (`SERVICE`), settable 21 … 60 |
-| Material zone | 105 … 225 (stair body, six 20 mm steps centred at 115 … 215, sensor distance 65 … 40 mm) | opened only by the automation during an acquisition | measuring position 155 mm (`measure_pos`, centre of step 3) |
+| Service zone | > 20 … 60 | **only manual** `SHUTTER_OPEN`; an automatic shutter closes when entering | `maint_pos`, default 40 mm (`SERVICE`), settable 21 … 60 |
+| Measuring zone (V1.5) | > 60 … 242 | **only the automation** (during a measuring programme) | `measure_pos` 155, `traverse_start/end` 80/240 (settable 61 … 242) |
+| – material (stair body) | 105 … 225 (six 20 mm steps centred at 115 … 215, sensor distance 65 … 40 mm) | – | measuring position 155 mm (centre of step 3) |
 | Forward end | 242 | – | forward switch at 244.3 mm (measured) |
 
-(The zone between 60 and 105 mm and beyond 225 mm belongs to the traverse range;
-the automation may open the shutter anywhere outside the park zone.)
+The zones are defined in **machine coordinates**; the origin is always on the park
+side (homing switch). They are fixed constants (`SafetyConfig`, `MotionConfig`), not
+settable via the API. A mirrored installation of the measuring frame is handled
+during commissioning (`DIR_POSITIVE_HIGH`, homing switch) – never by mirroring zones.
 
 ---
 
@@ -272,7 +292,7 @@ Exact member order, one line, floats with one decimal:
 | `measure.dist` | calibrated distance sensor → surface, mm |
 | `measure.thick` | `base_dist − dist`, never negative |
 | `measure.on_material` | `thick > edge_threshold` |
-| `measure.valid` | **only true while the shutter is open** (simulates: no radiation → no measurement) |
+| `measure.valid` | **only true while the shutter is open** (simulates: no radiation → no measurement). V1.5: also true during the shutter hold time after a run – profile clients use samples with `mode == "traverse"` |
 | `measure.in_range` | sensor reading within 35 … 300 mm (V1.4.2) |
 | `measure.avg`, `n` | mean thickness over valid on-material samples of the current/last acquisition |
 | `safety.hv_ok` | HV enable conditions met right now |
@@ -309,9 +329,9 @@ because of a full normal queue (§6.7).
 | `MOVE` | `pos` (req.), `speed` (opt., default 10) | READY, RUNNING | absolute move 0…242 mm, 1…20 mm/s; requires homed |
 | `PARK` | – | READY, RUNNING | move to the park position 2 mm at 10 mm/s; requires homed; the shutter closes when entering the park zone, HV is not changed |
 | `SERVICE` | – | READY, RUNNING | move to `maint_pos` (service zone) at 10 mm/s; requires homed |
-| `START_MEASURE` | `pos` (opt., default `measure_pos`) | RUNNING | move to pos (20 < pos ≤ 242), then stationary measurement until `STOP`; shutter opens automatically |
-| `START_TRAVERSE` | `start`, `end`, `speed` (opt., defaults `traverse_*`) | RUNNING | approach start, traverse to end at speed; shutter opens during the run, closes at the end; HV stays on |
-| `STOP` | – | all | controlled stop; acquisition ends, shutter closes |
+| `START_MEASURE` | `pos` (opt., default `measure_pos`) | RUNNING | move to pos (**60 < pos ≤ 242**, V1.5), then stationary measurement until `STOP`; shutter opens automatically |
+| `START_TRAVERSE` | `start`, `end`, `speed` (opt., defaults `traverse_*`) | RUNNING | one run: approach start (10 mm/s, no measurement), traverse to end at speed, stay at end; start and end **> 60 mm** (V1.5), \|end − start\| ≥ 1 mm, end < start allowed; the shutter opens in the run and **stays open for `shutter_hold`** after it (V1.5) so that the next run can follow without closing; HV stays on |
+| `STOP` | – | all | controlled stop; acquisition ends; an automatic shutter closes **in the same cycle** (V1.5); a manually opened shutter is not affected |
 | `GET_STATE` | – | all | heartbeat; reply extra `"state":"READY","sys_err":0,"local":false,"cycle_max_us":312,"period_max_us":1010,"overruns":0,"prio_lat_max_us":1450` (`stateExtraToJson`, §10) |
 | `GET_CONFIG` | – | all | reply extra `"config":{...}` (§5.3) |
 | `SET` | `key`, `value` | all | §9 |
@@ -326,11 +346,12 @@ because of a full normal queue (§6.7).
 ### 5.3 `GET_CONFIG` extra member
 
 ```
-"config":{"measure_pos":155.0,"maint_pos":40.0,"traverse_start":60.0,"traverse_end":240.0,
-"traverse_speed":200.0,"edge_threshold":3.0,"base_dist":70.0,"calib_near_raw":40.0,
+"config":{"measure_pos":155.0,"maint_pos":40.0,"traverse_start":80.0,"traverse_end":240.0,
+"traverse_speed":10.0,"shutter_hold":3.0,"edge_threshold":3.0,"base_dist":70.0,"calib_near_raw":40.0,
 "calib_near_ref":40.0,"calib_far_raw":65.0,"calib_far_ref":65.0,"calib_valid":true,"interlock":false,
-"cooling_flow":false,"temp":18.0,"wifi_ssid":"","wifi_pass_set":false}
+"cooling_flow":false,"temp":18.0,"estop_nc":false,"wifi_ssid":"","wifi_pass_set":false}
 ```
+(one line in reality; exact format in `params.h`, `paramsToJsonMember`)
 
 ### 5.4 Other endpoints
 
@@ -342,7 +363,7 @@ because of a full normal queue (§6.7).
 
 ## 6. Safety logic (`src/logic/safety_logic.h`)
 
-The rules R1 … R7 and invariants I1 … I6 are defined in the header and tested
+The rules R1 … R7 and invariants I1 … I8 are defined in the header and tested
 by `test_safety_logic` (incl. a randomised invariant test over 60 000 steps).
 
 ### 6.1 Conditions
@@ -354,9 +375,14 @@ by `test_safety_logic` (incl. a randomised invariant test over 60 000 steps).
   ESTOP > TEMP_HIGH > MOTOR_FAULT > COMM_TIMEOUT.
 - **Shutter open (AND):** state RUNNING (implies HV on and no fault) ∧ position > 20 mm
   (outside the park zone). **Manual** `SHUTTER_OPEN` additionally requires position ≤ 60 mm
-  (service zone, V1.2); the **automation** (`SHUTTER_AUTO_OPEN`) opens anywhere outside the
-  park zone. A shutter opened in the service zone stays open when the axis leaves it.
-  It closes automatically when HV drops, on any fault and when entering the park zone.
+  (service zone, V1.2); the **automation** (`SHUTTER_AUTO_OPEN`) opens only in the
+  **measuring zone** (> 60 mm, V1.5) and marks the shutter as automatic (`shutter_auto`).
+- **Shutter closes** (any shutter): HV drop or `HV_OFF`, any fault, entering the park zone,
+  `SHUTTER_CLOSE`. **Automatic shutter additionally (V1.5):** entering the service zone
+  (pos ≤ 60), `STOP`, and the hold time `shutter_hold` after the measuring programme
+  (no measuring mode active). A manually opened shutter stays open when the axis leaves
+  the service zone; if an acquisition starts while it is open, the automation takes it
+  over (from then on the automatic rules apply).
 
 ### 6.2 Transitions
 
@@ -366,7 +392,8 @@ by `test_safety_logic` (incl. a randomised invariant test over 60 000 steps).
 | READY | HV_ON, conditions ok | RUNNING | HV on |
 | RUNNING | HV_OFF or condition lost | READY | off |
 | RUNNING | SHUTTER_OPEN, 20 < pos ≤ 60 | RUNNING | shutter open (manual) |
-| RUNNING | SHUTTER_AUTO_OPEN, pos > 20 | RUNNING | shutter open (automation) |
+| RUNNING | SHUTTER_AUTO_OPEN, pos > 60 (V1.5) | RUNNING | shutter open (automation, `shutter_auto`) |
+| RUNNING | automatic shutter: pos ≤ 60, STOP or hold time expired (V1.5) | RUNNING | shutter closed |
 | any except FAULT/WAIT_ACK | fault condition or INIT failed | FAULT | off, motor emergency stop |
 | FAULT | next cycle | WAIT_ACK | off |
 | WAIT_ACK | ACK, cause cleared | RECOVER | off |
@@ -381,11 +408,24 @@ INIT is required again.
 
 See table in §5.2 (column "Allowed in"). Violations return `STATE`.
 
-### 6.4 Shutter automation
+### 6.4 Shutter automation (V1.5)
 
 During an acquisition (traverse run or measure hold) the control logic opens the
-shutter (event `SHUTTER_AUTO_OPEN`) as soon as state is RUNNING and position > 20 mm; when the acquisition
-ends (finished, STOP, fault) it closes the shutter.
+shutter (event `SHUTTER_AUTO_OPEN`) as soon as state is RUNNING and position > 60 mm
+(measuring zone). The shutter then stays open over the whole **measuring programme**:
+the end of a traverse run does not close it. It closes
+
+- after the **hold time** `shutter_hold` (default 3 s, 0 … 10 s) in which no measuring
+  mode was active (`seq.mode == NONE`; the approach phase of the next run counts as
+  active, even if it takes longer than the hold time),
+- immediately on `STOP` (in the STOP cycle),
+- when the axis enters the service zone (pos ≤ 60) or the park zone,
+- on HV loss, `HV_OFF`, any fault and `SHUTTER_CLOSE`.
+
+A continuous back-and-forth profile scan is therefore built by the client: after
+`motion.mode` returned to `none`, send the next `START_TRAVERSE` (e.g. with start and
+end swapped) within the hold time – the shutter is not cycled. With `shutter_hold = 0`
+the shutter closes at the end of every run (behaviour before V1.5).
 
 ### 6.5 Communication watchdog
 
@@ -536,7 +576,8 @@ request per cycle (`MOVE_TO, RUN_BACKWARD, STOP, FORCE_STOP, ZERO_HERE`).
 | Homing speed | 5 mm/s (seek and pull-off), pull-off 2 mm, timeout 70 s |
 | Normal speed: MOVE/PARK/SERVICE default, approach moves | 10 mm/s |
 | Speed range | 1 … 20 mm/s |
-| Acceleration | 500 mm/s² (`ACCEL_MM_S2`, VERIFY 0a) |
+| Acceleration | 500 mm/s² (`ACCEL_MM_S2`, verified in smoketest 0a) |
+| Measuring positions (V1.5) | `START_MEASURE`/`START_TRAVERSE`: > 60 mm (`measure_min_mm`) … 242 mm |
 | Arrival | driver stopped and at target, or stopped for ≥ 100 ms |
 
 Unexpected end switch while the driver runs (forward switch always; backward
@@ -552,11 +593,12 @@ switch outside homing) → force stop, reference lost, `MOTOR_FAULT`
 | `interlock` | bool (or 0/1) | false | – | **no** |
 | `cooling_flow` | bool (or 0/1) | false | – | **no** |
 | `temp` | number | 18.0 | −20.0 … 99.9 °C | **no** |
-| `measure_pos` | number | 155.0 | 21 … 242 mm | yes |
+| `measure_pos` | number | 155.0 | 61 … 242 mm (measuring zone, V1.5) | yes |
 | `maint_pos` | number | 40.0 | 21 … 60 mm (service zone, customer-defined) | yes |
-| `traverse_start` | number | 60.0 | 21 … 242 mm | yes |
-| `traverse_end` | number | 240.0 | 21 … 242 mm | yes |
+| `traverse_start` | number | 80.0 | 61 … 242 mm (V1.5) | yes |
+| `traverse_end` | number | 240.0 | 61 … 242 mm (V1.5) | yes |
 | `traverse_speed` | number | 10.0 | 1 … 20 mm/s | yes |
+| `shutter_hold` | number | 3.0 | 0.0 … 10.0 s – automatic shutter hold time (V1.5) | yes |
 | `edge_threshold` | number | 3.0 | 0.5 … 100 mm (thickness) | yes |
 | `base_dist` | number | 70.0 | 40 … 300 mm (virtual reference plane) | yes |
 | `calib_near_ref` | number | 40.0 | 40 … 300 mm | yes |
@@ -653,7 +695,7 @@ never interrupts a higher one.
 ## 12. System (`src/system/*.h`, `src/comm/*.h`)
 
 - Task watchdog 10 s (ESP-IDF 5 API), control task registered.
-- NVS namespace `add_demo`, schema version 3 (V1.3; older data → defaults), keys see `nvs_config.h`.
+- NVS namespace `add_demo`, schema version 4 (V1.5: `shutter_hold`, measuring zone; older data → defaults), keys see `nvs_config.h`.
 - REBOOT: the network task calls `systemRestart()` `REBOOT_DELAY_MS` = 700 ms after
   the request (HTTP reply sent, REBOOT pattern played).
 

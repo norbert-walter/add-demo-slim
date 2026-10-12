@@ -181,7 +181,7 @@ Implement exactly:
 
 Example of the expected style (rule R6, READY + HV_ON):
     case SafetyState::READY:
-        n.hv_on = false; n.shutter_open = false;
+        outputsOff(n);   // hv_on = shutter_open = shutter_auto = false (V1.5)
         if (ev == SafetyEvent::HV_ON) {
             if (safetyHvConditionsOk(in, cfg)) { n.state = SafetyState::RUNNING; n.hv_on = true; r.api = ApiError::OK; }
             else r.api = ApiError::PRECONDITION;
@@ -192,6 +192,10 @@ Hints:
 - crcFrameVerify uses the LAST occurrence of ,"crc":" and accepts trailing whitespace.
 - The random invariant test (test_invariants_random_sequences) fails if any rule lets the
   shutter be open without HV, HV on outside RUNNING, or outputs on in FAULT/WAIT_ACK/RECOVER.
+- V1.5: EVERY way of closing the shutter must also clear shutter_auto (use one helper).
+  SHUTTER_AUTO_OPEN needs pos > maint_max_mm (measuring zone) and sets shutter_auto (also
+  when the shutter was already open: take-over). In RUNNING an automatic shutter closes
+  when pos <= maint_max_mm. safetyShutterAutomation has the new V1.5 signature (hold time).
 
 Definition of done:
   pio test -e native -f native/test_types_crc -f native/test_safety_logic   -> all green
@@ -300,6 +304,10 @@ Pay attention to:
 - Events raised inside appTick by motionStop / motionEmergencyStop (seq.ev.acq_ended) must be
   consumed in the SAME appTick before the shutter automation (step 8).
 - appCommand: STOP leaves seq.ev.acq_ended pending for the next appTick.
+- V1.5 shutter over a measuring programme: step 8 uses prog_active_ms (updated while
+  seq.mode != NONE) and params.shutter_hold (seconds -> ms) for safetyShutterAutomation;
+  acq_ended does NOT close the shutter any more. STOP closes an AUTOMATIC shutter at once
+  (safetyStep SHUTTER_CLOSE inside appCommand); a manual shutter is left alone.
 - Comm watchdog: arm only on SUCCESS of INIT, MOVE, PARK, SERVICE, START_*, HV_ON (API -> true, LOCAL -> false).
 - V1.2: PARK -> motionStartMove(cfg.motion.park_target_mm, approach_speed);
   SERVICE -> motionStartMove(params.maint_pos, approach_speed).
@@ -327,6 +335,7 @@ Definition of done:
 - [ ] Watchdog-Ent-/Bewaffnung wie CONTRACT §6.5
 - [ ] LOCAL-Prüfung vor dem Zustandsgate; LOCAL-Befehl setzt `local` auch bei Ablehnung
 - [ ] STOP schwächt FORCE_STOP / ZERO_HERE nie ab
+- [ ] V1.5: Ende einer Profilfahrt schließt den Shutter **nicht**; Nachlaufzeit aus `params.shutter_hold`, Zeitbasis `prog_active_ms` auch in der Anfahrphase
 
 ---
 
@@ -632,6 +641,19 @@ Then run the ADD validation (spec §13) against the live device together with me
 ```
 
 ---
+
+## Anhang: Contract V1.5 (Zonen, Shutter über das Messprogramm, 12.10.2026)
+
+Keine neuen Prompts – die Regeln stehen in den Headern und Tests:
+- **S2.1:** `SafetyStatus::shutter_auto`, Invarianten I7/I8, `SHUTTER_AUTO_OPEN` nur in der
+  Messzone (> 60 mm) inkl. Übernahme eines manuell geöffneten Shutters, automatischer Shutter
+  schließt beim Einfahren in die Wartungszone, neue Signatur von `safetyShutterAutomation`.
+- **S2.2:** Bereiche `measure_pos`/`traverse_*` 61 … 242 mm, `traverse_start` 80, neuer
+  Parameter `shutter_hold` (0 … 10 s, 3.0) – auch in `paramsToJsonMember` nach `traverse_speed`.
+- **S2.3:** `MotionConfig::measure_min_mm` (60) statt `park_pos_mm` für Messpositionen.
+- **S2.4:** Nachlaufzeit (`prog_active_ms`), STOP schließt den automatischen Shutter sofort.
+- **S1:** NVS-Schema 4, Schlüssel `shold`.
+**Review aller Sprints ab S2.1:** Zonengrenzen nie hart codieren, immer `SafetyConfig`/`MotionConfig`.
 
 ## Anhang: Contract V1.4 (Smoketest 0a, 11.10.2026)
 

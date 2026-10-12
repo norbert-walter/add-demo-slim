@@ -1,6 +1,6 @@
 /**
  * @file params.h
- * @brief Parameters, simulated safety flags and the SET key table (FROZEN CONTRACT V1.4 §9).
+ * @brief Parameters, simulated safety flags and the SET key table (FROZEN CONTRACT V1.5 §9).
  *
  * Implementation: src/logic/params.cpp (Sprint S2.2).
  *
@@ -8,11 +8,13 @@
  *   interlock       bool    false   -                    no  (safety flag)
  *   cooling_flow    bool    false   -                    no  (safety flag)
  *   temp            number  18.0    -20.0 .. 99.9 °C     no  (safety flag)
- *   measure_pos     number  155.0   21.0 .. 242.0 mm     yes  (V1.4.2: centre of step 3)
+ *   measure_pos     number  155.0   61.0 .. 242.0 mm     yes  (V1.4.2: centre of step 3; V1.5: measuring zone)
  *   maint_pos       number  40.0    21.0 .. 60.0 mm      yes  (V1.2: service position, service zone)
- *   traverse_start  number  60.0    21.0 .. 242.0 mm     yes
- *   traverse_end    number  240.0   21.0 .. 242.0 mm     yes
+ *   traverse_start  number  80.0    61.0 .. 242.0 mm     yes  (V1.5: measuring zone, default 80)
+ *   traverse_end    number  240.0   61.0 .. 242.0 mm     yes  (V1.5: measuring zone)
  *   traverse_speed  number  10.0    1 .. 20 mm/s         yes  (V1.3: mm/s)
+ *   shutter_hold    number  3.0     0.0 .. 10.0 s        yes  (V1.5: automatic shutter stays open this
+ *                                                              long after a measuring mode ended)
  *   edge_threshold  number  3.0     0.5 .. 100.0 mm      yes  (thickness threshold!)
  *   base_dist       number  70.0    40.0 .. 300.0 mm     yes  (V1.2: virtual reference plane,
  *                                                              thick = base_dist - dist; 70 mm = material edge)
@@ -41,9 +43,10 @@
 struct Params {
     float       measure_pos    = 155.0f;    ///< V1.4.2: centre of step 3 (145 was a step edge)
     float       maint_pos      = 40.0f;
-    float       traverse_start = 60.0f;
+    float       traverse_start = 80.0f;     ///< V1.5 (was 60, now in the measuring zone)
     float       traverse_end   = 240.0f;
     float       traverse_speed = 10.0f;     ///< mm/s
+    float       shutter_hold   = 3.0f;      ///< V1.5: s, automatic shutter hold time
     float       edge_threshold = 3.0f;
     float       base_dist      = 70.0f;
     CalibPoints calib;                  ///< near_ref/far_ref settable via SET, *_raw via CALIB
@@ -73,8 +76,8 @@ ApiError paramSet(Params& p, SafetyFlags& f, const char* key,
 
 /**
  * Writes the configuration as ONE JSON member (no surrounding braces), exactly:
- *   "config":{"measure_pos":155.0,"maint_pos":40.0,"traverse_start":60.0,
- *   "traverse_end":240.0,"traverse_speed":10.0,"edge_threshold":3.0,"base_dist":70.0,
+ *   "config":{"measure_pos":155.0,"maint_pos":40.0,"traverse_start":80.0,
+ *   "traverse_end":240.0,"traverse_speed":10.0,"shutter_hold":3.0,"edge_threshold":3.0,"base_dist":70.0,
  *   "calib_near_raw":40.0,"calib_near_ref":40.0,"calib_far_raw":65.0,
  *   "calib_far_ref":65.0,"calib_valid":true,"interlock":false,
  *   "cooling_flow":false,"temp":18.0,"estop_nc":false,"wifi_ssid":"","wifi_pass_set":false}

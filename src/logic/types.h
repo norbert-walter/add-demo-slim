@@ -1,6 +1,6 @@
 /**
  * @file types.h
- * @brief Shared types of the ADD Demo System (FROZEN CONTRACT V1.4).
+ * @brief Shared types of the ADD Demo System (FROZEN CONTRACT V1.5).
  *
  * Pure C++ header: no Arduino, no ESP-IDF, no FreeRTOS includes.
  * Every module in src/logic/ must compile on the host (native tests).

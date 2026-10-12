@@ -39,7 +39,7 @@ pio device monitor -e smoketest           # "help"
 | Sprint | Dateien | Stand |
 |---|---|---|
 | 0a | smoketest | bereit zum Flashen |
-| 0b | Header, CONTRACT V1.4, Tests, app/* | erledigt (V1.3: mm/s, Signale, WLAN-Wiederverbindung, Herzschlag, Not-Aus-Parameter; V1.4: Werte aus Smoketest 0a) |
+| 0b | Header, CONTRACT V1.5, Tests, app/* | erledigt (V1.3: mm/s, Signale, WLAN-Wiederverbindung, Herzschlag, Not-Aus-Parameter; V1.4: Werte aus Smoketest 0a; V1.5: Zonen, Shutter über das Messprogramm) |
 | S1 | system, nvs_config, wifi_manager, log_buffer, main | offen |
 | S2.1–S2.4 | logic/*.cpp | offen (Tests rot bis Implementierung) |
 | S2.5 | hal_io, motion_drv | offen |

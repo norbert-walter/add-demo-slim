@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.3) – Sprint S2.2 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5) – Sprint S2.2 must make these pass. Do not modify.
 // Covers: src/logic/params.cpp (CONTRACT §9)
 #include <unity.h>
 #include <string.h>
@@ -21,9 +21,10 @@ void test_defaults() {
     Params p; p.measure_pos = 1; paramsDefaults(p);
     TEST_ASSERT_EQUAL_FLOAT(155.0f, p.measure_pos);
     TEST_ASSERT_EQUAL_FLOAT(40.0f, p.maint_pos);
-    TEST_ASSERT_EQUAL_FLOAT(60.0f, p.traverse_start);
+    TEST_ASSERT_EQUAL_FLOAT(80.0f, p.traverse_start);        // V1.5: in the measuring zone
     TEST_ASSERT_EQUAL_FLOAT(240.0f, p.traverse_end);
     TEST_ASSERT_EQUAL_FLOAT(10.0f, p.traverse_speed);        // mm/s (V1.3)
+    TEST_ASSERT_EQUAL_FLOAT(3.0f, p.shutter_hold);           // s (V1.5)
     TEST_ASSERT_FALSE(p.estop_nc);                           // simple switch, active LOW
     TEST_ASSERT_EQUAL_FLOAT(3.0f, p.edge_threshold);
     TEST_ASSERT_EQUAL_FLOAT(70.0f, p.base_dist);
@@ -68,9 +69,10 @@ void test_temp() {
 }
 void test_numeric_params_ranges_and_persist() {
     struct R { const char* k; double lo, hi; } rs[] = {
-        {"measure_pos", 21, 242}, {"maint_pos", 21, 60},
-        {"traverse_start", 21, 242}, {"traverse_end", 21, 242},
-        {"traverse_speed", 1, 20}, {"edge_threshold", 0.5, 100}, {"base_dist", 40, 300},
+        {"measure_pos", 61, 242}, {"maint_pos", 21, 60},          // V1.5: measuring zone > 60 mm
+        {"traverse_start", 61, 242}, {"traverse_end", 61, 242},
+        {"traverse_speed", 1, 20}, {"shutter_hold", 0, 10},
+        {"edge_threshold", 0.5, 100}, {"base_dist", 40, 300},
         {"calib_near_ref", 40, 300}, {"calib_far_ref", 40, 300},
     };
     for (auto& r : rs) {
@@ -85,9 +87,10 @@ void test_numeric_params_ranges_and_persist() {
 void test_values_land_in_right_fields() {
     OK(setNum("measure_pos", 111)); TEST_ASSERT_EQUAL_FLOAT(111.0f, P.measure_pos);
     OK(setNum("maint_pos", 33)); TEST_ASSERT_EQUAL_FLOAT(33.0f, P.maint_pos);
-    OK(setNum("traverse_start", 22)); TEST_ASSERT_EQUAL_FLOAT(22.0f, P.traverse_start);
+    OK(setNum("traverse_start", 72)); TEST_ASSERT_EQUAL_FLOAT(72.0f, P.traverse_start);
     OK(setNum("traverse_end", 222)); TEST_ASSERT_EQUAL_FLOAT(222.0f, P.traverse_end);
     OK(setNum("traverse_speed", 13.5)); TEST_ASSERT_EQUAL_FLOAT(13.5f, P.traverse_speed);
+    OK(setNum("shutter_hold", 2.5)); TEST_ASSERT_EQUAL_FLOAT(2.5f, P.shutter_hold);
     OK(setNum("edge_threshold", 4.5)); TEST_ASSERT_EQUAL_FLOAT(4.5f, P.edge_threshold);
     OK(setNum("base_dist", 199)); TEST_ASSERT_EQUAL_FLOAT(199.0f, P.base_dist);
     OK(setNum("calib_near_ref", 60)); TEST_ASSERT_EQUAL_FLOAT(60.0f, P.calib.near_ref);
@@ -122,7 +125,8 @@ void test_nan_rejected() {
     BAD(setNum("measure_pos", 0.0 / 0.0));
     // V1.4.1: +-Inf as well, for every numeric key (SET value 1e999 arrives as +inf)
     const char* keys[] = {"temp", "measure_pos", "maint_pos", "traverse_start", "traverse_end",
-                          "traverse_speed", "edge_threshold", "base_dist", "calib_near_ref", "calib_far_ref"};
+                          "traverse_speed", "shutter_hold", "edge_threshold", "base_dist", "calib_near_ref",
+                          "calib_far_ref"};
     const double bad[] = {0.0 / 0.0, 1.0 / 0.0, -1.0 / 0.0};
     for (const char* k : keys)
         for (double v : bad) BAD(setNum(k, v));
@@ -149,8 +153,8 @@ void test_config_json_exact_defaults() {
     char buf[600];
     int n = paramsToJsonMember(P, F, buf, sizeof(buf));
     TEST_ASSERT_EQUAL_STRING(
-        "\"config\":{\"measure_pos\":155.0,\"maint_pos\":40.0,\"traverse_start\":60.0,"
-        "\"traverse_end\":240.0,\"traverse_speed\":10.0,\"edge_threshold\":3.0,\"base_dist\":70.0,"
+        "\"config\":{\"measure_pos\":155.0,\"maint_pos\":40.0,\"traverse_start\":80.0,"
+        "\"traverse_end\":240.0,\"traverse_speed\":10.0,\"shutter_hold\":3.0,\"edge_threshold\":3.0,\"base_dist\":70.0,"
         "\"calib_near_raw\":40.0,\"calib_near_ref\":40.0,\"calib_far_raw\":65.0,"
         "\"calib_far_ref\":65.0,\"calib_valid\":true,\"interlock\":false,"
         "\"cooling_flow\":false,\"temp\":18.0,\"estop_nc\":false,\"wifi_ssid\":\"\",\"wifi_pass_set\":false}", buf);

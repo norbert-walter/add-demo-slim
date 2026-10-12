@@ -1,10 +1,11 @@
 /**
  * @file nvs_config.h
- * @brief Persistence of Params in NVS via Preferences (FROZEN CONTRACT V1.4 §9, Sprint S1).
+ * @brief Persistence of Params in NVS via Preferences (FROZEN CONTRACT V1.5 §9, Sprint S1).
  *
  * Namespace NVS_NAMESPACE. One key per Params field (short keys, max 15 chars):
- *   mpos, maint, tstart, tend, tspeed, edge, base, cnraw, cnref, cfraw, cfref, estnc, ssid, pass,
- *   plus "ver" (uint8, schema version = 3; V1.3 speeds in mm/s – older data -> defaults).
+ *   mpos, maint, tstart, tend, tspeed, shold, edge, base, cnraw, cnref, cfraw, cfref, estnc, ssid, pass,
+ *   plus "ver" (uint8, schema version = 4; V1.3 speeds in mm/s, V1.5 measuring zone > 60 mm and
+ *   shutter_hold "shold" – older data -> defaults).
  * Safety flags (interlock, cooling_flow, temp) are NEVER stored.
  * Called only from setup() and from the network task (Core 0) – never from
  * the control task (flash writes take milliseconds).

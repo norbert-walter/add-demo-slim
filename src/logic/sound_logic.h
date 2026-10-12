@@ -1,6 +1,6 @@
 /**
  * @file sound_logic.h
- * @brief Buzzer patterns for the ACTIVE buzzer on i2so.7 (FROZEN CONTRACT V1.4 §11.1).
+ * @brief Buzzer patterns for the ACTIVE buzzer on i2so.7 (FROZEN CONTRACT V1.5 §11.1).
  *
  * Implementation: src/logic/sound_logic.cpp (Sprint S2.4). Pure, no hardware.
  * The buzzer can only be switched on/off (fixed tone), so signals differ by

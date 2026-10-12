@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.3) – Sprint S2.1 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5) – Sprint S2.1 must make these pass. Do not modify.
 // Covers: src/logic/safety_logic.cpp (CONTRACT §6). Rules R1..R7 refer to safety_logic.h.
 #include <unity.h>
 #include "logic/safety_logic.h"
@@ -15,8 +15,16 @@ static SafetyInputs good() {
     in.motor_fault = false; in.comm_timeout = false; in.pos_mm = 100.0f; in.homed = true;
     return in;
 }
-static SafetyStatus st(SafetyState s, bool hv = false, bool sh = false, ErrorCode e = ErrorCode::NONE) {
-    SafetyStatus x; x.state = s; x.hv_on = hv; x.shutter_open = sh; x.err = e; return x;
+static SafetyStatus st(SafetyState s, bool hv = false, bool sh = false, ErrorCode e = ErrorCode::NONE,
+                       bool au = false) {
+    SafetyStatus x; x.state = s; x.hv_on = hv; x.shutter_open = sh; x.err = e; x.shutter_auto = au; return x;
+}
+// V1.5: shutter opened by the automation (RUNNING, HV on, shutter open, shutter_auto)
+static SafetyStatus stAuto() { return st(SafetyState::RUNNING, true, true, ErrorCode::NONE, true); }
+// shorthand for the V1.5 automation call
+static SafetyEvent automation(bool acquiring, bool active, uint32_t idle_ms, uint32_t hold_ms,
+                              const SafetyStatus& s, float pos) {
+    return safetyShutterAutomation(acquiring, active, idle_ms, hold_ms, s, pos, CFG);
 }
 static SafetyResult step(const SafetyStatus& s, SafetyEvent ev, const SafetyInputs& in) {
     return safetyStep(s, ev, in, CFG);
@@ -34,6 +42,9 @@ static void checkInvariants(const SafetyStatus& s, const SafetyInputs& in) {
     TEST_ASSERT_TRUE_MESSAGE(errSet == faultState, "I4 err <=> FAULT/WAIT_ACK");
     if (s.shutter_open) TEST_ASSERT_TRUE_MESSAGE(in.pos_mm > CFG.park_pos_mm, "I5 shutter only outside park");
     if (s.hv_on) TEST_ASSERT_TRUE_MESSAGE(safetyHvConditionsOk(in, CFG), "I6 hv_on => conditions ok");
+    if (s.shutter_auto) TEST_ASSERT_TRUE_MESSAGE(s.shutter_open, "I7 shutter_auto => shutter_open");
+    if (s.shutter_open && s.shutter_auto)
+        TEST_ASSERT_TRUE_MESSAGE(in.pos_mm > CFG.maint_max_mm, "I8 automatic shutter only in the measuring zone");
 }
 
 // ---- basic functions -------------------------------------------------------------
@@ -178,11 +189,25 @@ void test_r7_shutter_open_in_park_rejected() {
     in.pos_mm = 20.1f;
     TEST_ASSERT_TRUE(step(st(SafetyState::RUNNING, true), SafetyEvent::SHUTTER_OPEN, in).next.shutter_open);
 }
-// V1.2: automation opens anywhere outside the park zone (material zone included)
-void test_r7_auto_open_outside_park() {
-    SafetyInputs in = good(); in.pos_mm = 145.0f;
-    SafetyResult r = step(st(SafetyState::RUNNING, true), SafetyEvent::SHUTTER_AUTO_OPEN, in);
-    TEST_ASSERT_TRUE(r.next.shutter_open); ASSERT_API(ApiError::OK, r.api);
+// V1.5: automation opens only in the measuring zone (> maint_max_mm = 60 mm)
+void test_r7_auto_open_only_in_measuring_zone() {
+    SafetyInputs in = good();
+    const float ok_pos[]  = {60.1f, 105.0f, 145.0f, 242.0f};
+    const float bad_pos[] = {20.1f, 40.0f, 60.0f};
+    for (float p : ok_pos) {
+        in.pos_mm = p;
+        SafetyResult r = step(st(SafetyState::RUNNING, true), SafetyEvent::SHUTTER_AUTO_OPEN, in);
+        TEST_ASSERT_TRUE(r.next.shutter_open); TEST_ASSERT_TRUE(r.next.shutter_auto);
+        ASSERT_API(ApiError::OK, r.api);
+    }
+    for (float p : bad_pos) {
+        in.pos_mm = p;
+        SafetyResult r = step(st(SafetyState::RUNNING, true), SafetyEvent::SHUTTER_AUTO_OPEN, in);
+        TEST_ASSERT_FALSE(r.next.shutter_open); TEST_ASSERT_FALSE(r.next.shutter_auto);
+        ASSERT_API(ApiError::PRECONDITION, r.api);
+    }
+    in.pos_mm = 145.0f;
+    SafetyResult r;
     ASSERT_API(ApiError::STATE, step(st(SafetyState::READY), SafetyEvent::SHUTTER_AUTO_OPEN, in).api);
     in.cooling_flow = false;
     r = step(st(SafetyState::RUNNING, true), SafetyEvent::SHUTTER_AUTO_OPEN, in);
@@ -192,12 +217,62 @@ void test_r7_auto_open_outside_park() {
 void test_r7_manual_open_stays_open_outside_service_zone() {
     SafetyInputs in = good(); in.pos_mm = 40.0f;
     SafetyStatus s = step(st(SafetyState::RUNNING, true), SafetyEvent::SHUTTER_OPEN, in).next;
+    TEST_ASSERT_TRUE(s.shutter_open); TEST_ASSERT_FALSE(s.shutter_auto);   // manual
     in.pos_mm = 145.0f;
+    s = step(s, SafetyEvent::TICK, in).next;
+    TEST_ASSERT_TRUE(s.shutter_open);
+    in.pos_mm = 40.0f;                              // V1.5: manual shutter stays open in the service zone
     s = step(s, SafetyEvent::TICK, in).next;
     TEST_ASSERT_TRUE(s.shutter_open);
     in.pos_mm = 19.0f;                              // entering the park zone closes it
     s = step(s, SafetyEvent::TICK, in).next;
     TEST_ASSERT_FALSE(s.shutter_open);
+}
+// V1.5: the AUTOMATIC shutter closes when the axis enters the service zone (<= 60 mm)
+void test_r7_auto_shutter_closes_entering_service_zone() {
+    SafetyInputs in = good(); in.pos_mm = 60.1f;
+    SafetyResult r = step(stAuto(), SafetyEvent::TICK, in);
+    TEST_ASSERT_TRUE(r.next.shutter_open); TEST_ASSERT_TRUE(r.next.shutter_auto);
+    in.pos_mm = 60.0f;
+    r = step(stAuto(), SafetyEvent::TICK, in);
+    ASSERT_STATE(SafetyState::RUNNING, r.next.state); TEST_ASSERT_TRUE(r.next.hv_on);
+    TEST_ASSERT_FALSE(r.next.shutter_open); TEST_ASSERT_FALSE(r.next.shutter_auto);
+    in.pos_mm = 40.0f;                              // also with any command event
+    r = step(stAuto(), SafetyEvent::HV_ON, in);
+    TEST_ASSERT_FALSE(r.next.shutter_open); ASSERT_API(ApiError::OK, r.api);
+}
+// V1.5: a manually opened shutter is taken over by the automation (SHUTTER_AUTO_OPEN
+// while open): from then on the automatic closing rules apply
+void test_r7_auto_takes_over_manual_shutter() {
+    SafetyInputs in = good(); in.pos_mm = 40.0f;
+    SafetyStatus s = step(st(SafetyState::RUNNING, true), SafetyEvent::SHUTTER_OPEN, in).next;
+    in.pos_mm = 145.0f;
+    SafetyResult r = step(s, SafetyEvent::SHUTTER_AUTO_OPEN, in);
+    ASSERT_API(ApiError::OK, r.api);
+    TEST_ASSERT_TRUE(r.next.shutter_open); TEST_ASSERT_TRUE(r.next.shutter_auto);
+    in.pos_mm = 50.0f;
+    s = step(r.next, SafetyEvent::TICK, in).next;
+    TEST_ASSERT_FALSE(s.shutter_open); TEST_ASSERT_FALSE(s.shutter_auto);
+}
+// V1.5: every way of closing clears shutter_auto
+void test_r7_closing_clears_shutter_auto() {
+    SafetyInputs in = good();
+    SafetyResult r = step(stAuto(), SafetyEvent::SHUTTER_CLOSE, in);
+    TEST_ASSERT_FALSE(r.next.shutter_open); TEST_ASSERT_FALSE(r.next.shutter_auto);
+    r = step(stAuto(), SafetyEvent::HV_OFF, in);
+    TEST_ASSERT_FALSE(r.next.shutter_open); TEST_ASSERT_FALSE(r.next.shutter_auto);
+    in.cooling_flow = false;                         // HV conditions lost -> READY
+    r = step(stAuto(), SafetyEvent::TICK, in);
+    TEST_ASSERT_FALSE(r.next.shutter_open); TEST_ASSERT_FALSE(r.next.shutter_auto);
+    in = good(); in.estop = true;                    // fault
+    r = step(stAuto(), SafetyEvent::TICK, in);
+    TEST_ASSERT_FALSE(r.next.shutter_open); TEST_ASSERT_FALSE(r.next.shutter_auto);
+    in = good(); in.pos_mm = 19.0f;                  // park zone
+    r = step(stAuto(), SafetyEvent::TICK, in);
+    TEST_ASSERT_FALSE(r.next.shutter_open); TEST_ASSERT_FALSE(r.next.shutter_auto);
+    in = good(); in.pos_mm = 40.0f;                  // manual open in the service zone is never "auto"
+    r = step(st(SafetyState::RUNNING, true), SafetyEvent::SHUTTER_OPEN, in);
+    TEST_ASSERT_TRUE(r.next.shutter_open); TEST_ASSERT_FALSE(r.next.shutter_auto);
 }
 void test_r7_shutter_auto_closes_entering_park() {
     SafetyInputs in = good(); in.pos_mm = 19.9f;
@@ -349,26 +424,37 @@ void test_cmd_gate_matrix() {
     }
 }
 
-// ---- shutter automation ----------------------------------------------------------------------
-void test_auto_open_when_acquiring_outside_park() {
-    ASSERT_STATE(SafetyEvent::SHUTTER_AUTO_OPEN,
-                 safetyShutterAutomation(true, false, st(SafetyState::RUNNING, true), 50.0f, CFG));
-    ASSERT_STATE(SafetyEvent::SHUTTER_AUTO_OPEN,
-                 safetyShutterAutomation(true, false, st(SafetyState::RUNNING, true), 145.0f, CFG));
+// ---- shutter automation (V1.5) ----------------------------------------------------------------
+void test_auto_open_when_acquiring_in_measuring_zone() {
+    const SafetyStatus closed = st(SafetyState::RUNNING, true);
+    ASSERT_STATE(SafetyEvent::SHUTTER_AUTO_OPEN, automation(true, true, 0, 3000, closed, 60.1f));
+    ASSERT_STATE(SafetyEvent::SHUTTER_AUTO_OPEN, automation(true, true, 0, 3000, closed, 145.0f));
 }
-void test_auto_no_open_in_park_or_not_running() {
-    ASSERT_STATE(SafetyEvent::TICK, safetyShutterAutomation(true, false, st(SafetyState::RUNNING, true), 20.0f, CFG));
-    ASSERT_STATE(SafetyEvent::TICK, safetyShutterAutomation(true, false, st(SafetyState::READY), 50.0f, CFG));
-    ASSERT_STATE(SafetyEvent::TICK, safetyShutterAutomation(false, false, st(SafetyState::RUNNING, true), 50.0f, CFG));
-    ASSERT_STATE(SafetyEvent::TICK, safetyShutterAutomation(true, false, st(SafetyState::RUNNING, true, true), 50.0f, CFG));
+void test_auto_no_open_outside_measuring_zone_or_not_running() {
+    const SafetyStatus closed = st(SafetyState::RUNNING, true);
+    ASSERT_STATE(SafetyEvent::TICK, automation(true, true, 0, 3000, closed, 20.0f));
+    ASSERT_STATE(SafetyEvent::TICK, automation(true, true, 0, 3000, closed, 50.0f));    // service zone
+    ASSERT_STATE(SafetyEvent::TICK, automation(true, true, 0, 3000, closed, 60.0f));
+    ASSERT_STATE(SafetyEvent::TICK, automation(true, true, 0, 3000, st(SafetyState::READY), 145.0f));
+    ASSERT_STATE(SafetyEvent::TICK, automation(false, true, 0, 3000, closed, 145.0f));  // approach: no open
+    ASSERT_STATE(SafetyEvent::TICK, automation(true, true, 0, 3000, stAuto(), 145.0f)); // already automatic
 }
-void test_auto_close_on_acquisition_end() {
-    ASSERT_STATE(SafetyEvent::SHUTTER_CLOSE,
-                 safetyShutterAutomation(false, true, st(SafetyState::RUNNING, true, true), 50.0f, CFG));
-    ASSERT_STATE(SafetyEvent::TICK,
-                 safetyShutterAutomation(false, true, st(SafetyState::RUNNING, true, false), 50.0f, CFG));
-    ASSERT_STATE(SafetyEvent::SHUTTER_CLOSE,   // close has priority
-                 safetyShutterAutomation(true, true, st(SafetyState::RUNNING, true, true), 50.0f, CFG));
+void test_auto_takes_over_manually_opened_shutter() {
+    const SafetyStatus manual = st(SafetyState::RUNNING, true, true);   // open, shutter_auto false
+    ASSERT_STATE(SafetyEvent::SHUTTER_AUTO_OPEN, automation(true, true, 0, 3000, manual, 145.0f));
+    ASSERT_STATE(SafetyEvent::TICK, automation(false, false, 99999, 3000, manual, 145.0f)); // never auto-closed
+}
+// The shutter stays open over a whole measuring programme: the end of one traverse
+// does NOT close it; it closes only after the hold time without a measuring mode.
+void test_auto_close_only_after_hold_time() {
+    ASSERT_STATE(SafetyEvent::TICK, automation(false, true, 0, 3000, stAuto(), 145.0f));      // approach of next run
+    ASSERT_STATE(SafetyEvent::TICK, automation(false, false, 0, 3000, stAuto(), 145.0f));     // run just ended
+    ASSERT_STATE(SafetyEvent::TICK, automation(false, false, 2999, 3000, stAuto(), 145.0f));
+    ASSERT_STATE(SafetyEvent::SHUTTER_CLOSE, automation(false, false, 3000, 3000, stAuto(), 145.0f));
+    ASSERT_STATE(SafetyEvent::SHUTTER_CLOSE, automation(false, false, 0, 0, stAuto(), 145.0f)); // hold 0
+    ASSERT_STATE(SafetyEvent::TICK, automation(false, true, 99999, 0, stAuto(), 145.0f));     // active: never
+    ASSERT_STATE(SafetyEvent::TICK, automation(false, false, 99999, 3000,
+                                               st(SafetyState::RUNNING, true), 145.0f));     // already closed
 }
 
 // ---- comm watchdog ---------------------------------------------------------------------------
@@ -448,7 +534,10 @@ int main(int, char**) {
     RUN_TEST(test_r7_hv_off_to_ready_closes_shutter);
     RUN_TEST(test_r7_hv_on_idempotent);
     RUN_TEST(test_r7_manual_shutter_open_only_in_service_zone);
-    RUN_TEST(test_r7_auto_open_outside_park);
+    RUN_TEST(test_r7_auto_open_only_in_measuring_zone);
+    RUN_TEST(test_r7_auto_shutter_closes_entering_service_zone);
+    RUN_TEST(test_r7_auto_takes_over_manual_shutter);
+    RUN_TEST(test_r7_closing_clears_shutter_auto);
     RUN_TEST(test_r7_manual_open_stays_open_outside_service_zone);
     RUN_TEST(test_r7_shutter_open_in_park_rejected);
     RUN_TEST(test_r7_shutter_auto_closes_entering_park);
@@ -471,9 +560,10 @@ int main(int, char**) {
     RUN_TEST(test_r4_recover_never_turns_hv_on);
     RUN_TEST(test_full_cycle_estop_ack_recover);
     RUN_TEST(test_cmd_gate_matrix);
-    RUN_TEST(test_auto_open_when_acquiring_outside_park);
-    RUN_TEST(test_auto_no_open_in_park_or_not_running);
-    RUN_TEST(test_auto_close_on_acquisition_end);
+    RUN_TEST(test_auto_open_when_acquiring_in_measuring_zone);
+    RUN_TEST(test_auto_no_open_outside_measuring_zone_or_not_running);
+    RUN_TEST(test_auto_takes_over_manually_opened_shutter);
+    RUN_TEST(test_auto_close_only_after_hold_time);
     RUN_TEST(test_comm_timeout);
     RUN_TEST(test_comm_timeout_wraparound);
     RUN_TEST(test_invariants_random_sequences);

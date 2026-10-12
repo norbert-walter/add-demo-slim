@@ -1,13 +1,29 @@
 # Pflichtenheft – Demoanlage ADD (Slim)
 
-**Stand:** 2026-10-11
+**Stand:** 2026-10-12
 **Autor:** Norbert Walter
-**Version:** 1.7.4 (Contract V1.4.2, Ergebnisse Smoketest 0a vollständig)
+**Version:** 1.7.5 (Contract V1.5: Zonen, Shutter über das Messprogramm)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.7.4 → V1.7.5 (Contract V1.5, 12.10.2026)
+
+Anlass: Bei einer kontinuierlichen Profilfahrt (hin und her) öffnete und schloss der
+Shutter bei jedem Durchgang – das geht auf die Lebensdauer des Shutters.
+
+| Bereich | V1.7.4 | V1.7.5 |
+|---|---|---|
+| Zonen | Park 0 … 20, Wartung 20 … 60, Automatik überall außerhalb der Parkzone | **drei getrennte Zonen** in Maschinenkoordinaten (Nullpunkt immer auf der Parkseite = Referenzschalter): Park 0 … 20 (Shutter immer zu), Wartung > 20 … 60 (Shutter nur manuell), **Messzone > 60 … 242** (Shutter nur durch die Automatik). Feste Konstanten, nicht per API verstellbar |
+| Shutter bei Profilfahrt | schließt am Ende jeder Fahrt | **bleibt über das Messprogramm offen**; schließt erst nach der **Nachlaufzeit** `shutter_hold` (Standard 3 s) ohne Messmodus, sofort bei `STOP`, beim Einfahren in die Wartungs- oder Parkzone, bei HV-Abfall/`HV_OFF`, Fehler, `SHUTTER_CLOSE` |
+| Manueller Shutter | – | wird nie durch die Nachlaufzeit geschlossen; startet währenddessen eine Messung, übernimmt die Automatik ihn |
+| Messpositionen | `START_MEASURE`/`START_TRAVERSE` > 20 mm, Parameter 21 … 242 | **> 60 mm**, Parameter `measure_pos`, `traverse_start/end` **61 … 242**; Standard-Profil **80 → 240** |
+| Neuer Parameter | – | `shutter_hold` 0 … 10 s (0 = Verhalten wie bisher) |
+| Seitenwechsel des Messbügels | – | bei der Inbetriebnahme über `DIR_POSITIVE_HIGH` und die Wahl des Referenzschalters (neuer Smoketest Abschnitte 2 und 4), nie durch Spiegeln der Zonen |
+| Anlagenkoordinaten | – | Idee für später (§11.1): Umrechnung Maschine ↔ Anlage für mehrere Messeinrichtungen |
+| Contract-Beispiel `GET_CONFIG` | `"traverse_speed":200.0` | korrigiert auf 10.0 |
 
 ### V1.7.3 → V1.7.4
 
@@ -190,11 +206,17 @@ optischen Abstandssensor ersetzt. Die Firmware wird agentenbasiert entwickelt
 |---|---|---|
 | Parkzone | 0 … 20 mm | Shutter immer geschlossen |
 | Parkposition | 2 mm | Ziel von **PARK** |
-| Wartungszone | 20 … 60 mm | Shutter darf manuell geöffnet werden (Prüfung der Quelle); vom Kunden vorgegeben |
+| Wartungszone | > 20 … 60 mm | Shutter **nur manuell** (Prüfung der Quelle); ein automatisch geöffneter Shutter schließt beim Einfahren; vom Kunden vorgegeben |
 | Wartungsposition | 40 mm (Parameter `maint_pos`, 21 … 60 mm) | Ziel von **SERV** |
-| Messgutbereich | 105 … 225 mm | Stufenkörper, sechs Stufen à 20 mm, Messwerte 65 … 40 mm; Shutter nur automatisch während einer Messung |
+| **Messzone** (V1.5) | > 60 … 242 mm | Shutter **nur durch die Automatik** während eines Messprogramms; alle Mess- und Profilpositionen liegen hier (61 … 242 mm) |
+| Messgutbereich | 105 … 225 mm | Stufenkörper, sechs Stufen à 20 mm, Messwerte 65 … 40 mm |
 | Messposition | 155 mm (Mitte Stufe 3, Messwert 55 mm) | Normalposition, Ziel von **MEAS** |
-| Profilfahrt | 60 → 240 mm | Standard für **TRAV** |
+| Profilfahrt | 80 → 240 mm (V1.5) | Standard für **TRAV** |
+
+Die Zonen gelten in **Maschinenkoordinaten**; der Nullpunkt liegt immer auf der Parkseite
+(Referenzschalter). Die Wartungszone liegt damit immer zwischen Park- und Messzone. Wird
+der Messbügel seitenverkehrt eingebaut, werden bei der Inbetriebnahme Drehrichtung und
+Referenzschalter getauscht (Smoketest 2 und 4) – die Zonen bleiben unverändert.
 
 ### Kalibrierpunkte (Smoketest 0a, 11.10.2026, mit 11 kΩ Last am Sensor)
 
@@ -331,7 +353,7 @@ scripts/                     serial_cmd.py, add_client.py
 ### 5.3 Betriebsmodi
 
 **Stehende Messung (`START_MEASURE`)** – nur in RUNNING
-- Fährt mit 10 mm/s an die Messposition (20 < pos ≤ 242 mm, Standard 155 mm)
+- Fährt mit 10 mm/s an die Messposition (60 < pos ≤ 242 mm, Messzone, Standard 155 mm)
 - Shutter öffnet automatisch, Messung bis `STOP`
 - Mittelwert und Anzahl gültiger Werte in `/proc` (`avg`, `n`)
 
@@ -340,8 +362,15 @@ scripts/                     serial_cmd.py, add_client.py
 - SERVICE fährt auf `maint_pos` (Wartungszone); dort darf der Shutter manuell geöffnet werden
 
 **Profilfahrt (`START_TRAVERSE`)** – nur in RUNNING
-- Anfahrt Startposition, dann Fahrt zur Endposition mit konstanter Geschwindigkeit
-- Shutter offen während der Profilfahrt, schließt am Ende; HV bleibt an
+- Eine Fahrt: Anfahrt der Startposition mit 10 mm/s (ohne Messung), dann Fahrt zur
+  Endposition mit konstanter Geschwindigkeit `speed` (mit Messung); danach steht die Achse
+  an der Endposition. Start und Ende in der Messzone (> 60 mm), Abstand ≥ 1 mm, Rückwärts erlaubt
+- Shutter öffnet in der Fahrt und **bleibt nach dem Ende `shutter_hold` (3 s) offen**
+  (V1.5). Startet der Client in dieser Zeit die nächste Fahrt (z. B. Start und Ende
+  vertauscht), bleibt er offen – kontinuierliche Hin- und Rückfahrt ohne Shutter-Spiel.
+  Ohne Folgefahrt schließt er nach der Nachlaufzeit; `STOP` schließt sofort. HV bleibt an
+- Mehrere Durchgänge, Endlos-Querprofil oder kantengeführter Scan: Ablauf im Client
+  (Python/KI), Ende einer Fahrt erkennbar an `motion.mode == "none"` in `/proc`
 - Kantenerkennung: Messgut, wenn `thick > edge_threshold`
 - Statistik nur über gültige Werte auf Messgut (Lücken ignoriert)
 - Messwerte für Profile holt der Client per `/proc`-Polling (z. B. 200 ms)
@@ -419,7 +448,7 @@ im AP-Modus gibt es kein Internet), Fallback `sans-serif` / `monospace`.
 
 **Seite 2 – Settings (`/settings`)**
 - Werte beim Laden per `GET_CONFIG`
-- Messposition, Wartungsposition `maint_pos` (21 … 60 mm), Profilfahrt (Start/Ende/Geschwindigkeit), Kantenschwelle, `base_dist`
+- Messposition, Wartungsposition `maint_pos` (21 … 60 mm), Profilfahrt (Start/Ende/Geschwindigkeit), Shutter-Nachlaufzeit `shutter_hold` (V1.5), Kantenschwelle, `base_dist`
 - Sicherheitsflags (Toggle Interlock, Toggle Cooling, Temperatur)
 - Kalibrierung: Referenzwerte Nah/Fern (`SET calib_near_ref/far_ref`),
   Tasten Capture Near / Capture Far / Capture Base / Save / Reset (`CALIB`)
@@ -586,9 +615,13 @@ Reaktion im selben Zyklus: Shutter zu → Motor Not-Halt → HV aus → FAULT �
 
 ### Shutter
 Öffnen nur in RUNNING und außerhalb der Parkzone (> 20 mm). **Manuell** nur in der
-Wartungszone (20 … 60 mm); im Messgutbereich öffnet nur die Automatik während einer
-Messung. Schließt bei HV-Abfall, jedem Fehler, Einfahrt in die Parkzone und Ende der
-Messung. Ein in der Wartungszone geöffneter Shutter bleibt offen, wenn die Achse sie verlässt.
+Wartungszone (20 … 60 mm); in der **Messzone (> 60 mm)** öffnet nur die Automatik während
+einer Messung (V1.5). Jeder Shutter schließt bei HV-Abfall, `HV_OFF`, jedem Fehler,
+Einfahrt in die Parkzone und `SHUTTER_CLOSE`. Der **automatische** Shutter bleibt über
+das Messprogramm offen und schließt zusätzlich beim Einfahren in die Wartungszone, bei
+`STOP` und nach der Nachlaufzeit `shutter_hold` ohne Messmodus. Ein in der Wartungszone
+manuell geöffneter Shutter bleibt offen, wenn die Achse sie verlässt; beginnt dann eine
+Messung, übernimmt ihn die Automatik.
 
 ### Wiederanlauf
 **Kein automatischer Wiederanlauf.** Nach ACK bleiben HV und Shutter aus. Wurde
@@ -777,6 +810,8 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 - [ ] Nach ACK kein automatischer Wiederanlauf; nach Not-Aus in Fahrt erneutes INIT nötig
 - [ ] Shutter öffnet nie in der Parkzone (≤ 20 mm)
 - [ ] `SHUTTER_OPEN` manuell nur in der Wartungszone; bei 145 mm → `PRECONDITION`
+- [ ] V1.5: Automatischer Shutter nie in der Wartungszone (≤ 60 mm); schließt beim Einfahren
+- [ ] V1.5: Hin- und Rückfahrt mit Folgebefehl innerhalb von 3 s → Shutter bleibt offen; 3 s nach der letzten Fahrt zu; `STOP` schließt sofort
 - [ ] Fahrt auf 242 mm löst den vorderen Endschalter nicht aus
 - [ ] Not-Aus und `cooling_flow = false` gleichzeitig → `FAULT ESTOP`
 - [ ] STOP per API während Profilfahrt: Antwort < 150 ms, Achse steht < 1 s (`stress_api.py latency`)
@@ -851,7 +886,7 @@ S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
 | Autonomy-Level im ADD | konzeptionell Level 2, Scores in S6 | Offen (S6) |
 | Python-Demo-Skripte | S6 | Offen |
 
-### 11.1 Erweiterungen nach S6 (Ideen, V1.7.4)
+### 11.1 Erweiterungen nach S6 (Ideen, V1.7.4 / V1.7.5)
 
 Nicht Teil des Sprintplans und nicht im Contract. Aufnahme erst nach S6, jeweils mit eigener
 Contract-Version.
@@ -864,3 +899,4 @@ Contract-Version.
 | **Offline-Doku auf der Anlage** | Kompakte HTML-Fassung im SPIFFS (≈ 1 MB frei), ausgeliefert vom eingebauten Webserver im AP-Modus | Messen haben oft kein verlässliches Internet |
 | **Dokumentation per KI** | Softwareschnittstelle und Befehlssatz aus `CONTRACT.md` und Headern, technische Beschreibung aus Pflichtenheft und Smoketest-Protokoll, Bedienhandbuch mit menschlichem Input (Abläufe, Fotos) | Sicherheitshinweise und Not-Aus: KI entwirft, Mensch prüft und gibt frei |
 | **KI-gestützte Serientests (Präsentationsthema)** | Grundsatz: Sicherheit hängt nicht von der KI ab – deterministische Schicht (Verriegelungen, Zäune bei HV/Shutter, Not-Aus, Grenzwerte in der Firmware), die KI arbeitet nur innerhalb dieses Rahmens. Eingefrorene Kette (Modell, Quantisierung, Inferenz-Software, Prompt, Testvorgaben; Temperatur 0), Änderung = Requalifizierung. Erste Läufe menschlich begleitet mit vorher festgelegtem Endkriterium. Stufenweise: erst Sensorik, dann gefährliche Aktionen; Stufenübergänge per fester Regel, nicht per KI-Urteil. Langsame Bewegungen, Plausibilisierung mit weiteren Größen (Strom, Kühlwasserfluss, Brandmeldung). Watchdog → sicherer Zustand, lückenloses Protokoll, Ergebnis vom Menschen freigegeben. Eigenes Sicherheitskonzept (Rahmen IEC 61508 / ISO 13849, KI als nicht sicherheitsgerichteter Teil) | Die Demoanlage zeigt das Prinzip im Kleinen: Argumentprüfung, richtungsabhängige Endschalter, Freigaben in `.clinerules`, eingefrorene Contract-Tests |
+| **Anlagenkoordinaten (Ebene 2, V1.7.5)** | Zwei Ebenen: Die Zonen und alle Sicherheitsprüfungen bleiben in **Maschinenkoordinaten** (Ebene 1, Nullpunkt auf der Parkseite). Für mehrere Messeinrichtungen – z. B. zwei leicht versetzt gegenüberstehende Messbügel, die ortssynchron messen – rechnet jedes Gerät an der Schnittstelle um: `x_Anlage = coord_offset + coord_sign · x_Maschine` (Parameter `coord_offset` in mm, `coord_sign` ±1). Positionen in Befehlen werden zuerst in Maschinenkoordinaten umgerechnet und **danach** gegen die Zonen geprüft; `/proc` meldet die Position zusätzlich in Anlagenkoordinaten. Für die zeitliche Zuordnung eine gemeinsame Zeitbasis (SNTP oder Synchronimpuls) | Ein Leitsystem oder eine KI schickt allen Geräten dieselbe Anlagenposition. Ein falscher Versatz oder ein falsches Vorzeichen kann höchstens `BAD_PARAM` oder eine falsche Position bewirken, nie eine Zonenverletzung. Betrifft nur API und `/proc` (S3), nicht die Sicherheitslogik |

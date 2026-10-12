@@ -1,6 +1,6 @@
 /**
  * @file measure_logic.h
- * @brief Pure measurement chain (FROZEN CONTRACT V1.4 §7). No hardware access.
+ * @brief Pure measurement chain (FROZEN CONTRACT V1.5 §7). No hardware access.
  *
  * Implementation: src/logic/measure_logic.cpp (Sprint S2.2).
  *

@@ -1,6 +1,6 @@
 /**
  * @file app_logic.h
- * @brief Complete application logic as pure functions (FROZEN CONTRACT V1.4 §10).
+ * @brief Complete application logic as pure functions (FROZEN CONTRACT V1.5 §10).
  *
  * Implementation: src/logic/app_logic.cpp (Sprint S2.4).
  *
@@ -64,6 +64,7 @@ struct AppState {
     uint32_t local_last_ms = 0;      ///< time of the last LOCAL command
 
     SoundPlayer snd;                 ///< V1.3: buzzer pattern player
+    uint32_t    prog_active_ms = 0;  ///< V1.5: last cycle with seq.mode != NONE (shutter hold time)
     bool        boot_sound_done = false;   ///< V1.3: BOOT pattern started on the first appTick
 };
 
@@ -150,8 +151,14 @@ void appMeasure(AppState& s, const AppConfig& cfg, float median_mv, uint32_t now
  *        -> motionEmergencyStop, d = FORCE_STOP (overrides d)
  *  6. state != RUNNING && seq.mode != NONE -> motionStop (d = STOP unless d is FORCE_STOP)
  *  7. ev.acq_started -> statsReset(stats)
- *  8. e = safetyShutterAutomation(motionAcquiring(seq), ev.acq_ended || acq ended in 5/6, ...)
+ *  8. V1.5: active = seq.mode != NONE; active -> prog_active_ms = now;
+ *     e = safetyShutterAutomation(motionAcquiring(seq), active,
+ *                                 idle_ms = now - prog_active_ms (wrap-around safe),
+ *                                 hold_ms = lroundf(params.shutter_hold * 1000), safety, pos, cfg.safety)
  *     e != TICK -> safetyStep(e)
+ *     (ev.acq_ended no longer closes the shutter: it stays open over a measuring
+ *      programme and closes after the hold time, on STOP, when entering the
+ *      service zone, on HV loss or on a fault.)
  *  9. comm_armed && seq.phase == IDLE && !safety.hv_on -> comm_armed = false
  *  9b. V1.1: local && seq.phase == IDLE && !safety.hv_on &&
  *      (now - local_last_ms) >= local_hold_ms  -> local = false   (wrap-around safe)
@@ -177,7 +184,8 @@ HwOutputs appTick(AppState& s, const HwInputs& hw, const AppConfig& cfg);
  *  - INIT/MOVE/START_*: motion_seq start functions. Defaults: MOVE speed =
  *    approach_speed; START_MEASURE pos = params.measure_pos; START_TRAVERSE
  *    start/end/speed = params.traverse_*.
- *  - STOP: motionStop, OK.
+ *  - STOP: motionStop, OK. V1.5: if safety.shutter_open && safety.shutter_auto
+ *          -> safetyStep(SHUTTER_CLOSE) immediately (STOP ends the measuring programme).
  *  - SET: paramSet; persist -> out.persist.
  *    V1.3: key "estop_nc" only if seq.phase == IDLE && !safety.hv_on, else PRECONDITION.
  *  - CALIB: seq.phase != IDLE -> BUSY.
@@ -199,7 +207,7 @@ HwOutputs appTick(AppState& s, const HwInputs& hw, const AppConfig& cfg);
  *  - V1.3 sounds: entered FAULT (e.g. HV_ON with E-stop) -> ESTOP/FAULT as in appTick;
  *    source LOCAL and result OK -> CLICK (lowest priority); out.sound / out.buzzer updated.
  *  - Motion events raised here (e.g. acq_ended by STOP) stay pending in seq.ev
- *    and are processed by the next appTick (shutter closes one cycle later).
+ *    and are processed by the next appTick.
  */
 ApiError appCommand(AppState& s, const Command& cmd, const HwInputs& hw,
                     const AppConfig& cfg, HwOutputs& out);
