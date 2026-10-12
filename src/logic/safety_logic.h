@@ -1,6 +1,6 @@
 /**
  * @file safety_logic.h
- * @brief Pure safety state machine (FROZEN CONTRACT V1.5 §6). No hardware access.
+ * @brief Pure safety state machine (FROZEN CONTRACT V1.5.2 §6). No hardware access.
  *
  * Implementation: src/logic/safety_logic.cpp (Sprint S2.1).
  * The machine is a pure function: given the current status, one event and the
@@ -102,22 +102,30 @@ ErrorCode safetyFaultCause(const SafetyInputs& in, const SafetyConfig& cfg);
  *    state except FAULT/WAIT_ACK.
  *    api: OK for TICK, HV_OFF, SHUTTER_CLOSE; STATE for all other events.
  *
- * R2 FAULT:    TICK -> WAIT_ACK (err kept, motor_stop = true).
+ * V1.5.2: in every state except RUNNING the result has hv_on = false,
+ *    shutter_open = false and shutter_auto = false, even if cur (inconsistently)
+ *    has them set ("outputs forced off outside RUNNING").
+ *
+ * R2 FAULT:    motor_stop = true on EVERY event (V1.5.2 clarification).
+ *              TICK -> WAIT_ACK (err kept).
  *              HV_OFF, SHUTTER_CLOSE -> OK, no change. Other events -> STATE.
- * R3 WAIT_ACK: outputs off, motor_stop = true on every step.
+ * R3 WAIT_ACK: outputs off, motor_stop = true on EVERY event, including a
+ *              rejected ACK (V1.5.2 clarification).
  *              ACK: if safetyFaultCause(in) == NONE -> RECOVER, err = NONE, OK;
  *                   else stay, api = PRECONDITION.
  *              TICK, HV_OFF, SHUTTER_CLOSE -> OK, no change. Other -> STATE.
  * R4 RECOVER:  TICK -> READY if in.homed, else SAFE_START.
  *              HV_OFF, SHUTTER_CLOSE -> OK. Other events -> STATE.
- * R5 SAFE_START: INIT_DONE -> READY. TICK, HV_OFF, SHUTTER_CLOSE -> OK.
+ * R5 SAFE_START: INIT_DONE -> READY (unconditionally; in.homed is NOT checked,
+ *              INIT_DONE itself means homing succeeded). TICK, HV_OFF, SHUTTER_CLOSE -> OK.
  *              Other events (HV_ON, SHUTTER_OPEN, ACK) -> STATE.
  * R6 READY:    HV_ON: conditions ok -> RUNNING, hv on, OK; else PRECONDITION.
  *              INIT_DONE, TICK, HV_OFF, SHUTTER_CLOSE -> OK, no change.
  *              SHUTTER_OPEN, ACK -> STATE.
  * R7 RUNNING:  first, on EVERY event: if !safetyHvConditionsOk(in) -> READY,
  *              hv off, shutter closed; api = PRECONDITION for HV_ON,
- *              SHUTTER_OPEN and SHUTTER_AUTO_OPEN, OK for all others except ACK (STATE).
+ *              SHUTTER_OPEN and SHUTTER_AUTO_OPEN, OK for all others
+ *              (including INIT_DONE and TICK) except ACK (STATE).
  *              Then (conditions ok):
  *              - if shutter open and pos_mm <= park_pos_mm -> shutter closed.
  *              - V1.5: if shutter open && shutter_auto && pos_mm <= maint_max_mm

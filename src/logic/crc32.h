@@ -1,6 +1,6 @@
 /**
  * @file crc32.h
- * @brief CRC32 (IEEE 802.3 / zlib) and the JSON CRC frame (FROZEN CONTRACT V1.5 §4).
+ * @brief CRC32 (IEEE 802.3 / zlib) and the JSON CRC frame (FROZEN CONTRACT V1.5.2 §4).
  *
  * Pure C++, no ESP-IDF dependency. The firmware uses this implementation on the
  * target as well, so host tests and target behave identically.
@@ -53,3 +53,13 @@ int crcFrameAppend(char* buf, size_t len, size_t cap);
  * @return true if the frame is well-formed and the CRC matches.
  */
 bool crcFrameVerify(const char* body, size_t len);
+
+/*
+ * V1.5.2 implementation constraints (crc32.cpp):
+ *   - No internal size limit: crcFrameVerify must work for any len (frames of
+ *     several kB, e.g. /proc responses). No fixed-size copy buffer.
+ *   - Any len is valid input, including len < 8 (e.g. "x", "{}"): return false,
+ *     no out-of-bounds access, no pointer arithmetic before body.
+ *   - No static mutable state (no lazily initialised tables, no static flags);
+ *     a const table or computing on the fly is fine. Functions are reentrant.
+ */

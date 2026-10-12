@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.1 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-12
+**Version:** 1.5.2 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-12
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.5
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -20,6 +20,19 @@
 are English as required by the Pflichtenheft (§13, `display.h`: `FAULT:`, `CAUSE ACTIVE`,
 `ACK - HOLD 1 s`); calibration procedure uses the step centres 215/115 (§7.3); slot mapping
 `I2SO_TO_SLOT(n) = n` (§11); lower-boom reading (§7.2).
+
+**Clarifications 1.5.2 (review of Sprint S2.1, 2026-10-12, no behaviour change — the
+reference implementation already behaved like this; the tests now enforce it):**
+
+| # | Clarification | Where |
+|---|---|---|
+| 1 | FAULT: `motor_stop = true` on **every** event, not only on `TICK` (R2) | `safety_logic.h` |
+| 2 | WAIT_ACK: `motor_stop = true` on every event, **including a rejected ACK** (R3) | `safety_logic.h` |
+| 3 | SAFE_START: `INIT_DONE` → READY **unconditionally**; `in.homed` is not checked (R5) | `safety_logic.h` |
+| 4 | RUNNING: `INIT_DONE` and `TICK` → OK, also after condition loss (R7) | `safety_logic.h` |
+| 5 | Outside RUNNING the result always has `hv_on`, `shutter_open`, `shutter_auto` = false, even for an inconsistent `cur` | `safety_logic.h` |
+| 6 | `crcFrameVerify`: no internal size limit (frames of several kB), any `len` incl. `len < 8` without out-of-bounds access; `crc32.cpp` without static mutable state (reentrant) | `crc32.h` |
+| 7 | New tests: safety +5 (`test_r2_fault_motor_stop_on_every_event`, `test_r3_motor_stop_on_every_event`, `test_r5_init_done_ready_unconditional`, `test_r7_init_done_ok`, `test_outputs_forced_off_outside_running`), types_crc +3 (`test_frame_long_body_roundtrip`, `test_frame_long_body_fake_crc_rejected`, `test_frame_verify_short_inputs`). Reference implementation: 13 suites, **282/282** | `test/native` |
 
 **Scope note:** plant coordinates for several gauges (offset/sign transformation at the
 API boundary, common time base) are an extension idea for later (Pflichtenheft §11.1);

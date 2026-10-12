@@ -1,6 +1,7 @@
-// FROZEN TESTS (Contract V1.3) – Sprint S2.1 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.2) – Sprint S2.1 must make these pass. Do not modify.
 // Covers: src/logic/types.cpp, src/logic/crc32.cpp  (CONTRACT §3, §4)
 #include <unity.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include "logic/types.h"
@@ -153,6 +154,46 @@ void test_frame_verify_uses_last_occurrence() {
     TEST_ASSERT_TRUE(crcFrameVerify(buf, (size_t)n));
 }
 
+// ---- V1.5.2: no size limit, short inputs -------------------------------------------
+// Builds {"d":"xxxx...x"} with n payload characters into buf (cap >= n + 32).
+static size_t buildLong(char* buf, size_t n) {
+    size_t k = 0;
+    memcpy(buf, "{\"d\":\"", 6); k = 6;
+    for (size_t i = 0; i < n; ++i) buf[k++] = (char)('a' + (i % 26));
+    buf[k++] = '"'; buf[k++] = '}'; buf[k] = '\0';
+    return k;
+}
+void test_frame_long_body_roundtrip() {
+    static char buf[4200];
+    const size_t sizes[] = {500, 506, 520, 1500, 4000};   // around and far beyond 512
+    for (size_t n : sizes) {
+        size_t len = buildLong(buf, n);
+        int m = crcFrameAppend(buf, len, sizeof(buf));
+        TEST_ASSERT_EQUAL_INT((int)(len + 17), m);
+        TEST_ASSERT_TRUE_MESSAGE(crcFrameVerify(buf, (size_t)m), "long frame must verify");
+        buf[10] ^= 1;                                       // tamper early in the body
+        TEST_ASSERT_FALSE_MESSAGE(crcFrameVerify(buf, (size_t)m), "long tampered frame must fail");
+    }
+}
+void test_frame_long_body_fake_crc_rejected() {
+    static char buf[4200];
+    size_t len = buildLong(buf, 2000);
+    TEST_ASSERT_TRUE(crc32Ieee((const uint8_t*)buf, len) != 0u);   // so "00000000" is wrong
+    memcpy(buf + len - 1, ",\"crc\":\"00000000\"}", 18);      // overwrite '}' + NUL
+    TEST_ASSERT_FALSE(crcFrameVerify(buf, strlen(buf)));
+}
+void test_frame_verify_short_inputs() {
+    // heap buffers of exactly len bytes (no NUL): any read beyond len is caught by ASan
+    const char* a[] = {"x", "{}", "}", "{\"a\"}", ",\"crc\":", ",\"crc\":\"", "\"}"};
+    for (const char* s : a) {
+        size_t len = strlen(s);
+        char* p = (char*)malloc(len);
+        memcpy(p, s, len);
+        TEST_ASSERT_FALSE_MESSAGE(crcFrameVerify(p, len), s);
+        free(p);
+    }
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_safety_state_names);
@@ -174,5 +215,8 @@ int main(int, char**) {
     RUN_TEST(test_frame_verify_detects_tampering);
     RUN_TEST(test_frame_verify_malformed);
     RUN_TEST(test_frame_verify_uses_last_occurrence);
+    RUN_TEST(test_frame_long_body_roundtrip);
+    RUN_TEST(test_frame_long_body_fake_crc_rejected);
+    RUN_TEST(test_frame_verify_short_inputs);
     return UNITY_END();
 }
