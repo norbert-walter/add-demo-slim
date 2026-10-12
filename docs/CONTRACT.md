@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.2 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-12
+**Version:** 1.5.3 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-12
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.5
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -33,6 +33,15 @@ reference implementation already behaved like this; the tests now enforce it):**
 | 5 | Outside RUNNING the result always has `hv_on`, `shutter_open`, `shutter_auto` = false, even for an inconsistent `cur` | `safety_logic.h` |
 | 6 | `crcFrameVerify`: no internal size limit (frames of several kB), any `len` incl. `len < 8` without out-of-bounds access; `crc32.cpp` without static mutable state (reentrant) | `crc32.h` |
 | 7 | New tests: safety +5 (`test_r2_fault_motor_stop_on_every_event`, `test_r3_motor_stop_on_every_event`, `test_r5_init_done_ready_unconditional`, `test_r7_init_done_ok`, `test_outputs_forced_off_outside_running`), types_crc +3 (`test_frame_long_body_roundtrip`, `test_frame_long_body_fake_crc_rejected`, `test_frame_verify_short_inputs`). Reference implementation: 13 suites, **282/282** | `test/native` |
+
+**Clarifications 1.5.3 (second review of Sprint S2.1, differential test against the reference
+implementation, 2026-10-12, no behaviour change):**
+
+| # | Clarification | Where |
+|---|---|---|
+| 1 | R1 (fault entry) is checked **first, for every event**, including `INIT_DONE`; no rule may short-cut it. A one-shot `motor_fault` in the cycle in which homing finishes leads to FAULT | `safety_logic.h` |
+| 2 | Active fault cause together with `INIT_FAILED`: the cause wins (`err` = cause, not `HOMING_FAILED`) | `safety_logic.h` |
+| 3 | New tests (safety +5): `test_r1_matrix_every_event_every_cause` (4 states × 4 causes × 9 events), `test_r1_motor_fault_with_init_done`, `test_api_table_all_states_all_events` (API code and next state for all 6 × 9 combinations), `test_r4_recover_init_done_rejected`, `test_r7_init_done_applies_closing_rules`. Reference implementation: 13 suites, **287/287** | `test/native` |
 
 **Scope note:** plant coordinates for several gauges (offset/sign transformation at the
 API boundary, common time base) are an extension idea for later (Pflichtenheft §11.1);

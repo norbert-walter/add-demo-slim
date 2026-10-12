@@ -1,6 +1,7 @@
-// FROZEN TESTS (Contract V1.5.2) – Sprint S2.1 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.3) – Sprint S2.1 must make these pass. Do not modify.
 // Covers: src/logic/safety_logic.cpp (CONTRACT §6). Rules R1..R7 refer to safety_logic.h.
 #include <unity.h>
+#include <stdio.h>
 #include "logic/safety_logic.h"
 
 static SafetyConfig CFG;
@@ -576,6 +577,103 @@ void test_outputs_forced_off_outside_running() {
     }
 }
 
+// ---- V1.5.3: R1 before every other rule, complete API table --------------------------
+static bool benignEv(SafetyEvent ev) {
+    return ev == SafetyEvent::TICK || ev == SafetyEvent::HV_OFF || ev == SafetyEvent::SHUTTER_CLOSE;
+}
+// consistent status for an operational state (RUNNING: HV on, automatic shutter open)
+static SafetyStatus opStatus(SafetyState s) {
+    if (s == SafetyState::RUNNING) return stAuto();
+    return st(s);
+}
+
+// R1 matrix: every operational state x every cause x every event -> FAULT
+void test_r1_matrix_every_event_every_cause() {
+    const SafetyState states[] = {SafetyState::SAFE_START, SafetyState::READY, SafetyState::RUNNING,
+                                  SafetyState::RECOVER};
+    for (SafetyState s : states) {
+        for (int c = 0; c < 4; ++c) {
+            SafetyInputs in = good();
+            ErrorCode exp = ErrorCode::NONE;
+            switch (c) {
+                case 0: in.estop = true;        exp = ErrorCode::ESTOP;        break;
+                case 1: in.temp_c = 40.0f;      exp = ErrorCode::TEMP_HIGH;    break;
+                case 2: in.motor_fault = true;  exp = ErrorCode::MOTOR_FAULT;  break;
+                default: in.comm_timeout = true; exp = ErrorCode::COMM_TIMEOUT; break;
+            }
+            for (SafetyEvent ev : ALL_EVENTS) {
+                char msg[96];
+                snprintf(msg, sizeof(msg), "R1: state %d, cause %d, event %d", (int)s, (int)exp, (int)ev);
+                SafetyResult r = step(opStatus(s), ev, in);
+                TEST_ASSERT_EQUAL_INT_MESSAGE((int)SafetyState::FAULT, (int)r.next.state, msg);
+                TEST_ASSERT_EQUAL_INT_MESSAGE((int)exp, (int)r.next.err, msg);   // cause wins over HOMING_FAILED
+                TEST_ASSERT_TRUE_MESSAGE(r.motor_stop, msg);
+                TEST_ASSERT_FALSE_MESSAGE(r.next.hv_on, msg);
+                TEST_ASSERT_FALSE_MESSAGE(r.next.shutter_open, msg);
+                TEST_ASSERT_FALSE_MESSAGE(r.next.shutter_auto, msg);
+                TEST_ASSERT_EQUAL_INT_MESSAGE((int)(benignEv(ev) ? ApiError::OK : ApiError::STATE), (int)r.api, msg);
+                checkInvariants(r.next, in);
+            }
+        }
+    }
+}
+// a one-shot motor fault in the cycle in which homing finishes must not be lost
+void test_r1_motor_fault_with_init_done() {
+    SafetyInputs in = good(); in.motor_fault = true;
+    SafetyResult r = step(st(SafetyState::SAFE_START), SafetyEvent::INIT_DONE, in);
+    ASSERT_STATE(SafetyState::FAULT, r.next.state);
+    ASSERT_STATE(ErrorCode::MOTOR_FAULT, r.next.err);
+    TEST_ASSERT_TRUE(r.motor_stop);
+}
+// API code and next state for every (state, event) with all conditions good
+void test_api_table_all_states_all_events() {
+    const ApiError O = ApiError::OK, S = ApiError::STATE, P = ApiError::PRECONDITION;
+    const SafetyState SS = SafetyState::SAFE_START, RD = SafetyState::READY, RU = SafetyState::RUNNING,
+                      FA = SafetyState::FAULT, WA = SafetyState::WAIT_ACK, RC = SafetyState::RECOVER;
+    // columns: TICK, INIT_DONE, INIT_FAILED, HV_ON, HV_OFF, SHUTTER_OPEN, SHUTTER_CLOSE, ACK, SHUTTER_AUTO_OPEN
+    struct Row { SafetyState from; ApiError api[9]; SafetyState next[9]; };
+    const Row rows[] = {
+        {SS, {O, O, S, S, O, S, O, S, S},  {SS, RD, FA, SS, SS, SS, SS, SS, SS}},
+        {RD, {O, O, S, O, O, S, O, S, S},  {RD, RD, FA, RU, RD, RD, RD, RD, RD}},
+        // RUNNING at pos 100 (measuring zone), HV on, shutter closed
+        {RU, {O, O, S, O, O, P, O, S, O},  {RU, RU, FA, RU, RD, RU, RU, RU, RU}},
+        {FA, {O, S, S, S, O, S, O, S, S},  {WA, FA, FA, FA, FA, FA, FA, FA, FA}},
+        {WA, {O, S, S, S, O, S, O, O, S},  {WA, WA, WA, WA, WA, WA, WA, RC, WA}},
+        {RC, {O, S, S, S, O, S, O, S, S},  {RD, RC, FA, RC, RC, RC, RC, RC, RC}},
+    };
+    for (const Row& row : rows) {
+        bool faultState = row.from == FA || row.from == WA;
+        SafetyStatus cur = st(row.from, row.from == RU, false, faultState ? ErrorCode::ESTOP : ErrorCode::NONE);
+        for (int e = 0; e < 9; ++e) {
+            char msg[64];
+            snprintf(msg, sizeof(msg), "state %d, event %d", (int)row.from, e);
+            SafetyResult r = step(cur, ALL_EVENTS[e], good());
+            TEST_ASSERT_EQUAL_INT_MESSAGE((int)row.api[e], (int)r.api, msg);
+            TEST_ASSERT_EQUAL_INT_MESSAGE((int)row.next[e], (int)r.next.state, msg);
+            checkInvariants(r.next, good());
+        }
+    }
+}
+// RECOVER with homed = false: INIT_DONE does not shortcut to READY; TICK -> SAFE_START
+void test_r4_recover_init_done_rejected() {
+    SafetyInputs in = good(); in.homed = false;
+    SafetyResult r = step(st(SafetyState::RECOVER), SafetyEvent::INIT_DONE, in);
+    ASSERT_STATE(SafetyState::RECOVER, r.next.state); ASSERT_API(ApiError::STATE, r.api);
+    ASSERT_STATE(SafetyState::SAFE_START, step(st(SafetyState::RECOVER), SafetyEvent::TICK, in).next.state);
+}
+// RUNNING + INIT_DONE: the closing rules of R7 apply as for every other event
+void test_r7_init_done_applies_closing_rules() {
+    SafetyInputs in = good(); in.pos_mm = 40.0f;                 // service zone
+    SafetyResult r = step(stAuto(), SafetyEvent::INIT_DONE, in);
+    TEST_ASSERT_FALSE_MESSAGE(r.next.shutter_open, "automatic shutter closes in the service zone");
+    TEST_ASSERT_FALSE(r.next.shutter_auto);
+    in.pos_mm = 10.0f;                                           // park zone
+    r = step(st(SafetyState::RUNNING, true, true), SafetyEvent::INIT_DONE, in);
+    TEST_ASSERT_FALSE_MESSAGE(r.next.shutter_open, "shutter closes in the park zone");
+    TEST_ASSERT_TRUE(r.next.hv_on);
+    checkInvariants(r.next, in);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_initial_status);
@@ -635,5 +733,10 @@ int main(int, char**) {
     RUN_TEST(test_r5_init_done_ready_unconditional);
     RUN_TEST(test_r7_init_done_ok);
     RUN_TEST(test_outputs_forced_off_outside_running);
+    RUN_TEST(test_r1_matrix_every_event_every_cause);
+    RUN_TEST(test_r1_motor_fault_with_init_done);
+    RUN_TEST(test_api_table_all_states_all_events);
+    RUN_TEST(test_r4_recover_init_done_rejected);
+    RUN_TEST(test_r7_init_done_applies_closing_rules);
     return UNITY_END();
 }
