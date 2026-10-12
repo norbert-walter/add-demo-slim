@@ -46,7 +46,7 @@ Teil der Definition of Done in `.clinerules`.
 | 0a | `src/smoketest/smoketest.cpp` (0a.3) | ✅ fertig | Smoketest-Protokoll freigegeben (5.2 bekannte Einschränkung) | ✅ 11.10.2026, Tag `sprint-0a` |
 | 0b | Header, CONTRACT, Tests, `src/app/*` | ✅ fertig (Claude) | 287/287 gegen Referenzimplementierung | ✅ Contract V1.5.3 |
 | S1 | system, nvs_config, wifi_manager, log_buffer, main, `logic/wifi_logic.cpp` | ⬜ offen | `test_wifi_logic` | – |
-| S2.1 | `logic/types.cpp`, `crc32.cpp`, `safety_logic.cpp` | ⬜ offen | `test_types_crc`, `test_safety_logic` | – |
+| S2.1 | `logic/types.cpp`, `crc32.cpp`, `safety_logic.cpp` | ✅ fertig | `test_types_crc` 22/22 · `test_safety_logic` 62/62 | ✅ 12.10.2026 |
 | S2.2 | `logic/measure_logic.cpp`, `params.cpp` | ⬜ offen | `test_measure_logic`, `test_params` | – |
 | S2.3 | `logic/motion_seq.cpp` | ⬜ offen | `test_motion_seq` | – |
 | S2.4 | `logic/app_logic.cpp`, `sound_logic.cpp` | ⬜ offen | `test_app_logic`, `test_sound_logic` | – |
