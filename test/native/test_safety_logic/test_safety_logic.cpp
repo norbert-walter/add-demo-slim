@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5) – Sprint S2.1 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.2) – Sprint S2.1 must make these pass. Do not modify.
 // Covers: src/logic/safety_logic.cpp (CONTRACT §6). Rules R1..R7 refer to safety_logic.h.
 #include <unity.h>
 #include "logic/safety_logic.h"
@@ -514,6 +514,68 @@ void test_estop_and_cooling_loss_simultaneous() {
     ASSERT_API(ApiError::STATE, r.api);
 }
 
+// ---- V1.5.2: clarifications from the S2.1 review ------------------------------------
+static const SafetyEvent ALL_EVENTS[] = {
+    SafetyEvent::TICK, SafetyEvent::INIT_DONE, SafetyEvent::INIT_FAILED, SafetyEvent::HV_ON,
+    SafetyEvent::HV_OFF, SafetyEvent::SHUTTER_OPEN, SafetyEvent::SHUTTER_CLOSE, SafetyEvent::ACK,
+    SafetyEvent::SHUTTER_AUTO_OPEN};
+
+// R2: motor_stop = true on EVERY event in FAULT (not only on TICK)
+void test_r2_fault_motor_stop_on_every_event() {
+    SafetyInputs in = good(); in.estop = true;
+    for (SafetyEvent ev : ALL_EVENTS) {
+        SafetyResult r = step(st(SafetyState::FAULT, false, false, ErrorCode::ESTOP), ev, in);
+        TEST_ASSERT_TRUE_MESSAGE(r.motor_stop, "FAULT: motor_stop on every event (cause active)");
+        r = step(st(SafetyState::FAULT, false, false, ErrorCode::ESTOP), ev, good());
+        TEST_ASSERT_TRUE_MESSAGE(r.motor_stop, "FAULT: motor_stop on every event (cause gone)");
+    }
+}
+// R3: motor_stop = true on EVERY event in WAIT_ACK, including a rejected ACK
+void test_r3_motor_stop_on_every_event() {
+    SafetyInputs in = good(); in.estop = true;
+    for (SafetyEvent ev : ALL_EVENTS) {
+        SafetyResult r = step(st(SafetyState::WAIT_ACK, false, false, ErrorCode::ESTOP), ev, in);
+        TEST_ASSERT_TRUE_MESSAGE(r.motor_stop, "WAIT_ACK: motor_stop on every event");
+        if (ev != SafetyEvent::ACK) ASSERT_STATE(SafetyState::WAIT_ACK, r.next.state);
+    }
+    SafetyResult r = step(st(SafetyState::WAIT_ACK, false, false, ErrorCode::ESTOP), SafetyEvent::ACK, in);
+    ASSERT_API(ApiError::PRECONDITION, r.api);
+    TEST_ASSERT_TRUE_MESSAGE(r.motor_stop, "rejected ACK keeps motor_stop");
+}
+// R5: INIT_DONE -> READY unconditionally (in.homed is not checked)
+void test_r5_init_done_ready_unconditional() {
+    SafetyInputs in = good(); in.homed = false;
+    SafetyResult r = step(st(SafetyState::SAFE_START), SafetyEvent::INIT_DONE, in);
+    ASSERT_STATE(SafetyState::READY, r.next.state);
+    ASSERT_API(ApiError::OK, r.api);
+}
+// R7: INIT_DONE and TICK in RUNNING -> OK, with conditions ok and after condition loss
+void test_r7_init_done_ok() {
+    SafetyResult r = step(st(SafetyState::RUNNING, true, false), SafetyEvent::INIT_DONE, good());
+    ASSERT_API(ApiError::OK, r.api); ASSERT_STATE(SafetyState::RUNNING, r.next.state);
+    SafetyInputs lost = good(); lost.interlock = false;
+    r = step(st(SafetyState::RUNNING, true, true), SafetyEvent::INIT_DONE, lost);
+    ASSERT_API(ApiError::OK, r.api); ASSERT_STATE(SafetyState::READY, r.next.state);
+    TEST_ASSERT_FALSE(r.next.hv_on); TEST_ASSERT_FALSE(r.next.shutter_open);
+    r = step(st(SafetyState::RUNNING, true, true), SafetyEvent::TICK, lost);
+    ASSERT_API(ApiError::OK, r.api);
+}
+// Outside RUNNING, outputs are forced off even if cur is inconsistent
+void test_outputs_forced_off_outside_running() {
+    const SafetyState states[] = {SafetyState::SAFE_START, SafetyState::READY, SafetyState::RECOVER,
+                                  SafetyState::FAULT, SafetyState::WAIT_ACK};
+    for (SafetyState s : states) {
+        ErrorCode e = (s == SafetyState::FAULT || s == SafetyState::WAIT_ACK) ? ErrorCode::ESTOP : ErrorCode::NONE;
+        for (SafetyEvent ev : ALL_EVENTS) {
+            SafetyResult r = step(st(s, true, true, e, true), ev, good());
+            if (r.next.state == SafetyState::RUNNING) continue;   // e.g. READY + HV_ON
+            TEST_ASSERT_FALSE_MESSAGE(r.next.hv_on, "hv_on forced off outside RUNNING");
+            TEST_ASSERT_FALSE_MESSAGE(r.next.shutter_open, "shutter forced closed outside RUNNING");
+            TEST_ASSERT_FALSE_MESSAGE(r.next.shutter_auto, "shutter_auto cleared outside RUNNING");
+        }
+    }
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_initial_status);
@@ -568,5 +630,10 @@ int main(int, char**) {
     RUN_TEST(test_comm_timeout_wraparound);
     RUN_TEST(test_invariants_random_sequences);
     RUN_TEST(test_estop_and_cooling_loss_simultaneous);
+    RUN_TEST(test_r2_fault_motor_stop_on_every_event);
+    RUN_TEST(test_r3_motor_stop_on_every_event);
+    RUN_TEST(test_r5_init_done_ready_unconditional);
+    RUN_TEST(test_r7_init_done_ok);
+    RUN_TEST(test_outputs_forced_off_outside_running);
     return UNITY_END();
 }

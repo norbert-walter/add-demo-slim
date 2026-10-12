@@ -18,7 +18,7 @@ agentenbasierte Entwicklung mit code-server + Cline.
 | `src/app/*` | Snapshot, Command-Queue, Control-Task (vorgegeben) |
 | `src/hal/*.h`, `src/system/*.h`, `src/comm/*.h`, `src/display/*.h` | Hardware-Verträge |
 | `src/smoketest/smoketest.cpp` | Sprint 0a |
-| `test/native/*` | eingefrorene Host-Tests (274 Testfälle, 13 Suiten, Contract V1.5; `test_command_queue` braucht einen Linux/macOS-Host mit pthreads) |
+| `test/native/*` | eingefrorene Host-Tests (282 Testfälle, 13 Suiten, Contract V1.5.2; `test_command_queue` braucht einen Linux/macOS-Host mit pthreads) |
 | `test/embedded/*` | On-Target-Tests (S5) |
 | `scripts/serial_cmd.py` | nicht-interaktiver Serial-Client (auch für Cline) |
 | `scripts/add_client.py` | REST-Client mit CRC-Rahmenregel (Referenz) |
@@ -37,14 +37,14 @@ pio device monitor -e smoketest           # "help"
 
 ## Status der Module
 
-**Stand: 12.10.2026 · Contract V1.5.1 · Pflichtenheft V1.7.5**
+**Stand: 12.10.2026 · Contract V1.5.2 · Pflichtenheft V1.7.5**
 Diese Tabelle wird **nach jedem Sprint** aktualisiert (Implementierung **und** Tests) –
 Teil der Definition of Done in `.clinerules`.
 
 | Sprint | Dateien | Implementierung | Tests auf dem Gerät / nativ | Stand |
 |---|---|---|---|---|
 | 0a | `src/smoketest/smoketest.cpp` (0a.3) | ✅ fertig | Smoketest-Protokoll freigegeben (5.2 bekannte Einschränkung) | ✅ 11.10.2026, Tag `sprint-0a` |
-| 0b | Header, CONTRACT, Tests, `src/app/*` | ✅ fertig (Claude) | 274/274 gegen Referenzimplementierung | ✅ Contract V1.5.1 |
+| 0b | Header, CONTRACT, Tests, `src/app/*` | ✅ fertig (Claude) | 282/282 gegen Referenzimplementierung | ✅ Contract V1.5.2 |
 | S1 | system, nvs_config, wifi_manager, log_buffer, main, `logic/wifi_logic.cpp` | ⬜ offen | `test_wifi_logic` | – |
 | S2.1 | `logic/types.cpp`, `crc32.cpp`, `safety_logic.cpp` | ⬜ offen | `test_types_crc`, `test_safety_logic` | – |
 | S2.2 | `logic/measure_logic.cpp`, `params.cpp` | ⬜ offen | `test_measure_logic`, `test_params` | – |
@@ -60,11 +60,12 @@ Teil der Definition of Done in `.clinerules`.
 Nativ grün im Repository (ohne Referenzimplementierung): nur `test_env`. Alle anderen
 Suiten scheitern beim Linken, bis ihr Sprint die `.cpp`-Dateien liefert – das ist erwartet.
 
-**Nachweis der Tests:** Die 274 Testfälle sind keine reine Sollvorgabe – sie laufen
+**Nachweis der Tests:** Die 282 Testfälle sind keine reine Sollvorgabe – sie laufen
 vollständig grün gegen eine Referenzimplementierung (`referenz_logic.zip`, bewusst nicht
 im Repository, damit der Agent sie nicht abschreibt). Reproduzierbar mit
 `scripts/verify_reference.sh /pfad/zu/referenz_logic.zip`. Zusätzlich wurden 40 Fehler in die
 Logik und 10 in den Queue-Code gezielt eingebaut (Mutationstest); die Tests erkennen alle
 bis auf einen harmlosen (fehlendes Leeren alter Antworten – die Sequenznummer sichert die
 Zuordnung trotzdem). Contract V1.5: weitere 7 gezielte Fehler in der Shutter-/Zonenlogik,
-alle erkannt.
+alle erkannt. Contract V1.5.2: 8 zusätzliche Tests aus dem Review von S2.1
+(motor_stop in FAULT/WAIT_ACK, INIT_DONE, Ausgänge außerhalb RUNNING, lange und kurze CRC-Rahmen).
