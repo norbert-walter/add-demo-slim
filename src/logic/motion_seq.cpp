@@ -39,7 +39,7 @@ static bool isHoming(SeqPhase p) {
 // ---------------------------------------------------------------------------
 
 int32_t mmToSteps(float mm, const MotionConfig& c) {
-    return static_cast<int32_t>(static_cast<double>(mm) * static_cast<double>(c.steps_per_mm) + 0.5);
+    return (int32_t)lroundf(mm * c.steps_per_mm);
 }
 
 float stepsToMm(int32_t steps, const MotionConfig& c) {
@@ -47,8 +47,7 @@ float stepsToMm(int32_t steps, const MotionConfig& c) {
 }
 
 uint32_t mmPerSecToHz(float mm_s, const MotionConfig& c) {
-    return static_cast<uint32_t>(
-        static_cast<double>(mm_s) * static_cast<double>(c.steps_per_mm) + 0.5);
+    return (uint32_t)lroundf(mm_s * c.steps_per_mm);
 }
 
 // ---------------------------------------------------------------------------
@@ -87,10 +86,8 @@ ApiError motionStartMove(MotionSeq& s, float pos_mm, float speed_mm_s,
                          DrvRequest& out) {
     out.op = DrvOp::NONE;
 
-    /* Check order (V1.4.1): PRECONDITION before BUSY so that an unhomed
-       busy sequencer returns PRECONDITION rather than BUSY. */
-    if (!s.homed) return ApiError::PRECONDITION;
     if (s.phase != SeqPhase::IDLE) return ApiError::BUSY;
+    if (!s.homed) return ApiError::PRECONDITION;
 
     /* Range checks using !(lo <= x && x <= hi) — NaN-safe. */
     if (!(0.0f <= pos_mm && pos_mm <= c.axis_max_mm))  return ApiError::BAD_PARAM;
@@ -113,8 +110,8 @@ ApiError motionStartTraverse(MotionSeq& s, float start_mm, float end_mm,
                              const MotionConfig& c, DrvRequest& out) {
     out.op = DrvOp::NONE;
 
-    if (!s.homed) return ApiError::PRECONDITION;
     if (s.phase != SeqPhase::IDLE) return ApiError::BUSY;
+    if (!s.homed) return ApiError::PRECONDITION;
 
     /* V1.5: start and end must lie in the measuring zone (> measure_min_mm,
        axis_max_mm]. */
@@ -154,8 +151,8 @@ ApiError motionStartMeasure(MotionSeq& s, float pos_mm,
                             DrvRequest& out) {
     out.op = DrvOp::NONE;
 
-    if (!s.homed) return ApiError::PRECONDITION;
     if (s.phase != SeqPhase::IDLE) return ApiError::BUSY;
+    if (!s.homed) return ApiError::PRECONDITION;
 
     /* V1.5: pos must lie in the measuring zone (> measure_min_mm, axis_max_mm]. */
     if (!(c.measure_min_mm < pos_mm && pos_mm <= c.axis_max_mm))
