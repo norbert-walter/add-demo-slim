@@ -48,7 +48,7 @@ Teil der Definition of Done in `.clinerules`.
 | 0a | `src/smoketest/smoketest.cpp` (0a.3) | ✅ fertig | Smoketest-Protokoll freigegeben (5.2 bekannte Einschränkung) | ✅ 11.10.2026, Tag `sprint-0a` |
 | 0b | Header, CONTRACT, Tests, `src/app/*` | ✅ fertig (Claude) | 303/303 gegen Referenzimplementierung | ✅ Contract V1.5.6 |
 | L1 | `logic/types.cpp`, `crc32.cpp`, `safety_logic.cpp` | ✅ fertig (Qwen) | `test_types_crc` 22/22 · `test_safety_logic` 62/62 | ✅ 12.10.2026, Tag `sprint-2.1` |
-| L2 | `logic/measure_logic.cpp`, `params.cpp` | ✅ fertig (Qwen) | `test_measure_logic` 40/40 · `test_params` 20/20 | in Review |
+| L2 | `logic/measure_logic.cpp`, `params.cpp` | ✅ fertig (Qwen) | `test_measure_logic` 40/40 · `test_params` 20/20 | ✅ 13.10.2026, Tag `sprint-l2` |
 | L3 | `logic/motion_seq.cpp`, `sound_logic.cpp`, `wifi_logic.cpp` | ⬜ offen | `test_motion_seq`, `test_sound_logic`, `test_wifi_logic` | – |
 | L4 | `logic/app_logic.cpp` | ⬜ offen | `test_app_logic` | – |
 | L5 | `logic/proc_json.cpp`, `api_parse.cpp`, `display_logic.cpp` | ⬜ offen | `test_proc_json`, `test_api_parse`, `test_display_logic` | – |
