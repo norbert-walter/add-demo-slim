@@ -131,8 +131,8 @@ ApiError paramSet(Params& p, SafetyFlags& f, const char* key,
         if (namesEqual(key, e.key)) {
             if (vtype != ValueType::NUMBER) return ApiError::BAD_PARAM;
             if (!std::isfinite(num))             return ApiError::BAD_PARAM;
+            if (num < e.lo || num > e.hi)     return ApiError::BAD_PARAM;
             float fv = static_cast<float>(num);
-            if (fv < e.lo || fv > e.hi)     return ApiError::BAD_PARAM;
             e.apply(p, fv);
             *persist = true;
             return ApiError::OK;

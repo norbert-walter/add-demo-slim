@@ -104,9 +104,9 @@ void stabilityUpdate(StabilityTracker& s, uint32_t now_ms, float value) {
         s.since_ms    = now_ms;
         s.initialized = true;
     } else if (fabsf(value - s.ref) > s.tol_mm) {
-        // Jump detected: restart window, reference stays the original stable value
-        s.since_ms  = now_ms;
-        // ref is NOT updated (V1.5.5: ref stays the first value of the stable period)
+        // Jump detected: restart window, both ref and since reset to current reading
+        s.ref         = value;
+        s.since_ms    = now_ms;
     }
     // else: within tolerance, nothing changes
 }
