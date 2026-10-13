@@ -1,6 +1,6 @@
 /**
  * @file display.h
- * @brief Local status display + touch operation (CONTRACT V1.4 §13, Sprint S4).
+ * @brief Local status display + touch operation (CONTRACT V1.4 §13, Sprint I1).
  *
  * Runs in its own low-priority task on Core 1 (DISPLAY_PERIOD_MS), reads only
  * snapshotGet(), snapshotGetConfig() (estop_nc) and the wifi_manager getters for

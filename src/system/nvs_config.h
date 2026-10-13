@@ -1,6 +1,6 @@
 /**
  * @file nvs_config.h
- * @brief Persistence of Params in NVS via Preferences (FROZEN CONTRACT V1.5 §9, Sprint S1).
+ * @brief Persistence of Params in NVS via Preferences (FROZEN CONTRACT V1.5 §9, Sprint P1).
  *
  * Namespace NVS_NAMESPACE. One key per Params field (short keys, max 15 chars):
  *   mpos, maint, tstart, tend, tspeed, shold, edge, base, cnraw, cnref, cfraw, cfref, estnc, ssid, pass,

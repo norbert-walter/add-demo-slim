@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.3) – Sprint S1 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.3) – Sprint L3 must make these pass. Do not modify.
 // Covers: src/logic/wifi_logic.cpp (CONTRACT §12.1) – router connection with retries and pause.
 #include <unity.h>
 #include "logic/wifi_logic.h"

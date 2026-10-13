@@ -1,13 +1,20 @@
 # Pflichtenheft – Demoanlage ADD (Slim)
 
-**Stand:** 2026-10-12
+**Stand:** 2026-10-13
 **Autor:** Norbert Walter
-**Version:** 1.7.5 (Contract V1.5: Zonen, Shutter über das Messprogramm)
+**Version:** 1.7.6 (Sprint-Plan V3: Reihenfolge nach Abhängigkeiten)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.7.5 → V1.7.6 (Sprint-Plan V3, 13.10.2026)
+- Sprints neu geordnet nach den tatsächlichen Abhängigkeiten im Code: erst die gesamte reine
+  Logik (L1–L5), dann Plattformdienste (P1, P2), Hardware (H1), Integration (I1), Web (W1),
+  Abnahme (A1), ADD-Dokument (D1). Begründung und Zuordnung alt → neu im Sprint-Dokument.
+- Höchstens 3 Dateien bzw. ca. 300 Zeilen Referenzumfang pro Sprint, eine Cline-Task pro Datei.
+- Kapitel 5.2 (Modulstruktur) und 9 (Entwicklungsplan) angepasst.
 
 ### V1.7.4 → V1.7.5 (Contract V1.5, 12.10.2026)
 
@@ -323,31 +330,34 @@ Die Zuordnung FluidNC-Bit `i2so.N` → FastAccelStepper-Slot hat der Smoketest (
 ```
 src/
 ├── config.h                 Pins, Slots, Timing (eingefroren nach 0a)
-├── main.cpp                 setup(), Netzwerk-Task                       S1
+├── main.cpp                 setup(), Netzwerk-Task                       I1
 ├── logic/                   REINE LOGIK (nativ getestet)
-│   ├── types.h/.cpp         Typen, Namen                                 S2.1
-│   ├── crc32.h/.cpp         CRC32 + Rahmenregel                          S2.1
-│   ├── safety_logic.h/.cpp  Zustandsautomat R1–R7                        S2.1
-│   ├── measure_logic.h/.cpp Messkette, Kalibrierung, Statistik           S2.2
-│   ├── params.h/.cpp        Parameter, SET-Schlüssel                     S2.2
-│   ├── motion_seq.h/.cpp    Ablaufsteuerung Achse                        S2.3
-│   ├── app_logic.h/.cpp     Gesamtlogik (Tick, Befehle, Prozessabbild)   S2.4
-│   ├── proc_json.h/.cpp     /proc- und Antwort-JSON                      S3
-│   └── api_parse.h/.cpp     /api-Parser                                  S3
+│   ├── types.h/.cpp         Typen, Namen                                 L1
+│   ├── crc32.h/.cpp         CRC32 + Rahmenregel                          L1
+│   ├── safety_logic.h/.cpp  Zustandsautomat R1–R7                        L1
+│   ├── measure_logic.h/.cpp Messkette, Kalibrierung, Statistik           L2
+│   ├── params.h/.cpp        Parameter, SET-Schlüssel                     L2
+│   ├── motion_seq.h/.cpp    Ablaufsteuerung Achse                        L3
+│   ├── app_logic.h/.cpp     Gesamtlogik (Tick, Befehle, Prozessabbild)   L4
+│   ├── sound_logic.h/.cpp   Buzzer-Muster                                L3
+│   ├── wifi_logic.h/.cpp    Router-Verbindung (Zustandsautomat)          L3
+│   ├── display_logic.h/.cpp Display-Modus, Tastenlogik                   L5
+│   ├── proc_json.h/.cpp     /proc- und Antwort-JSON                      L5
+│   └── api_parse.h/.cpp     /api-Parser                                  L5
 ├── hal/
-│   ├── hal_io.h/.cpp        GPIO, ADC, LEDs, Buzzer                      S2.5
-│   └── motion_drv.h/.cpp    FastAccelStepper-Adapter                     S2.5
+│   ├── hal_io.h/.cpp        GPIO, ADC, LEDs, Buzzer                      H1
+│   └── motion_drv.h/.cpp    FastAccelStepper-Adapter                     H1
 ├── app/                     (0b, vollständig vorgegeben)
 │   ├── snapshot.h/.cpp      Prozessabbild über Kerne
 │   ├── command_queue.h/.cpp Befehls-Queue mit Antwort
-│   └── control_task.h/.cpp  Steuer-Task (Glue)                           Review S2.6
-├── system/  system, nvs_config                                           S1
-├── comm/    wifi_manager, log_buffer, http_server                        S1/S3
-├── display/ lgfx_config.h (0a), display.cpp                              S4
+│   └── control_task.h/.cpp  Steuer-Task (Glue)                           Review I1
+├── system/  system, nvs_config                                           P1
+├── comm/    wifi_manager, http_server (P2), log_buffer (P1)              P1/P2
+├── display/ lgfx_config.h (0a), display.cpp                              I1
 └── smoketest/smoketest.cpp  Sprint 0a
 test/native/<suite>/         eingefrorene Host-Tests
-test/embedded/test_hardware/ On-Target-Tests                              S5
-data/                        www/, add.json, doc.md                       S4/S6
+test/embedded/test_hardware/ On-Target-Tests                              H1/A1
+data/                        www/ (W1), add.json, doc.md (D1)            W1/D1
 scripts/                     serial_cmd.py, add_client.py
 ```
 
@@ -746,39 +756,44 @@ Bedienvorrang).
 
 ## 9. Entwicklungsplan
 
-### Abhängigkeitskette
+### Abhängigkeitskette (Sprint-Plan V3)
 
 ```
-S0a Smoketest (👤)  ─► S0b Verträge (🤖 Claude, 👤 Review) ─► S1 System/NVS/WiFi (🤖)
-                                                           └► S2.1 types/crc/safety (🤖)
-                                                               └► S2.2 measure/params (🤖)
-                                                                   └► S2.3 motion_seq (🤖)
-                                                                       └► S2.4 app_logic (🤖)
-S2.5 HAL + Motortreiber aus Smoketest (👤+🤖) ─► S2.6 Integration Control-Task (👤+🤖)
-   ─► S3 JSON/Parser/HTTP (🤖) ─► S4 Web + Display (🤖) ─► S5 Abnahme (👤) ─► S6 ADD (👤+Claude)
+S0a Smoketest (👤) ─► S0b Verträge (Claude, 👤 Review)
+  ─► L1 types/crc/safety ─► L2 measure/params ─► L3 motion_seq/sound/wifi_logic
+  ─► L4 app_logic ─► L5 proc_json/api_parse/display_logic            (reine Logik, nativ)
+  ─► P1 log_buffer/nvs_config/system ─► P2 wifi_manager/http_server   (Plattform)
+  ─► H1 hal_io/motion_drv (👤+🤖) ─► I1 display/main/Gesamt-Build (👤+🤖, erster Flash)
+  ─► W1 Web-Seiten ─► A1 Abnahme (👤) ─► D1 ADD-Dokument (👤+Claude)
 ```
 
-S1 und S2.1–S2.4 sind voneinander unabhängig (S2.x braucht keine Hardware).
+Erst die gesamte reine Logik: Sie ist die Hälfte der Arbeit und vollständig nativ prüfbar.
+Plattform und Hardware bauen danach nur noch auf fertigem Code auf; die vollständige Firmware
+linkt erst in I1. Begründung und Zuordnung zu den alten Sprint-Namen: Sprint-Dokument,
+Abschnitt „Sprint-Plan V3“.
 
 ### Sprint-Übersicht
 
 | Sprint | Inhalt | Prüfung (DoD) | Wer | Aufwand |
 |---|---|---|---|---|
-| S0a | Smoketest, Protokoll, config.h-Werte | Smoketest-Protokoll | 👤 | 3–4 h |
-| S0b | Verträge, Header, Tests, Skelette | dieses Paket | Claude + 👤 Review | erledigt / 1 h Review |
-| S1 | system, nvs_config, wifi_manager, main | firmware-partial baut; Boot-Test am Gerät | 🤖 Qwen | 2 h |
-| S2.1 | types, crc32, safety_logic | test_types_crc, test_safety_logic | 🤖 Qwen | 1–2 h |
-| S2.2 | measure_logic, params | test_measure_logic, test_params | 🤖 Qwen | 1–2 h |
-| S2.3 | motion_seq | test_motion_seq | 🤖 Qwen | 1–2 h |
-| S2.4 | app_logic | test_app_logic | 🤖 Qwen (Review Claude) | 2 h |
-| S2.5 | hal_io, motion_drv | Smoketest-Funktionen über HAL | 👤 + 🤖 | 2 h |
-| S2.6 | control_task + main zusammenführen | firmware baut; INIT/MOVE/Not-Aus per Serial | 👤 + 🤖 | 2 h |
-| S3 | proc_json, api_parse, log_buffer, http_server | test_proc_json, test_api_parse; curl-Tests | 🤖 Qwen | 2–3 h |
-| S4a/b | index.html, settings.html (4a); display_logic.cpp, display.cpp (4b) | test_display_logic; Sichtprüfung, Bedienung | 🤖 Qwen | 3–4 h |
-| S5 | Integration, Abnahme | Kapitel 10 | 👤 | 3–4 h |
-| S6 | add.json, doc.md, Python-Demos | KI-Validierung | 👤 + Claude | 2–3 h |
+| S0a | Smoketest, Protokoll, config.h-Werte | Smoketest-Protokoll | 👤 | erledigt |
+| S0b | Verträge, Header, Tests, Skelette | Review | Claude + 👤 | erledigt |
+| L1 | types, crc32, safety_logic | test_types_crc, test_safety_logic | 🤖 Qwen | erledigt (ca. 5 h Rechenzeit, 5 Runden) |
+| L2 | measure_logic, params | test_measure_logic, test_params | 🤖 Qwen | 2–4 h |
+| L3 | motion_seq, sound_logic, wifi_logic | test_motion_seq, test_sound_logic, test_wifi_logic | 🤖 Qwen | 3–5 h |
+| L4 | app_logic | test_app_logic | 🤖 Qwen (Review Claude) | 4–6 h |
+| L5 | proc_json, api_parse, display_logic | test_proc_json, test_api_parse, test_display_logic | 🤖 Qwen | 3–4 h |
+| P1 | log_buffer, nvs_config, system | native Tests mit Nachbildung; firmware-partial | 🤖 Qwen | 2–3 h |
+| P2 | wifi_manager, http_server | firmware-partial, Review | 🤖 Qwen (Review Claude) | 3–4 h |
+| H1 | hal_io, motion_drv | Smoketest-Funktionen über HAL am Gerät | 👤 + 🤖 | 2–3 h |
+| I1 | display.cpp, main.cpp, Gesamt-Build | firmware baut; erster Flash; INIT/MOVE/Not-Aus, curl | 👤 + 🤖 | 3–4 h |
+| W1 | index.html, settings.html | Sichtprüfung, Bedienung | 🤖 Qwen | 2–3 h |
+| A1 | Integration, Abnahme | Kapitel 10 | 👤 | 3–4 h |
+| D1 | add.json, doc.md, Python-Demos | KI-Validierung | 👤 + Claude | 2–3 h |
 
-**Gesamt: ca. 25–30 h**, davon ca. 12–15 h agentenbasiert.
+Die Zeiten der 🤖-Sprints sind Rechenzeit von Qwen lokal (ca. 18 Token/s), nicht deine Zeit.
+
+**Gesamt:** ca. 35–50 h, davon ca. 25–35 h Rechenzeit von Qwen (unbeaufsichtigt möglich).
 
 ---
 

@@ -5,7 +5,7 @@
  * Runs on Core 1 every CONTROL_PERIOD_MS. Reads HAL + stepper driver,
  * calls the pure logic (app_logic.h), writes outputs, publishes the snapshot.
  * Implementation: src/app/control_task.cpp (provided complete in Sprint 0b,
- * compiled and reviewed in Sprint S2.6).
+ * compiled and reviewed in Sprint I1).
  */
 #pragma once
 #include "logic/params.h"

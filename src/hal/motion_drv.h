@@ -3,7 +3,7 @@
  * @brief Adapter between DrvRequest (logic/motion_seq.h) and FastAccelStepper
  *        in I2S_MUX mode (FROZEN CONTRACT V1.5 §11).
  *
- * Implementation: src/hal/motion_drv.cpp (Sprint S2.5, from the smoketest).
+ * Implementation: src/hal/motion_drv.cpp (Sprint H1, from the smoketest).
  * Only the control task calls these functions.
  *
  * FastAccelStepper (master / 2.x, ESP-IDF >= 5.3):

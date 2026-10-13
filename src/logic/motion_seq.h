@@ -4,7 +4,7 @@
  *
  * V1.3: ALL speeds are mm/s (API, parameters, /proc, MotionConfig).
  *
- * Implementation: src/logic/motion_seq.cpp (Sprint S2.3).
+ * Implementation: src/logic/motion_seq.cpp (Sprint L3).
  *
  * The sequencer never talks to hardware. Every call returns at most ONE
  * DrvRequest which the control task hands to the stepper driver adapter

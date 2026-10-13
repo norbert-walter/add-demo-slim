@@ -2,7 +2,7 @@
  * @file wifi_logic.h
  * @brief Station (router) connection state machine (FROZEN CONTRACT V1.5 §12.1).
  *
- * Implementation: src/logic/wifi_logic.cpp (Sprint S1). Pure, no hardware.
+ * Implementation: src/logic/wifi_logic.cpp (Sprint L3). Pure, no hardware.
  * wifi_manager.cpp calls staStep() every 100 ms from the network task and
  * executes the returned action (WiFi.begin / WiFi.disconnect). The access
  * point "ADD-Demo" is ALWAYS on (WIFI_AP_STA) and not handled here.

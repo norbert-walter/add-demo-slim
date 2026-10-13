@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.3) – Sprint S2.4 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.3) – Sprint L3 must make these pass. Do not modify.
 // Covers: src/logic/sound_logic.cpp (CONTRACT §11.1) – patterns of the active buzzer.
 #include <unity.h>
 #include "logic/sound_logic.h"

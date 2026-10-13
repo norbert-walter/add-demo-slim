@@ -6,7 +6,7 @@
  * Every module in src/logic/ must compile on the host (native tests).
  *
  * DO NOT MODIFY. Changes require a contract revision (docs/CONTRACT.md).
- * Implementation of the name functions: src/logic/types.cpp (Sprint S2.1).
+ * Implementation of the name functions: src/logic/types.cpp (Sprint L1).
  */
 #pragma once
 

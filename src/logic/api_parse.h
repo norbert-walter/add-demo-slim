@@ -2,7 +2,7 @@
  * @file api_parse.h
  * @brief Parsing of POST /api bodies into a Command (FROZEN CONTRACT V1.5 §4, §5.2).
  *
- * Implementation: src/logic/api_parse.cpp (Sprint S3). Uses ArduinoJson 7
+ * Implementation: src/logic/api_parse.cpp (Sprint L5). Uses ArduinoJson 7
  * (header-only, also builds natively). No range checks here – those live in
  * params.cpp / motion_seq.cpp. Only syntax and types are checked.
  *

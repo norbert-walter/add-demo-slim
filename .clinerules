@@ -4,12 +4,14 @@
 Firmware for the ADD Demo System: ESP32 (MKS DLC32 V2.1), PlatformIO,
 **pioarduino = Arduino Core 3.x on ESP-IDF 5.x**. Contract: docs/CONTRACT.md.
 Requirements (German): docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.7.md.
+Sprint plan and order: docs/Sprint_Prompts_Demoanlage_ADD_Slim_V2.md ("Sprint-Plan V3").
+The task you get comes from docs/sprints/<Sprint>.md – do only that task.
 
 ## Hard rules
 1. FROZEN files – never modify, rename or delete:
    - src/**/*.h (all headers), src/config.h
    - src/app/snapshot.cpp, src/app/command_queue.cpp, src/app/control_task.cpp
-     (exception: Sprint S2.6 may fix compile errors in control_task.cpp – report every change)
+     (exception: Sprint I1 may fix compile errors in control_task.cpp – report every change)
    - everything in test/ and docs/CONTRACT.md
    If a frozen file seems wrong: STOP and describe the problem. Do not work around it.
 2. Implement exactly the functions declared in the headers. No extra public functions,
@@ -27,8 +29,8 @@ Requirements (German): docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.7.md.
                     Never use /usr/bin/pio, never install platformio via pip or apt.
                     If "pio" is not found: stop and tell the user (PATH problem).
 - Host tests:       pio test -e native            (single suite: -f native/test_<name>)
-- Quiet build:      pio run -e firmware -s          (complete firmware, from Sprint S2.6 on)
-- Partial build:    pio run -e firmware-partial -s  (Sprints S1..S2.5: missing later modules are ok)
+- Quiet build:      pio run -e firmware -s          (complete firmware, from Sprint I1 on)
+- Partial build:    pio run -e firmware-partial -s  (Sprints L1..H1: missing later modules are ok)
 - Frozen check:     git diff --exit-code -- src/config.h ':(glob)src/**/*.h' test docs/CONTRACT.md
 - NEVER run without explicit user approval: any "-t upload", "-t uploadfs",
   "pio test -e esp32-test", "pio device monitor". (Flashing can move the motor.)
@@ -46,7 +48,7 @@ Requirements (German): docs/Pflichtenheft_Demoanlage_ADD_Slim_V1.7.md.
    only if their module belongs to a later sprint)
    REGRESSION RULE: every suite that was green before the sprint must still be green.
    Run the full native suite, not only the sprint suite.
-2. pio run -e firmware-partial -s (S1..S2.5) or pio run -e firmware -s (from S2.6)
+2. pio run -e firmware-partial -s (L1..H1) or pio run -e firmware -s (from I1)
    -> no compile errors, no new warnings in your files
 3. Frozen check passes (no diff).
 4. Update the status table in README.md for this sprint: implementation status and

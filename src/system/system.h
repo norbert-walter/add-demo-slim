@@ -1,6 +1,6 @@
 /**
  * @file system.h
- * @brief Boot helpers and task watchdog (FROZEN CONTRACT V1.5 §12, implemented in Sprint S1).
+ * @brief Boot helpers and task watchdog (FROZEN CONTRACT V1.5 §12, implemented in Sprint P1).
  *
  * ESP-IDF 5.x API (Arduino Core 3.x): the task watchdog is configured with
  * esp_task_wdt_config_t + esp_task_wdt_reconfigure() (the core may already have

@@ -4,7 +4,7 @@
  *
  * Pure C++, no ESP-IDF dependency. The firmware uses this implementation on the
  * target as well, so host tests and target behave identically.
- * Implementation: src/logic/crc32.cpp (Sprint S2.1).
+ * Implementation: src/logic/crc32.cpp (Sprint L1).
  *
  * CRC frame rule (identical for requests, responses and /proc):
  *   1. The sender builds the JSON object WITHOUT the crc field, e.g.

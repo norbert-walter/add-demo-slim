@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5.3) – Sprint S2.1 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.3) – Sprint L1 must make these pass. Do not modify.
 // Covers: src/logic/safety_logic.cpp (CONTRACT §6). Rules R1..R7 refer to safety_logic.h.
 #include <unity.h>
 #include <stdio.h>

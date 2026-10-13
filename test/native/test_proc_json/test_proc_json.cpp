@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.3) – Sprint S3 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.3) – Sprint L5 must make these pass. Do not modify.
 // Covers: src/logic/proc_json.cpp (CONTRACT §5)
 #include <unity.h>
 #include <string.h>

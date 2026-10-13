@@ -2,7 +2,7 @@
  * @file app_logic.h
  * @brief Complete application logic as pure functions (FROZEN CONTRACT V1.5 §10).
  *
- * Implementation: src/logic/app_logic.cpp (Sprint S2.4).
+ * Implementation: src/logic/app_logic.cpp (Sprint L4).
  *
  * This is the "brain" of the device. The control task (src/app/control_task.cpp)
  * only reads hardware into HwInputs, calls these functions and writes HwOutputs

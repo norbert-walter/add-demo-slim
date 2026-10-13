@@ -2,7 +2,7 @@
  * @file proc_json.h
  * @brief Serialisation of /proc and /api responses (FROZEN CONTRACT V1.5 §5).
  *
- * Implementation: src/logic/proc_json.cpp (Sprint S3). snprintf only, no
+ * Implementation: src/logic/proc_json.cpp (Sprint L5). snprintf only, no
  * heap, no ArduinoJson. Output is framed with crcFrameAppend().
  *
  * Number format: all floats "%.1f". Before printing every float is sanitised:

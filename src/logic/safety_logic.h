@@ -2,7 +2,7 @@
  * @file safety_logic.h
  * @brief Pure safety state machine (FROZEN CONTRACT V1.5.3 §6). No hardware access.
  *
- * Implementation: src/logic/safety_logic.cpp (Sprint S2.1).
+ * Implementation: src/logic/safety_logic.cpp (Sprint L1).
  * The machine is a pure function: given the current status, one event and the
  * current inputs it returns the next status. It never reads globals, never
  * blocks, never allocates. The control task calls it once per cycle (TICK)

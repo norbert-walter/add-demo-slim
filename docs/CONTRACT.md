@@ -1,7 +1,7 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.3 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-12
-**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.5
+**Version:** 1.5.4 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-12
+**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.6
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
 
@@ -42,6 +42,11 @@ implementation, 2026-10-12, no behaviour change):**
 | 1 | R1 (fault entry) is checked **first, for every event**, including `INIT_DONE`; no rule may short-cut it. A one-shot `motor_fault` in the cycle in which homing finishes leads to FAULT | `safety_logic.h` |
 | 2 | Active fault cause together with `INIT_FAILED`: the cause wins (`err` = cause, not `HOMING_FAILED`) | `safety_logic.h` |
 | 3 | New tests (safety +5): `test_r1_matrix_every_event_every_cause` (4 states × 4 causes × 9 events), `test_r1_motor_fault_with_init_done`, `test_api_table_all_states_all_events` (API code and next state for all 6 × 9 combinations), `test_r4_recover_init_done_rejected`, `test_r7_init_done_applies_closing_rules`. Reference implementation: 13 suites, **287/287** | `test/native` |
+
+**Clarification 1.5.4 (sprint plan V3, 2026-10-13, no behaviour change):** the sprint names in the
+header and test comments follow the new plan (L1–L5 pure logic, P1–P2 platform, H1 hardware,
+I1 integration; mapping in `docs/Sprint_Prompts_Demoanlage_ADD_Slim_V2.md`). `log_buffer` belongs
+to P1 (previously contradictory: S1 / S3).
 
 **Scope note:** plant coordinates for several gauges (offset/sign transformation at the
 API boundary, common time base) are an extension idea for later (Pflichtenheft §11.1);

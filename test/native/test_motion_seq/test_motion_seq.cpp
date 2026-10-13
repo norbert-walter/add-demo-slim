@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5) – speeds in mm/s – Sprint S2.3 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5) – speeds in mm/s – Sprint L3 must make these pass. Do not modify.
 // Covers: src/logic/motion_seq.cpp (CONTRACT §8)
 #include <unity.h>
 #include <math.h>

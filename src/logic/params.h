@@ -2,7 +2,7 @@
  * @file params.h
  * @brief Parameters, simulated safety flags and the SET key table (FROZEN CONTRACT V1.5 §9).
  *
- * Implementation: src/logic/params.cpp (Sprint S2.2).
+ * Implementation: src/logic/params.cpp (Sprint L2).
  *
  * SET keys (key | type | default | valid range | persisted in NVS):
  *   interlock       bool    false   -                    no  (safety flag)

@@ -2,7 +2,7 @@
  * @file hal_io.h
  * @brief Thin hardware layer for digital/analog I/O (FROZEN CONTRACT V1.5 §11).
  *
- * Implementation: src/hal/hal_io.cpp (Sprint S2.5, taken over from the
+ * Implementation: src/hal/hal_io.cpp (Sprint H1, taken over from the
  * smoketest code). Only the control task (Core 1) calls these functions.
  *
  * The i2s output (buzzer) is written through the FastAccelStepper engine

@@ -1,8 +1,117 @@
-# Sprint-Prompts – Demoanlage ADD (Slim) · V2.4
+# Sprint-Prompts – Demoanlage ADD (Slim) · V3.0
 
-**Stand:** 2026-10-12 · **Autor:** Norbert Walter
-**Basis:** Pflichtenheft V1.7.5, `docs/CONTRACT.md` V1.5 (Änderungen seit V1.3: Anhänge am Ende)
+**Stand:** 2026-10-13 · **Autor:** Norbert Walter
+**Basis:** Pflichtenheft V1.7.6, `docs/CONTRACT.md` V1.5.4 (Änderungen seit V1.3: Anhänge am Ende)
 **Werkzeuge:** code-server + Cline, Modell Qwen3.6-35B-A3B (64k Kontext), Review mit Claude
+---
+
+## Sprint-Plan V3 (ab 13.10.2026)
+
+### Warum ein neuer Plan?
+
+Sprint S2.1 (types, crc32, safety_logic) hat gezeigt, wie Qwen mit 64k Kontext arbeitet
+(`docs/reviews/Review_S2.1.md`):
+
+- **Drei Dateien mit ca. 300 Zeilen Referenzumfang** sind die passende Größe für einen Sprint.
+  S2.1 hatte 3 Dateien, 19 Funktionen und 282 Zeilen Referenzumfang (Qwen: ca. 750 Zeilen).
+- **Qwen erfüllt die Tests, nicht den Header-Text.** Was kein Test prüft, ist ungesichert.
+  Die Nacharbeit machte 55–68 % des Token-Verbrauchs aus, überwiegend wegen Testlücken.
+- **Frische Tasks mit genau einer Aufgabe sind am effizientesten.** Der Abschluss-Task mit
+  einer konkreten Codezeile kostete ca. 1 % des Sprints.
+
+Die Prüfung der alten Reihenfolge gegen die tatsächlichen Abhängigkeiten im Code ergab drei
+Fehler:
+
+1. **S1 kam zu früh.** `nvs_config` braucht `params.cpp` (S2.2), `main.cpp` ruft HTTP-Server
+   (S3) und Display (S4b) auf. S1 hätte nur kompiliert, ohne geprüft zu werden.
+2. **S2.6 verlangte eine vollständige Firmware**, die vor S3 und S4b nicht linken kann.
+3. **`log_buffer`** stand im Header unter S3, im Prompt unter S1.
+
+Außerdem waren die Sprints ungleich groß: S2.4 bündelte die größte Datei (`app_logic`,
+279 Zeilen) mit `sound_logic`, während `wifi_logic` (45 Zeilen) in S1 steckte.
+
+### Grundsätze
+
+1. **Reihenfolge nach Abhängigkeiten.** Ein Sprint baut nur auf fertigem, geprüftem Code auf.
+2. **Erst die reine Logik, dann Plattform, dann Hardware, dann Integration.**
+   Die reine Logik ist die Hälfte der Arbeit und vollständig nativ prüfbar – dort ist Qwen am
+   stärksten. Plattform und Hardware bauen danach nur noch auf fertigem Code auf. Der erste
+   Flash der vollständigen Firmware kommt erst, wenn sie wirklich vollständig linkt.
+3. **Größe:** höchstens 3 Dateien und ca. 300 Zeilen Referenzumfang pro Sprint.
+4. **Eine Cline-Task pro Datei** (frischer Kontext). Jede Aufgabe steht als eigener Abschnitt
+   in der Sprint-Datei `docs/sprints/<Sprint>.md` und beginnt mit einer „Stand:“-Zeile.
+5. **Tests vor dem Start absichern (Claude).** Vor jedem Sprint werden die Tests gegen gezielt
+   fehlerhafte Varianten der Referenzimplementierung geprüft (Mutationstest) und bei Lücken
+   ergänzt (Contract-Version). Was nicht nativ testbar ist, bekommt eine Nachbildung
+   (wie `test_command_queue`) oder eine Prüfliste am Gerät.
+6. **Review nach dem Sprint (Claude):** alle Suiten unter AddressSanitizer/UBSan, eingefrorene
+   Dateien unverändert, Differenztest gegen die Referenz (Zufallsfälle), Review-Protokoll in
+   `docs/reviews/`. Erst dann Merge nach `master` und Tag `sprint-<name>`.
+7. **Berichte prüfbar machen:** Qwen zitiert die SUMMARY-Zeilen der Testausgabe wörtlich.
+   Konkrete Anweisungen (eine Codezeile) statt Hinweisen, wo es auf eine Stelle ankommt.
+
+### Sprints
+
+| Sprint | Dateien | Ref.-Umfang | Prüfung | Wer |
+|---|---|---:|---|---|
+| ✅ **L1** (= S2.1) | `logic/types.cpp`, `crc32.cpp`, `safety_logic.cpp` | 282 | `test_types_crc`, `test_safety_logic` | Qwen |
+| **L2** | `logic/measure_logic.cpp`, `params.cpp` | 143 | `test_measure_logic`, `test_params` | Qwen |
+| **L3** | `logic/motion_seq.cpp`, `sound_logic.cpp`, `wifi_logic.cpp` | 227 | `test_motion_seq`, `test_sound_logic`, `test_wifi_logic` | Qwen |
+| **L4** | `logic/app_logic.cpp` (allein; Aufgaben nach Funktionsgruppen) | 279 | `test_app_logic` | Qwen, Review Claude |
+| **L5** | `logic/proc_json.cpp`, `api_parse.cpp`, `display_logic.cpp` | 169 | `test_proc_json`, `test_api_parse`, `test_display_logic` | Qwen |
+| **P1** | `comm/log_buffer.cpp`, `system/nvs_config.cpp`, `system/system.cpp` | klein | neue native Tests mit Nachbildung für log_buffer und nvs_config; firmware-partial | Qwen |
+| **P2** | `comm/wifi_manager.cpp`, `comm/http_server.cpp` | mittel | firmware-partial, Review | Qwen |
+| **H1** | `hal/hal_io.cpp`, `hal/motion_drv.cpp` | mittel | Smoketest-Code als Vorlage; Prüfung am Gerät | du + Qwen |
+| **I1** | `display/display.cpp`, `main.cpp`, Gesamt-Build | mittel | `pio run -e firmware`, erster Flash, Prüfliste am Gerät | du + Qwen |
+| **W1** | `data/www/index.html`, `settings.html` | – | Sichtprüfung im Browser | Qwen |
+| **A1** | Abnahme (Pflichtenheft Kapitel 10) | – | Abnahmeprotokoll | du |
+| **D1** | `data/add.json`, `data/doc.md`, Demo-Skripte | – | KI-Validierung | du + Claude |
+
+Abhängigkeiten: L1 → L2 → L3 → L4 (app_logic braucht safety, measure, params, motion_seq,
+sound) → L5 → P1 (nvs_config braucht params) → P2 (http_server braucht api_parse, proc_json,
+log_buffer) → H1 → I1 (alles) → W1 → A1 → D1. W1 ist inhaltlich unabhängig und kann bei
+Bedarf vorgezogen werden.
+
+Umfang gesamt: 21 C++-Dateien mit ca. 107 öffentlichen Funktionen (davon 12 Dateien reine
+Logik mit ca. 72 Funktionen und ca. 1 100 Zeilen Referenzumfang), dazu 2 Web-Seiten und das
+ADD-Dokument.
+
+### Zuordnung alt → neu
+
+| Datei | bisher | neu |
+|---|---|---|
+| types, crc32, safety_logic | S2.1 | L1 (erledigt, Tag `sprint-2.1`) |
+| measure_logic, params | S2.2 | L2 |
+| motion_seq | S2.3 | L3 |
+| sound_logic | S2.4 | L3 |
+| wifi_logic | S1 | L3 |
+| app_logic | S2.4 | L4 |
+| proc_json, api_parse | S3 | L5 |
+| display_logic | S4b | L5 |
+| log_buffer, nvs_config, system | S1 (log_buffer im Header: S3) | P1 |
+| wifi_manager | S1 | P2 |
+| http_server | S3 | P2 |
+| hal_io, motion_drv | S2.5 | H1 |
+| display.cpp | S4b | I1 |
+| main.cpp, Integration control_task | S1, S2.6 | I1 |
+| Web-Seiten | S4a | W1 |
+| Abnahme | S5 | A1 |
+| ADD-Dokument, Demo-Skripte | S6 | D1 |
+
+Die Prompts der alten Sprints weiter unten bleiben als Quelle für die Sprint-Dateien in
+`docs/sprints/` erhalten. Für die Arbeit mit Cline gilt immer die Sprint-Datei.
+
+### Ablauf eines Sprints
+
+1. **Claude:** Tests des Sprints absichern (Mutationstest, ggf. Contract-Version), Sprint-Datei
+   `docs/sprints/<Sprint>.md` mit einer Aufgabe pro Datei schreiben, Bundle.
+2. **Du:** Bundle einspielen, Branch `sprint-<name>` anlegen.
+3. **Qwen:** je Aufgabe eine frische Cline-Task (Plan → Act), Bericht mit SUMMARY-Zeilen.
+4. **Du:** Bericht prüfen, committen, Bundle `git bundle create … <branch> ^master` an Claude.
+5. **Claude:** Review (Tests, Sanitizer, Differenztest, eingefrorene Dateien), bei Befund
+   Nacharbeits-Prompt, sonst Review-Protokoll.
+6. **Du:** Merge nach `master` mit `--no-ff`, Tag `sprint-<name>`, Push.
+7. Token-Verbrauch je Task (↑ ↓ →) in die Tabelle im Review-Protokoll eintragen.
 
 ---
 
@@ -20,7 +129,7 @@ blockierenden Aufrufe, kein Flashen ohne Freigabe, Definition of Done).
 Bei Nutzung **ohne Cline**: den Inhalt von `.clinerules` vor jeden Prompt setzen
 und die genannten Header/Tests mit in den Prompt kopieren.
 
-### Ablauf je Sprint
+### Ablauf je Cline-Task
 1. Neue Cline-Task (frischer Kontext). Modus **Plan**: Prompt einfügen.
    Cline liest die Dateien und legt einen Plan vor → prüfen.
 2. Modus **Act**: Cline implementiert, baut, testet, iteriert.
@@ -32,7 +141,7 @@ und die genannten Header/Tests mit in den Prompt kopieren.
 5. Frozen-Check und Commit:
    ```bash
    git diff --exit-code -- src/config.h ':(glob)src/**/*.h' test docs/CONTRACT.md
-   git add -A && git commit -m "Sprint S2.1: types, crc32, safety_logic"
+   git add -A && git commit -m "Sprint L2: measure_logic, params"
    ```
 
 ### Auto-Approve in Cline
@@ -47,11 +156,12 @@ und die genannten Header/Tests mit in den Prompt kopieren.
 
 | Sprint | Modell | Grund |
 |---|---|---|
-| S1, S2.1–S2.3, S3 | Qwen3.6-35B-A3B | eng umrissen, Tests als Ziel |
-| S2.4 | Qwen, Review Claude | viele Querbeziehungen |
-| S2.5, S2.6 | du + Qwen/Claude | Hardware, Nebenläufigkeit |
-| S4 | Qwen (Web), Qwen/Claude (Display) | viel UI-Code |
-| S6 | Claude | ADD-Expertise |
+| L1–L3, L5, P1 | Qwen3.6-35B-A3B | eng umrissen, Tests als Ziel |
+| L4 | Qwen, Review Claude | viele Querbeziehungen |
+| P2 | Qwen, Review Claude | Netzwerk, Nebenläufigkeit |
+| H1, I1 | du + Qwen/Claude | Hardware, erster Flash |
+| W1 | Qwen | viel UI-Code |
+| D1 | Claude | ADD-Expertise |
 
 ### Wenn Tests nicht grün werden
 - Erst die Fehlermeldung des Tests lesen lassen („read the failing assertion and the rule in the header it refers to“).
@@ -59,6 +169,11 @@ und die genannten Header/Tests mit in den Prompt kopieren.
 - **Nie** Tests oder Header ändern lassen. Ist ein Test wirklich falsch → Contract-Änderung (CONTRACT §14).
 
 ---
+
+## Bisherige Sprint-Prompts (V2.4, Quelle für `docs/sprints/`)
+
+Die folgenden Abschnitte verwenden die alten Sprint-Namen (Zuordnung siehe oben). Sie
+werden nicht mehr direkt an Cline gegeben.
 
 ## Sprint 0a – Smoketest (du, an der Hardware)
 

@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5) – speeds in mm/s – Sprint S2.4 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5) – speeds in mm/s – Sprint L4 must make these pass. Do not modify.
 // Covers: src/logic/app_logic.cpp (CONTRACT §10) – complete scenarios with a
 // simulated axis (fake_axis.h) and a simulated distance sensor.
 #include <unity.h>
