@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.3) – Sprint L2 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.5) – Sprint L2 must make these pass. Do not modify.
 // Covers: src/logic/measure_logic.cpp (CONTRACT §7)
 #include <unity.h>
 #include "logic/measure_logic.h"
@@ -184,6 +184,81 @@ void test_stats_reset_and_empty() {
     TEST_ASSERT_EQUAL_FLOAT(0.0f, statsMean(a));
 }
 
+// ---- V1.5.5: every parameter of the structs is used (no hard-coded defaults) ----------
+void test_curve_uses_struct_fields() {
+    SensorCurve c; c.k_mm = 100.0f; c.exponent = -1.0f;
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 50.0f, sensorMvToMm(2000.0f, c));   // 100 * 2^-1
+    c.exponent = -2.0f;
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 25.0f, sensorMvToMm(2000.0f, c));   // 100 * 2^-2
+}
+void test_range_uses_struct_fields() {
+    SensorCurve c; c.min_mm = 50.0f; c.max_mm = 60.0f;
+    TEST_ASSERT_FALSE(sensorInRange(49.9f, c));
+    TEST_ASSERT_TRUE(sensorInRange(50.0f, c));
+    TEST_ASSERT_TRUE(sensorInRange(60.0f, c));
+    TEST_ASSERT_FALSE(sensorInRange(60.1f, c));
+    TEST_ASSERT_FALSE(sensorInRange(40.0f, c));
+}
+void test_median_other_sizes() {
+    uint16_t a[5] = {50, 10, 40, 20, 30};
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 30.0f, medianMean(a, 5, 1));       // mean of 20,30,40
+    uint16_t b[4] = {4, 1, 3, 2};
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 2.5f, medianMean(b, 4, 0));        // no discard
+    uint16_t c[3] = {7, 9, 8};
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 8.0f, medianMean(c, 3, 1));        // n = 2*discard + 1
+}
+void test_median_large_values_no_overflow() {
+    uint16_t s[16]; for (int i = 0; i < 16; ++i) s[i] = 60000;
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 60000.0f, medianMean(s, 16, 4));
+}
+void test_iir_uses_alpha() {
+    Iir f; f.alpha = 0.5f;
+    iirUpdate(f, 100.0f);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 300.0f, iirUpdate(f, 500.0f));    // 0.5*100 + 0.5*500
+    Iir g; g.alpha = 0.0f;
+    iirUpdate(g, 1.0f);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 7.0f, iirUpdate(g, 7.0f));        // no filtering
+}
+void test_calib_boundaries() {
+    CalibPoints p; p.near_raw = 100; p.far_raw = 105; p.near_ref = 100; p.far_ref = 105;
+    TEST_ASSERT_TRUE(calibValid(p));                     // spans exactly 5 mm are valid
+    p.far_raw = 104.9f;
+    TEST_ASSERT_FALSE(calibValid(p));
+    p = CalibPoints{}; p.near_ref = 40; p.far_ref = 300; p.near_raw = 40; p.far_raw = 300;
+    TEST_ASSERT_TRUE(calibValid(p));                     // refs 40 and 300 inclusive
+    p.far_ref = 300.1f;
+    TEST_ASSERT_FALSE(calibValid(p));
+}
+void test_stability_uses_struct_fields() {
+    StabilityTracker s; s.window_ms = 200; s.tol_mm = 2.0f;
+    stabilityUpdate(s, 0, 100.0f);
+    stabilityUpdate(s, 100, 101.9f);                     // within 2.0 -> no restart
+    TEST_ASSERT_TRUE(stabilityIsStable(s, 200));
+    stabilityUpdate(s, 250, 102.1f);                     // 2.1 from the reference -> restart
+    TEST_ASSERT_FALSE(stabilityIsStable(s, 449));
+    TEST_ASSERT_TRUE(stabilityIsStable(s, 450));
+}
+void test_stability_tolerance_is_inclusive() {
+    StabilityTracker s;
+    stabilityUpdate(s, 0, 100.0f);
+    stabilityUpdate(s, 300, 100.5f);                     // exactly tol -> no restart
+    TEST_ASSERT_TRUE(stabilityIsStable(s, 500));
+}
+void test_stability_reference_does_not_drift() {
+    StabilityTracker s;
+    stabilityUpdate(s, 0, 100.0f);
+    stabilityUpdate(s, 300, 100.4f);                     // within tol of the reference 100.0
+    stabilityUpdate(s, 450, 100.8f);                     // 0.8 from the reference -> restart
+    TEST_ASSERT_FALSE(stabilityIsStable(s, 800));
+    TEST_ASSERT_TRUE(stabilityIsStable(s, 950));
+}
+void test_stats_sum_in_double() {
+    AcqStats a;
+    statsAdd(a, 2.0e7f, true, true);
+    for (int i = 0; i < 10; ++i) statsAdd(a, 1.0f, true, true);
+    TEST_ASSERT_FLOAT_WITHIN(0.2f, (2.0e7f + 10.0f) / 11.0f, statsMean(a));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_curve_1v_is_168_8_mm);
@@ -215,5 +290,15 @@ int main(int, char**) {
     RUN_TEST(test_stability_wraparound);
     RUN_TEST(test_stats_only_valid_on_material);
     RUN_TEST(test_stats_reset_and_empty);
+    RUN_TEST(test_curve_uses_struct_fields);
+    RUN_TEST(test_range_uses_struct_fields);
+    RUN_TEST(test_median_other_sizes);
+    RUN_TEST(test_median_large_values_no_overflow);
+    RUN_TEST(test_iir_uses_alpha);
+    RUN_TEST(test_calib_boundaries);
+    RUN_TEST(test_stability_uses_struct_fields);
+    RUN_TEST(test_stability_tolerance_is_inclusive);
+    RUN_TEST(test_stability_reference_does_not_drift);
+    RUN_TEST(test_stats_sum_in_double);
     return UNITY_END();
 }

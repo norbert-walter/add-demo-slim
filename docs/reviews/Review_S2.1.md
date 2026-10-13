@@ -24,6 +24,34 @@
 | 4 (84/84) | Verhalten korrekt; `len < 8` und README-Zeile offen | Abschluss-Task |
 | 5 | erledigt | Freigabe |
 
+## Token-Verbrauch (Cline, Qwen3.6-35B-A3B lokal)
+
+↑ = Eingabe (neu eingelesen) · ↓ = Ausgabe (inkl. Denken) · → = aus dem Prompt-Cache gelesen
+
+| Task | ↑ Eingabe | ↓ Ausgabe | → Cache |
+|---|---:|---:|---:|
+| Pure C++ (Erstimplementierung) | 119 200 | 49 800 | 1 700 000 |
+| Continuation (nach Kontextüberlauf) | 208 500 | 68 400 | 2 500 000 |
+| Nacharbeit Teil 1 (V1.5.2) | 175 400 | 34 800 | 1 200 000 |
+| Nacharbeit Teil 2 (safety_logic) | 272 000 | 48 800 | 2 900 000 |
+| Nacharbeit Teil 3 (V1.5.3) | 243 600 | 64 500 | 2 300 000 |
+| Abschluss (len < 8, README) | 10 000 | 1 200 | 33 600 |
+| **Summe** | **1 028 700** | **267 500** | **10 633 600** |
+
+| Phase | ↑ | ↓ | → |
+|---|---:|---:|---:|
+| Erstimplementierung | 32 % | 44 % | 39 % |
+| Nacharbeit (Teil 1–3, Abschluss) | 68 % | 56 % | 61 % |
+| davon Abschluss | 1,0 % | 0,4 % | 0,3 % |
+
+- 91 % des gesamten Kontexts (Eingabe + Cache, 11,7 Mio. Token) kamen aus dem Prompt-Cache.
+- Rechenzeit ca. 5 h (ca. 18 Token/s Ausgabe), Wanduhrzeit ca. 6 h inkl. Pausen.
+- Vergleich API-Preise (Stand Oktober 2026, gleiche Tokenmengen): Haiku 5.5 ≈ 0,34 $,
+  Gemini 3.5 Flash-Lite ≈ 1,30 $, GPT-5.4 mini ≈ 2,77 $, Sonnet 5.5 ≈ 5,80 $,
+  Opus 5.5 ≈ 11,59 $, GPT-5.5 ≈ 18,49 $ (ohne Cache das 3- bis 5-Fache).
+  Programmierqualität von Qwen3.6-35B-A3B laut Benchmarks etwa auf dem Niveau von
+  GPT-5.4 mini / Gemini 3.5 Flash-Lite.
+
 ## Akzeptierte Abweichungen und bekannte Schwächen
 
 - **A1:** In RECOVER setzt `safetyStep` bei `TICK`, `HV_OFF`, `SHUTTER_CLOSE` zusätzlich
