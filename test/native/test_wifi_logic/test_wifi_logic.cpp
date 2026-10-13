@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.3) – Sprint L3 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.7) – Sprint L3 must make these pass. Do not modify.
 // Covers: src/logic/wifi_logic.cpp (CONTRACT §12.1) – router connection with retries and pause.
 #include <unity.h>
 #include "logic/wifi_logic.h"
@@ -94,6 +94,61 @@ void test_wraparound() {
     ACT(StaAction::BEGIN, staStep(S, true, false, now + 10000, C));
 }
 
+// ---- V1.5.7: mutation test before Sprint L3 ------------------------------------------
+void test_state_names() {
+    TEST_ASSERT_EQUAL_STRING("off", staStateName(StaState::OFF));
+    TEST_ASSERT_EQUAL_STRING("connecting", staStateName(StaState::CONNECTING));
+    TEST_ASSERT_EQUAL_STRING("connected", staStateName(StaState::CONNECTED));
+    TEST_ASSERT_EQUAL_STRING("backoff", staStateName(StaState::BACKOFF));
+}
+void test_uses_config() {
+    C.attempts = 2; C.attempt_timeout_ms = 1000; C.backoff_ms = 5000;
+    ACT(StaAction::BEGIN, staStep(S, true, false, now, C));
+    ACT(StaAction::NONE, staStep(S, true, false, now + 999, C));
+    ACT(StaAction::BEGIN, staStep(S, true, false, now + 1000, C));
+    TEST_ASSERT_EQUAL_UINT8(2, S.attempt);
+    ACT(StaAction::DISCONNECT, staStep(S, true, false, now + 2000, C));     // only 2 attempts
+    TEST_ASSERT_EQUAL_INT((int)StaState::BACKOFF, (int)S.state);
+    TEST_ASSERT_EQUAL_UINT32(5000, staBackoffRemainingMs(S, now + 2000, C));
+    TEST_ASSERT_EQUAL_UINT32(1000, staBackoffRemainingMs(S, now + 6000, C));
+    ACT(StaAction::NONE, staStep(S, true, false, now + 6999, C));
+    ACT(StaAction::BEGIN, staStep(S, true, false, now + 7000, C));
+}
+void test_backoff_link_up_connects_and_attempt_zero() {
+    staStep(S, true, false, now, C);
+    advance(30000, true, false);
+    TEST_ASSERT_EQUAL_INT((int)StaState::BACKOFF, (int)S.state);
+    TEST_ASSERT_EQUAL_UINT8(0, S.attempt);                                   // 0 outside CONNECTING
+    ACT(StaAction::NONE, staStep(S, true, true, now + 100, C));              // router came back
+    TEST_ASSERT_EQUAL_INT((int)StaState::CONNECTED, (int)S.state);
+    TEST_ASSERT_EQUAL_UINT8(0, S.attempt);
+    TEST_ASSERT_EQUAL_UINT32(0, staBackoffRemainingMs(S, now + 100, C));
+}
+void test_unconfigured_from_every_state() {
+    // from CONNECTING
+    staStep(S, true, false, now, C);
+    ACT(StaAction::DISCONNECT, staStep(S, false, false, now + 100, C));
+    TEST_ASSERT_EQUAL_INT((int)StaState::OFF, (int)S.state);
+    TEST_ASSERT_EQUAL_UINT8(0, S.attempt);
+    // from BACKOFF
+    staStep(S, true, false, now, C);
+    advance(30000, true, false);
+    ACT(StaAction::DISCONNECT, staStep(S, false, false, now + 100, C));
+    TEST_ASSERT_EQUAL_INT((int)StaState::OFF, (int)S.state);
+    TEST_ASSERT_EQUAL_UINT8(0, S.attempt);
+    ACT(StaAction::NONE, staStep(S, false, false, now + 200, C));            // stays OFF quietly
+}
+void test_link_checked_before_timeout() {
+    staStep(S, true, false, now, C);
+    ACT(StaAction::NONE, staStep(S, true, true, now + 10000, C));            // link at the timeout instant
+    TEST_ASSERT_EQUAL_INT((int)StaState::CONNECTED, (int)S.state);
+}
+void test_remaining_zero_outside_backoff() {
+    TEST_ASSERT_EQUAL_UINT32(0, staBackoffRemainingMs(S, now, C));           // OFF
+    staStep(S, true, false, now, C);
+    TEST_ASSERT_EQUAL_UINT32(0, staBackoffRemainingMs(S, now + 10, C));      // CONNECTING
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_defaults);
@@ -105,5 +160,11 @@ int main(int, char**) {
     RUN_TEST(test_success_in_third_attempt);
     RUN_TEST(test_ssid_removed_disconnects);
     RUN_TEST(test_wraparound);
+    RUN_TEST(test_state_names);
+    RUN_TEST(test_uses_config);
+    RUN_TEST(test_backoff_link_up_connects_and_attempt_zero);
+    RUN_TEST(test_unconfigured_from_every_state);
+    RUN_TEST(test_link_checked_before_timeout);
+    RUN_TEST(test_remaining_zero_outside_backoff);
     return UNITY_END();
 }

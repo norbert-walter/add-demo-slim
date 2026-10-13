@@ -20,7 +20,7 @@ agentenbasierte Entwicklung mit code-server + Cline.
 | `src/app/*` | Snapshot, Command-Queue, Control-Task (vorgegeben) |
 | `src/hal/*.h`, `src/system/*.h`, `src/comm/*.h`, `src/display/*.h` | Hardware-Verträge |
 | `src/smoketest/smoketest.cpp` | Sprint 0a |
-| `test/native/*` | eingefrorene Host-Tests (303 Testfälle, 13 Suiten, Contract V1.5.6; `test_command_queue` braucht einen Linux/macOS-Host mit pthreads) |
+| `test/native/*` | eingefrorene Host-Tests (321 Testfälle, 13 Suiten, Contract V1.5.7; `test_command_queue` braucht einen Linux/macOS-Host mit pthreads) |
 | `test/embedded/*` | On-Target-Tests (S5) |
 | `scripts/serial_cmd.py` | nicht-interaktiver Serial-Client (auch für Cline) |
 | `scripts/add_client.py` | REST-Client mit CRC-Rahmenregel (Referenz) |
@@ -39,14 +39,14 @@ pio device monitor -e smoketest           # "help"
 
 ## Status der Module
 
-**Stand: 13.10.2026 · Contract V1.5.6 · Pflichtenheft V1.7.6**
+**Stand: 13.10.2026 · Contract V1.5.7 · Pflichtenheft V1.7.6**
 Diese Tabelle wird **nach jedem Sprint** aktualisiert (Implementierung **und** Tests) –
 Teil der Definition of Done in `.clinerules`.
 
 | Sprint | Dateien | Implementierung | Tests auf dem Gerät / nativ | Stand |
 |---|---|---|---|---|
 | 0a | `src/smoketest/smoketest.cpp` (0a.3) | ✅ fertig | Smoketest-Protokoll freigegeben (5.2 bekannte Einschränkung) | ✅ 11.10.2026, Tag `sprint-0a` |
-| 0b | Header, CONTRACT, Tests, `src/app/*` | ✅ fertig (Claude) | 303/303 gegen Referenzimplementierung | ✅ Contract V1.5.6 |
+| 0b | Header, CONTRACT, Tests, `src/app/*` | ✅ fertig (Claude) | 321/321 gegen Referenzimplementierung | ✅ Contract V1.5.7 |
 | L1 | `logic/types.cpp`, `crc32.cpp`, `safety_logic.cpp` | ✅ fertig (Qwen) | `test_types_crc` 22/22 · `test_safety_logic` 62/62 | ✅ 12.10.2026, Tag `sprint-2.1` |
 | L2 | `logic/measure_logic.cpp`, `params.cpp` | ✅ fertig (Qwen) | `test_measure_logic` 40/40 · `test_params` 20/20 | ✅ 13.10.2026, Tag `sprint-l2` |
 | L3 | `logic/motion_seq.cpp`, `sound_logic.cpp`, `wifi_logic.cpp` | ⬜ offen | `test_motion_seq`, `test_sound_logic`, `test_wifi_logic` | – |
@@ -66,7 +66,7 @@ Reihenfolge und Begründung: `docs/Sprint_Prompts_Demoanlage_ADD_Slim_V2.md`, Ab
 Nativ grün im Repository (ohne Referenzimplementierung): nur `test_env`. Alle anderen
 Suiten scheitern beim Linken, bis ihr Sprint die `.cpp`-Dateien liefert – das ist erwartet.
 
-**Nachweis der Tests:** Die 303 Testfälle sind keine reine Sollvorgabe – sie laufen
+**Nachweis der Tests:** Die 321 Testfälle sind keine reine Sollvorgabe – sie laufen
 vollständig grün gegen eine Referenzimplementierung (`referenz_logic.zip`, bewusst nicht
 im Repository, damit der Agent sie nicht abschreibt). Reproduzierbar mit
 `scripts/verify_reference.sh /pfad/zu/referenz_logic.zip`. Zusätzlich wurden 40 Fehler in die
@@ -76,4 +76,5 @@ Zuordnung trotzdem). Contract V1.5: weitere 7 gezielte Fehler in der Shutter-/Zo
 alle erkannt. Contract V1.5.2: 8 zusätzliche Tests aus dem Review von S2.1
 (motor_stop in FAULT/WAIT_ACK, INIT_DONE, Ausgänge außerhalb RUNNING, lange und kurze CRC-Rahmen). Contract V1.5.3: R1-Matrix über alle Ereignisse und
 vollständige API-Tabelle (Differenztest gegen die Referenz hatte eine Lücke bei `INIT_DONE` gezeigt). Contract V1.5.5: Mutationstest vor L2
-(43 Mutanten von measure_logic/params, alle bis auf 2 gleichwertige erkannt, +14 Tests). Contract V1.5.6: +2 Tests aus dem Review von L2.
+(43 Mutanten von measure_logic/params, alle bis auf 2 gleichwertige erkannt, +14 Tests). Contract V1.5.6: +2 Tests aus dem Review von L2. Contract V1.5.7: Mutationstest vor L3 (72 Mutanten von
+motion_seq/sound_logic/wifi_logic, auch gegen `test_app_logic`; +18 Tests).

@@ -1,6 +1,6 @@
 /**
  * @file motion_seq.h
- * @brief Pure, non-blocking motion sequencer (FROZEN CONTRACT V1.5 §8).
+ * @brief Pure, non-blocking motion sequencer (FROZEN CONTRACT V1.5.7 §8).
  *
  * V1.3: ALL speeds are mm/s (API, parameters, /proc, MotionConfig).
  *
@@ -170,6 +170,8 @@ void motionEmergencyStop(MotionSeq& s, const MotionInputs& in, DrvRequest& out);
  *  - MEAS_APPROACH: arrived -> phase MEAS_HOLD, ev.acq_started (out NONE).
  *  - MEAS_HOLD: nothing.
  * Every phase change sets phase_start_ms = now; every MOVE_TO sets target_steps.
+ * V1.5.7: all time differences (timeout, settle) are uint32 wrap-around safe:
+ * (uint32_t)(now - start) compared with the limit.
  */
 DrvRequest motionTick(MotionSeq& s, const MotionInputs& in, const MotionConfig& c);
 

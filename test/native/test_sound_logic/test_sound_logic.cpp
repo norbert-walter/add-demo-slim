@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.3) – Sprint L3 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.7) – Sprint L3 must make these pass. Do not modify.
 // Covers: src/logic/sound_logic.cpp (CONTRACT §11.1) – patterns of the active buzzer.
 #include <unity.h>
 #include "logic/sound_logic.h"
@@ -84,6 +84,30 @@ void test_names() {
     TEST_ASSERT_EQUAL_STRING("none", soundName(Sound::NONE));
 }
 
+// ---- V1.5.7 -------------------------------------------------------------------------
+void test_all_names_exact() {
+    TEST_ASSERT_EQUAL_STRING("none", soundName(Sound::NONE));
+    TEST_ASSERT_EQUAL_STRING("click", soundName(Sound::CLICK));
+    TEST_ASSERT_EQUAL_STRING("homed", soundName(Sound::HOMED));
+    TEST_ASSERT_EQUAL_STRING("boot", soundName(Sound::BOOT));
+    TEST_ASSERT_EQUAL_STRING("reboot", soundName(Sound::REBOOT));
+    TEST_ASSERT_EQUAL_STRING("fault", soundName(Sound::FAULT));
+    TEST_ASSERT_EQUAL_STRING("estop", soundName(Sound::ESTOP));
+}
+void test_start_none_and_full_priority_order() {
+    TEST_ASSERT_FALSE(soundStart(P, Sound::NONE, 0));
+    TEST_ASSERT_TRUE(soundStart(P, Sound::CLICK, 0));
+    TEST_ASSERT_FALSE(soundStart(P, Sound::NONE, 10));                 // NONE never replaces
+    TEST_ASSERT_EQUAL_INT((int)Sound::CLICK, (int)P.cur);
+    const Sound order[] = {Sound::CLICK, Sound::HOMED, Sound::BOOT, Sound::REBOOT, Sound::FAULT, Sound::ESTOP};
+    for (int i = 0; i < 6; ++i)
+        for (int j = 0; j < 6; ++j) {
+            P = SoundPlayer{};
+            soundStart(P, order[i], 0);
+            TEST_ASSERT_EQUAL_MESSAGE(j >= i, soundStart(P, order[j], 10), soundName(order[j]));
+        }
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_durations);
@@ -93,5 +117,7 @@ int main(int, char**) {
     RUN_TEST(test_priority);
     RUN_TEST(test_wraparound);
     RUN_TEST(test_names);
+    RUN_TEST(test_all_names_exact);
+    RUN_TEST(test_start_none_and_full_priority_order);
     return UNITY_END();
 }

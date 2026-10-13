@@ -741,7 +741,7 @@ des Style Guides. **Kein** eigener Top-Level-Block `live_data` – `/proc` wird 
 | `test_api_parse` | api_parse | Parser, Typen, Fehlerfälle |
 
 Alle Tests sind **eingefroren** und gegen eine Referenzimplementierung geprüft
-(303 Testfälle, alle grün (Contract V1.5.6), `test_command_queue` zusätzlich mit ThreadSanitizer geprüft; Mutationstests bestätigen die Trennschärfe).
+(321 Testfälle, alle grün (Contract V1.5.7), `test_command_queue` zusätzlich mit ThreadSanitizer geprüft; Mutationstests bestätigen die Trennschärfe).
 
 **Regressionsregel (DoD jedes Sprints):** Alle Suiten, die vor dem Sprint grün waren,
 sind danach weiterhin grün (`pio test -e native` vollständig, nicht nur die Sprint-Suite).

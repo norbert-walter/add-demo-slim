@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.6 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-12
+**Version:** 1.5.7 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-12
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.6
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -66,6 +66,14 @@ to P1 (previously contradictory: S1 / S3).
 | 1 | `stabilityUpdate`: a restart sets **both** `ref = value` and `since = now`; after a jump the tracker settles at the new level. (The L2 code kept the old `ref`, so calibration never became stable – found by `test_app_logic`, not by `test_measure_logic`.) | `measure_logic.h` |
 | 2 | `paramSet`: the range check uses the double value as received; 60.999999999 is out of range for 61.0..242.0 | `params.h` |
 | 3 | New tests: `test_stability_settles_at_new_level_after_jump`, `test_range_check_in_double`. Reference: 13 suites, **303/303** | `test/native` |
+
+**Clarifications 1.5.7 (test hardening before Sprint L3, mutation test against the reference,
+module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
+
+| # | Clarification | Where |
+|---|---|---|
+| 1 | `motionTick`: timeout and settle time are uint32 wrap-around safe | `motion_seq.h` |
+| 2 | New tests: motion_seq +10 (config used for conversions and speeds, check order, every start clears `error_latched`, emergency stop while the driver still runs, timeout boundary and wrap, arrival by position and by settle time, `motionAcquiring`, one-shot events), sound_logic +2 (all names, full priority matrix), wifi_logic +6 (names, config used, link in BACKOFF, unconfigured from every state, link before timeout, remaining time). 72 mutants: all caught except 2 equivalent ones. Reference: 13 suites, **321/321** | `test/native` |
 
 **Scope note:** plant coordinates for several gauges (offset/sign transformation at the
 API boundary, common time base) are an extension idea for later (Pflichtenheft §11.1);

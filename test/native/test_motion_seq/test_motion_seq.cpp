@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5) – speeds in mm/s – Sprint L3 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.7) – speeds in mm/s – Sprint L3 must make these pass. Do not modify.
 // Covers: src/logic/motion_seq.cpp (CONTRACT §8)
 #include <unity.h>
 #include <math.h>
@@ -339,6 +339,120 @@ void test_successful_start_clears_error_latched() {
     TEST_ASSERT_TRUE(motionStateOf(S) == MotionState::IDLE);
 }
 
+// ---- V1.5.7: mutation test before Sprint L3 ------------------------------------------
+static MotionInputs mi(uint32_t t, bool running, int32_t pos, bool lf = false, bool lb = false) {
+    MotionInputs m; m.now_ms = t; m.drv_running = running; m.drv_pos_steps = pos;
+    m.limit_fwd = lf; m.limit_bwd = lb; return m;
+}
+void test_conversions_use_config() {
+    MotionConfig c; c.steps_per_mm = 100.0f;
+    TEST_ASSERT_EQUAL_INT32(123, mmToSteps(1.234f, c));
+    TEST_ASSERT_EQUAL_UINT32(250, mmPerSecToHz(2.5f, c));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 2.5f, stepsToMm(250, c));
+}
+void test_start_speeds_use_config() {
+    MotionConfig c; c.homing_speed = 3.0f; c.approach_speed = 7.0f;
+    MotionSeq s; DrvRequest r;
+    API(ApiError::OK, motionStartHoming(s, mi(10, false, 0), c, r));
+    TEST_ASSERT_EQUAL_UINT32(mmPerSecToHz(3.0f, c), r.speed_hz);
+    s = MotionSeq{}; s.homed = true;
+    API(ApiError::OK, motionStartMeasure(s, 150.0f, mi(10, false, 0), c, r));
+    OP(DrvOp::MOVE_TO, r.op);
+    TEST_ASSERT_EQUAL_UINT32(mmPerSecToHz(7.0f, c), r.speed_hz);       // approach speed
+    s = MotionSeq{}; s.homed = true;
+    API(ApiError::OK, motionStartTraverse(s, 80.0f, 200.0f, 3.0f, mi(10, false, 0), c, r));
+    TEST_ASSERT_EQUAL_UINT32(mmPerSecToHz(7.0f, c), r.speed_hz);       // approach to the start
+    TEST_ASSERT_EQUAL_INT32(mmToSteps(80.0f, c), r.target_steps);
+    DrvRequest t = motionTick(s, mi(20, false, mmToSteps(80.0f, c)), c);   // arrived at start
+    OP(DrvOp::MOVE_TO, t.op);
+    TEST_ASSERT_EQUAL_INT32(mmToSteps(200.0f, c), t.target_steps);
+    TEST_ASSERT_EQUAL_UINT32(mmPerSecToHz(3.0f, c), t.speed_hz);       // traverse speed
+}
+void test_homing_start_clears_homed() {
+    MotionSeq s; s.homed = true; DrvRequest r;
+    API(ApiError::OK, motionStartHoming(s, mi(10, false, 0), C, r));
+    TEST_ASSERT_FALSE(s.homed);
+}
+void test_move_check_order() {
+    MotionSeq s; DrvRequest r;                                         // not homed, idle
+    API(ApiError::PRECONDITION, motionStartMove(s, 999.0f, 99.0f, mi(10, false, 0), C, r));
+    API(ApiError::PRECONDITION, motionStartTraverse(s, 10.0f, 10.0f, 99.0f, mi(10, false, 0), C, r));
+    API(ApiError::PRECONDITION, motionStartMeasure(s, 999.0f, mi(10, false, 0), C, r));
+    s.homed = true; s.phase = SeqPhase::MOVE;                          // busy
+    API(ApiError::BUSY, motionStartMove(s, 999.0f, 99.0f, mi(10, false, 0), C, r));
+    OP(DrvOp::NONE, r.op);
+}
+void test_every_start_clears_error_latched() {
+    DrvRequest r;
+    MotionSeq s; s.homed = true; s.error_latched = true;
+    API(ApiError::OK, motionStartMove(s, 50.0f, 5.0f, mi(10, false, 0), C, r));
+    TEST_ASSERT_FALSE(s.error_latched);
+    s = MotionSeq{}; s.homed = true; s.error_latched = true;
+    API(ApiError::OK, motionStartMeasure(s, 100.0f, mi(10, false, 0), C, r));
+    TEST_ASSERT_FALSE(s.error_latched);
+    s = MotionSeq{}; s.homed = true; s.error_latched = true;
+    API(ApiError::OK, motionStartTraverse(s, 80.0f, 100.0f, 5.0f, mi(10, false, 0), C, r));
+    TEST_ASSERT_FALSE(s.error_latched);
+    s = MotionSeq{}; s.error_latched = true;
+    API(ApiError::OK, motionStartHoming(s, mi(10, false, 0), C, r));
+    TEST_ASSERT_FALSE(s.error_latched);
+    s = MotionSeq{}; s.homed = true; s.error_latched = true;          // an error leaves it set
+    API(ApiError::BAD_PARAM, motionStartMove(s, 500.0f, 5.0f, mi(10, false, 0), C, r));
+    TEST_ASSERT_TRUE(s.error_latched);
+}
+void test_emergency_idle_but_driver_running_loses_reference() {
+    MotionSeq s; s.homed = true; DrvRequest r;                         // idle, still decelerating
+    motionEmergencyStop(s, mi(10, true, 500), r);
+    OP(DrvOp::FORCE_STOP, r.op);
+    TEST_ASSERT_FALSE(s.homed);
+}
+void test_homing_timeout_boundary_and_wrap() {
+    MotionConfig c; c.homing_timeout_ms = 1000;
+    const uint32_t starts[] = {5000u, 0xFFFFFF00u};                     // second start wraps
+    for (uint32_t t0 : starts) {
+        MotionSeq s; DrvRequest r;
+        API(ApiError::OK, motionStartHoming(s, mi(t0, false, 0), c, r));
+        DrvRequest t = motionTick(s, mi(t0 + 100u, true, -100), c);    // early in the homing
+        OP(DrvOp::NONE, t.op);
+        t = motionTick(s, mi(t0 + 1000u, true, -100), c);              // exactly the timeout
+        OP(DrvOp::NONE, t.op);
+        TEST_ASSERT_EQUAL_INT((int)SeqPhase::HOME_SEEK, (int)s.phase);
+        t = motionTick(s, mi(t0 + 1001u, true, -100), c);              // 1 ms later
+        OP(DrvOp::FORCE_STOP, t.op);
+        TEST_ASSERT_TRUE(motionTakeEvents(s).homing_failed);
+        TEST_ASSERT_TRUE(s.error_latched);
+    }
+}
+void test_arrival_by_position_and_by_settle_time() {
+    MotionSeq s; s.homed = true; DrvRequest r;
+    API(ApiError::OK, motionStartMove(s, 50.0f, 5.0f, mi(5000, false, 0), C, r));
+    motionTick(s, mi(5001, false, r.target_steps), C);                // at target, settle not over
+    TEST_ASSERT_EQUAL_INT((int)SeqPhase::IDLE, (int)s.phase);
+    s = MotionSeq{}; s.homed = true;
+    API(ApiError::OK, motionStartMove(s, 50.0f, 5.0f, mi(5000, false, 0), C, r));
+    motionTick(s, mi(5099, false, 7), C);                              // stopped elsewhere, < settle_ms
+    TEST_ASSERT_EQUAL_INT((int)SeqPhase::MOVE, (int)s.phase);
+    motionTick(s, mi(5100, false, 7), C);                              // settle_ms after the start
+    TEST_ASSERT_EQUAL_INT((int)SeqPhase::IDLE, (int)s.phase);
+}
+void test_acquiring_only_in_run_and_hold() {
+    MotionSeq s; s.homed = true; DrvRequest r;
+    API(ApiError::OK, motionStartTraverse(s, 80.0f, 100.0f, 5.0f, mi(10, false, 0), C, r));
+    TEST_ASSERT_FALSE(motionAcquiring(s));                             // TRAV_APPROACH
+    s = MotionSeq{}; s.homed = true;
+    API(ApiError::OK, motionStartMeasure(s, 100.0f, mi(10, false, 0), C, r));
+    TEST_ASSERT_FALSE(motionAcquiring(s));                             // MEAS_APPROACH
+    motionTick(s, mi(20, false, r.target_steps), C);
+    TEST_ASSERT_TRUE(motionAcquiring(s));                              // MEAS_HOLD
+}
+void test_take_events_clears() {
+    MotionSeq s; s.homed = true; DrvRequest r;
+    API(ApiError::OK, motionStartMeasure(s, 100.0f, mi(10, false, 0), C, r));
+    motionTick(s, mi(20, false, r.target_steps), C);
+    TEST_ASSERT_TRUE(motionTakeEvents(s).acq_started);
+    TEST_ASSERT_FALSE(motionTakeEvents(s).acq_started);               // one-shot
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_conversions);
@@ -367,5 +481,15 @@ int main(int, char**) {
     RUN_TEST(test_non_finite_inputs_rejected);
     RUN_TEST(test_static_limit_without_motion_is_no_fault);
     RUN_TEST(test_successful_start_clears_error_latched);
+    RUN_TEST(test_conversions_use_config);
+    RUN_TEST(test_start_speeds_use_config);
+    RUN_TEST(test_homing_start_clears_homed);
+    RUN_TEST(test_move_check_order);
+    RUN_TEST(test_every_start_clears_error_latched);
+    RUN_TEST(test_emergency_idle_but_driver_running_loses_reference);
+    RUN_TEST(test_homing_timeout_boundary_and_wrap);
+    RUN_TEST(test_arrival_by_position_and_by_settle_time);
+    RUN_TEST(test_acquiring_only_in_run_and_hold);
+    RUN_TEST(test_take_events_clears);
     return UNITY_END();
 }
