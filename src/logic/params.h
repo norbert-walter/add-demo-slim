@@ -1,6 +1,6 @@
 /**
  * @file params.h
- * @brief Parameters, simulated safety flags and the SET key table (FROZEN CONTRACT V1.5 §9).
+ * @brief Parameters, simulated safety flags and the SET key table (FROZEN CONTRACT V1.5.5 §9).
  *
  * Implementation: src/logic/params.cpp (Sprint L2).
  *
@@ -85,6 +85,6 @@ ApiError paramSet(Params& p, SafetyFlags& f, const char* key,
  * Floats with one decimal. wifi_pass is never written; instead
  * "wifi_pass_set":true|false. Also contains the calibration raw values and
  * "calib_valid".
- * @return length written (without NUL) or -1 if cap is too small.
+ * @return length written (without NUL) or -1 if cap is too small (needs cap >= length + 1).
  */
 int paramsToJsonMember(const Params& p, const SafetyFlags& f, char* buf, size_t cap);

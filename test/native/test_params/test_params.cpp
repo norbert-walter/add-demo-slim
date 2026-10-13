@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5) – Sprint L2 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.5) – Sprint L2 must make these pass. Do not modify.
 // Covers: src/logic/params.cpp (CONTRACT §9)
 #include <unity.h>
 #include <string.h>
@@ -175,6 +175,69 @@ void test_config_json_cap_too_small() {
     TEST_ASSERT_EQUAL_INT(-1, paramsToJsonMember(P, F, buf, sizeof(buf)));
 }
 
+// ---- V1.5.5 -------------------------------------------------------------------------
+// every field in the right place: all values distinct from each other and from the defaults
+void test_config_json_exact_all_fields() {
+    OK(setNum("measure_pos", 150.5)); OK(setNum("maint_pos", 33.3)); OK(setNum("traverse_start", 70.1));
+    OK(setNum("traverse_end", 230.2)); OK(setNum("traverse_speed", 12.5)); OK(setNum("shutter_hold", 7.7));
+    OK(setNum("edge_threshold", 4.4)); OK(setNum("base_dist", 88.8));
+    OK(setNum("calib_near_ref", 41.1)); OK(setNum("calib_far_ref", 66.6));
+    P.calib.near_raw = 42.2f; P.calib.far_raw = 67.7f;           // raw values come from CALIB
+    OK(setBool("cooling_flow", true)); OK(setNum("temp", -12.3)); OK(setBool("estop_nc", true));
+    OK(setStr("wifi_ssid", "Net ~1"));
+    char buf[600];
+    int n = paramsToJsonMember(P, F, buf, sizeof(buf));
+    TEST_ASSERT_EQUAL_STRING(
+        "\"config\":{\"measure_pos\":150.5,\"maint_pos\":33.3,\"traverse_start\":70.1,"
+        "\"traverse_end\":230.2,\"traverse_speed\":12.5,\"shutter_hold\":7.7,\"edge_threshold\":4.4,\"base_dist\":88.8,"
+        "\"calib_near_raw\":42.2,\"calib_near_ref\":41.1,\"calib_far_raw\":67.7,"
+        "\"calib_far_ref\":66.6,\"calib_valid\":true,\"interlock\":false,"
+        "\"cooling_flow\":true,\"temp\":-12.3,\"estop_nc\":true,\"wifi_ssid\":\"Net ~1\",\"wifi_pass_set\":false}", buf);
+    TEST_ASSERT_EQUAL_INT((int)strlen(buf), n);
+    P.calib.far_raw = 43.0f;                                      // raw span < 5 -> invalid
+    paramsToJsonMember(P, F, buf, sizeof(buf));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "\"calib_valid\":false,"));
+}
+void test_config_json_cap_exact() {
+    char buf[600];
+    int n = paramsToJsonMember(P, F, buf, sizeof(buf));
+    TEST_ASSERT_TRUE(n > 0);
+    char exact[600];
+    TEST_ASSERT_EQUAL_INT(n, paramsToJsonMember(P, F, exact, (size_t)n + 1));   // room for NUL
+    TEST_ASSERT_EQUAL_STRING(buf, exact);
+    TEST_ASSERT_EQUAL_INT(-1, paramsToJsonMember(P, F, exact, (size_t)n));      // no room for NUL
+}
+void test_string_rule_boundaries() {
+    OK(setStr("wifi_ssid", " ~ "));                                // 0x20 and 0x7E are allowed
+    char s1[2] = {0x7F, 0}; BAD(setStr("wifi_ssid", s1));
+    char s2[2] = {0x1F, 0}; BAD(setStr("wifi_ssid", s2));
+    char p63[64]; memset(p63, 'p', 63); p63[63] = 0;
+    OK(setStr("wifi_pass", p63)); TEST_ASSERT_TRUE(persist);       // 63 chars, persisted
+    BAD(setStr("wifi_pass", "secret\"12"));
+    BAD(setStr("wifi_pass", "secret\\12"));
+    TEST_ASSERT_EQUAL_STRING(p63, P.wifi_pass);
+}
+void test_persist_untouched_on_every_error() {
+    const char* typed[] = {"interlock", "cooling_flow", "estop_nc", "temp", "measure_pos", "calib_far_ref"};
+    for (const char* k : typed) {                       // wrong type: string for a bool/number key
+        bool pz = true;
+        BAD(paramSet(P, F, k, ValueType::STRING, 0, false, "x", &pz));
+        TEST_ASSERT_TRUE_MESSAGE(pz, k);
+        pz = false;
+        BAD(paramSet(P, F, k, ValueType::STRING, 0, false, "x", &pz));
+        TEST_ASSERT_FALSE_MESSAGE(pz, k);
+    }
+    const char* strs[] = {"wifi_ssid", "wifi_pass"};
+    for (const char* k : strs) {                        // wrong type: number for a string key
+        bool pz = true;
+        BAD(paramSet(P, F, k, ValueType::NUMBER, 1, false, "", &pz));
+        TEST_ASSERT_TRUE_MESSAGE(pz, k);
+    }
+    bool pz = true;
+    BAD(paramSet(P, F, "interlock", ValueType::NUMBER, 2, false, "", &pz));   // bad number for a flag
+    TEST_ASSERT_TRUE(pz);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_defaults);
@@ -192,5 +255,9 @@ int main(int, char**) {
     RUN_TEST(test_config_json_exact_defaults);
     RUN_TEST(test_config_json_never_contains_password);
     RUN_TEST(test_config_json_cap_too_small);
+    RUN_TEST(test_config_json_exact_all_fields);
+    RUN_TEST(test_config_json_cap_exact);
+    RUN_TEST(test_string_rule_boundaries);
+    RUN_TEST(test_persist_untouched_on_every_error);
     return UNITY_END();
 }

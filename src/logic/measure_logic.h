@@ -1,6 +1,6 @@
 /**
  * @file measure_logic.h
- * @brief Pure measurement chain (FROZEN CONTRACT V1.5 §7). No hardware access.
+ * @brief Pure measurement chain (FROZEN CONTRACT V1.5.5 §7). No hardware access.
  *
  * Implementation: src/logic/measure_logic.cpp (Sprint L2).
  *
@@ -63,7 +63,7 @@ struct CalibPoints {             ///< V1.2 defaults: identity at the demo's work
 
 /**
  * Valid if |far_raw - near_raw| >= 5 mm, |far_ref - near_ref| >= 5 mm and both
- * refs within 40..300 mm.
+ * refs within 40..300 mm (inclusive: 40 <= ref <= 300).
  */
 bool calibValid(const CalibPoints& p);
 
@@ -80,6 +80,8 @@ bool onMaterial(float thick_mm, float threshold_mm);
 /**
  * Stability detector for calibration capture.
  * update(): if not initialised or |value - ref| > tol_mm -> ref = value, since = now.
+ *           Otherwise nothing changes (V1.5.5: ref stays the first value of the stable
+ *           period, it does not follow the signal).
  * isStable(): initialised && (now - since) >= window_ms (uint32 wrap-safe).
  */
 struct StabilityTracker {
@@ -92,7 +94,11 @@ struct StabilityTracker {
 void stabilityUpdate(StabilityTracker& s, uint32_t now_ms, float value);
 bool stabilityIsStable(const StabilityTracker& s, uint32_t now_ms);
 
+/// V1.5.5: all functions use the fields of the structs passed in (SensorCurve, Iir,
+/// StabilityTracker); the defaults must never be hard-coded in measure_logic.cpp.
+
 /// Running mean of thickness during an acquisition (traverse run / measure hold).
+/// The sum is accumulated in double (AcqStats::sum).
 struct AcqStats {
     double   sum = 0.0;
     uint32_t n   = 0;

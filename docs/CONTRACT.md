@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.4 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-12
+**Version:** 1.5.5 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-12
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.6
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -47,6 +47,16 @@ implementation, 2026-10-12, no behaviour change):**
 header and test comments follow the new plan (L1–L5 pure logic, P1–P2 platform, H1 hardware,
 I1 integration; mapping in `docs/Sprint_Prompts_Demoanlage_ADD_Slim_V2.md`). `log_buffer` belongs
 to P1 (previously contradictory: S1 / S3).
+
+**Clarifications 1.5.5 (test hardening before Sprint L2, mutation test against the reference,
+2026-10-13, no behaviour change):**
+
+| # | Clarification | Where |
+|---|---|---|
+| 1 | All measure functions use the fields of the structs passed in (`SensorCurve`, `Iir`, `StabilityTracker`); no hard-coded defaults. `AcqStats` sums in double | `measure_logic.h` |
+| 2 | `calibValid`: refs 40..300 inclusive; `StabilityTracker`: the reference stays the first value of the stable period | `measure_logic.h` |
+| 3 | `paramsToJsonMember`: needs `cap >= length + 1` | `params.h` |
+| 4 | New tests: measure +10 (struct fields, median sizes and overflow, calib boundaries, stability tolerance and reference, double sum), params +4 (all JSON fields with distinct values, exact cap, string-rule boundaries, persist untouched on every error). 43 mutants of the reference: all caught except 2 equivalent ones. Reference: 13 suites, **301/301** | `test/native` |
 
 **Scope note:** plant coordinates for several gauges (offset/sign transformation at the
 API boundary, common time base) are an extension idea for later (Pflichtenheft §11.1);
