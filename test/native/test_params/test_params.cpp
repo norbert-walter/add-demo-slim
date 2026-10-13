@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5.5) – Sprint L2 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.6) – Sprint L2 must make these pass. Do not modify.
 // Covers: src/logic/params.cpp (CONTRACT §9)
 #include <unity.h>
 #include <string.h>
@@ -238,6 +238,23 @@ void test_persist_untouched_on_every_error() {
     TEST_ASSERT_TRUE(pz);
 }
 
+// V1.5.6: the range check uses the double value; values just outside a limit are rejected
+// even if they round to the limit as float
+void test_range_check_in_double() {
+    struct R { const char* k; double lo, hi; } rs[] = {
+        {"measure_pos", 61, 242}, {"maint_pos", 21, 60}, {"traverse_start", 61, 242},
+        {"traverse_end", 61, 242}, {"traverse_speed", 1, 20}, {"shutter_hold", 0, 10},
+        {"edge_threshold", 0.5, 100}, {"base_dist", 40, 300},
+        {"calib_near_ref", 40, 300}, {"calib_far_ref", 40, 300}, {"temp", -20, 99.9},
+    };
+    for (auto& r : rs) {
+        BAD(setNum(r.k, r.lo - 1e-9));
+        BAD(setNum(r.k, r.hi + 1e-9));
+        OK(setNum(r.k, r.lo));
+        OK(setNum(r.k, r.hi));
+    }
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_defaults);
@@ -259,5 +276,6 @@ int main(int, char**) {
     RUN_TEST(test_config_json_cap_exact);
     RUN_TEST(test_string_rule_boundaries);
     RUN_TEST(test_persist_untouched_on_every_error);
+    RUN_TEST(test_range_check_in_double);
     return UNITY_END();
 }

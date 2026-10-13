@@ -1,6 +1,6 @@
 /**
  * @file params.h
- * @brief Parameters, simulated safety flags and the SET key table (FROZEN CONTRACT V1.5.5 §9).
+ * @brief Parameters, simulated safety flags and the SET key table (FROZEN CONTRACT V1.5.6 §9).
  *
  * Implementation: src/logic/params.cpp (Sprint L2).
  *
@@ -70,6 +70,8 @@ void paramsDefaults(Params& p);
  * @param persist          set to true if the key is persisted (caller saves NVS),
  *                         false otherwise; untouched on error
  * @return OK, or BAD_PARAM (unknown key, wrong type, out of range incl. NaN and +-Inf (V1.4.1), too long)
+ * V1.5.6: the range check uses the double value as received (e.g. 60.999999999 is out of
+ * range for 61.0..242.0); convert to float only after the check.
  */
 ApiError paramSet(Params& p, SafetyFlags& f, const char* key,
                   ValueType vtype, double num, bool b, const char* str, bool* persist);
