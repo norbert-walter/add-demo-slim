@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.5 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-12
+**Version:** 1.5.6 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-12
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.6
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -57,6 +57,15 @@ to P1 (previously contradictory: S1 / S3).
 | 2 | `calibValid`: refs 40..300 inclusive; `StabilityTracker`: the reference stays the first value of the stable period | `measure_logic.h` |
 | 3 | `paramsToJsonMember`: needs `cap >= length + 1` | `params.h` |
 | 4 | New tests: measure +10 (struct fields, median sizes and overflow, calib boundaries, stability tolerance and reference, double sum), params +4 (all JSON fields with distinct values, exact cap, string-rule boundaries, persist untouched on every error). 43 mutants of the reference: all caught except 2 equivalent ones. Reference: 13 suites, **301/301** | `test/native` |
+
+**Clarifications 1.5.6 (review of Sprint L2: differential test and `test_app_logic` with the L2 code,
+2026-10-13, no behaviour change):**
+
+| # | Clarification | Where |
+|---|---|---|
+| 1 | `stabilityUpdate`: a restart sets **both** `ref = value` and `since = now`; after a jump the tracker settles at the new level. (The L2 code kept the old `ref`, so calibration never became stable – found by `test_app_logic`, not by `test_measure_logic`.) | `measure_logic.h` |
+| 2 | `paramSet`: the range check uses the double value as received; 60.999999999 is out of range for 61.0..242.0 | `params.h` |
+| 3 | New tests: `test_stability_settles_at_new_level_after_jump`, `test_range_check_in_double`. Reference: 13 suites, **303/303** | `test/native` |
 
 **Scope note:** plant coordinates for several gauges (offset/sign transformation at the
 API boundary, common time base) are an extension idea for later (Pflichtenheft §11.1);

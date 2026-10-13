@@ -1,6 +1,6 @@
 /**
  * @file measure_logic.h
- * @brief Pure measurement chain (FROZEN CONTRACT V1.5.5 §7). No hardware access.
+ * @brief Pure measurement chain (FROZEN CONTRACT V1.5.6 §7). No hardware access.
  *
  * Implementation: src/logic/measure_logic.cpp (Sprint L2).
  *
@@ -79,9 +79,10 @@ bool onMaterial(float thick_mm, float threshold_mm);
 
 /**
  * Stability detector for calibration capture.
- * update(): if not initialised or |value - ref| > tol_mm -> ref = value, since = now.
- *           Otherwise nothing changes (V1.5.5: ref stays the first value of the stable
- *           period, it does not follow the signal).
+ * update(): if not initialised or |value - ref| > tol_mm -> RESTART: ref = value AND
+ *           since = now (both!). Otherwise nothing changes: ref keeps the value of the last
+ *           restart and does not follow small changes (V1.5.5). After a jump to a new
+ *           level the tracker therefore becomes stable again at the new level (V1.5.6).
  * isStable(): initialised && (now - since) >= window_ms (uint32 wrap-safe).
  */
 struct StabilityTracker {

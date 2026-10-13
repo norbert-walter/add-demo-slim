@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5.5) – Sprint L2 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.6) – Sprint L2 must make these pass. Do not modify.
 // Covers: src/logic/measure_logic.cpp (CONTRACT §7)
 #include <unity.h>
 #include "logic/measure_logic.h"
@@ -259,6 +259,16 @@ void test_stats_sum_in_double() {
     TEST_ASSERT_FLOAT_WITHIN(0.2f, (2.0e7f + 10.0f) / 11.0f, statsMean(a));
 }
 
+// V1.5.6: after a jump the tracker settles at the NEW level (ref = value on restart)
+void test_stability_settles_at_new_level_after_jump() {
+    StabilityTracker s;
+    stabilityUpdate(s, 0, 100.0f);
+    stabilityUpdate(s, 200, 110.0f);                     // jump -> restart at 110
+    for (uint32_t t = 220; t <= 800; t += 20) stabilityUpdate(s, t, 110.1f);   // new level
+    TEST_ASSERT_TRUE(stabilityIsStable(s, 700));         // 500 ms after the jump
+    TEST_ASSERT_TRUE(stabilityIsStable(s, 800));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_curve_1v_is_168_8_mm);
@@ -300,5 +310,6 @@ int main(int, char**) {
     RUN_TEST(test_stability_tolerance_is_inclusive);
     RUN_TEST(test_stability_reference_does_not_drift);
     RUN_TEST(test_stats_sum_in_double);
+    RUN_TEST(test_stability_settles_at_new_level_after_jump);
     return UNITY_END();
 }
