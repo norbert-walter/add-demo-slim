@@ -1,6 +1,6 @@
 /**
  * @file motion_seq.h
- * @brief Pure, non-blocking motion sequencer (FROZEN CONTRACT V1.5.7 §8).
+ * @brief Pure, non-blocking motion sequencer (FROZEN CONTRACT V1.5.8 §8).
  *
  * V1.3: ALL speeds are mm/s (API, parameters, /proc, MotionConfig).
  *
@@ -94,7 +94,7 @@ struct MotionSeq {
 };
 
 // ---- conversions ----------------------------------------------------------
-int32_t  mmToSteps(float mm, const MotionConfig& c);            ///< lroundf(mm * steps_per_mm)
+int32_t  mmToSteps(float mm, const MotionConfig& c);            ///< lroundf(mm * steps_per_mm), exactly (also < 0)
 float    stepsToMm(int32_t steps, const MotionConfig& c);       ///< steps / steps_per_mm
 uint32_t mmPerSecToHz(float mm_s, const MotionConfig& c);       ///< lroundf(mm_s * steps_per_mm)
 
@@ -103,6 +103,8 @@ uint32_t mmPerSecToHz(float mm_s, const MotionConfig& c);       ///< lroundf(mm_
 // V1.4.1: every float argument must be finite; NaN or +-Inf -> BAD_PARAM (write range
 // checks as !(lo <= x && x <= hi) so that NaN fails them).
 // Every successful start clears error_latched.
+// V1.5.8: every start checks BUSY (phase != IDLE) FIRST, then PRECONDITION (!homed), then
+// BAD_PARAM - e.g. any start during homing returns BUSY.
 /**
  * Homing. BUSY if phase != IDLE. Sets homed = false, error_latched = false,
  * homing_start_ms = now. If limit_bwd is already active: phase HOME_LATCH,

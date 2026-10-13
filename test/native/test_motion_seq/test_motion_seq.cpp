@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5.7) – speeds in mm/s – Sprint L3 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.8) – speeds in mm/s – Sprint L3 must make these pass. Do not modify.
 // Covers: src/logic/motion_seq.cpp (CONTRACT §8)
 #include <unity.h>
 #include <math.h>
@@ -453,6 +453,29 @@ void test_take_events_clears() {
     TEST_ASSERT_FALSE(motionTakeEvents(s).acq_started);               // one-shot
 }
 
+// ---- V1.5.8: review of L3 -------------------------------------------------------------
+// BUSY is checked before PRECONDITION for every start (e.g. any start during homing)
+void test_busy_before_precondition_during_homing() {
+    MotionSeq s; DrvRequest r;
+    API(ApiError::OK, motionStartHoming(s, mi(10, false, 0), C, r));     // homing: busy, not homed
+    API(ApiError::BUSY, motionStartHoming(s, mi(20, true, 0), C, r));
+    API(ApiError::BUSY, motionStartMove(s, 50.0f, 5.0f, mi(20, true, 0), C, r));
+    API(ApiError::BUSY, motionStartTraverse(s, 80.0f, 100.0f, 5.0f, mi(20, true, 0), C, r));
+    API(ApiError::BUSY, motionStartMeasure(s, 100.0f, mi(20, true, 0), C, r));
+    OP(DrvOp::NONE, r.op);
+}
+// conversions exactly as documented: lroundf(mm * steps_per_mm), also for negative values
+void test_conversions_are_lroundf() {
+    for (int i = -5000; i <= 30000; i += 7) {
+        float mm = i / 100.0f;
+        TEST_ASSERT_EQUAL_INT32((int32_t)lroundf(mm * C.steps_per_mm), mmToSteps(mm, C));
+    }
+    for (int i = 0; i <= 2500; i += 3) {
+        float v = i / 100.0f;
+        TEST_ASSERT_EQUAL_UINT32((uint32_t)lroundf(v * C.steps_per_mm), mmPerSecToHz(v, C));
+    }
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_conversions);
@@ -491,5 +514,7 @@ int main(int, char**) {
     RUN_TEST(test_arrival_by_position_and_by_settle_time);
     RUN_TEST(test_acquiring_only_in_run_and_hold);
     RUN_TEST(test_take_events_clears);
+    RUN_TEST(test_busy_before_precondition_during_homing);
+    RUN_TEST(test_conversions_are_lroundf);
     return UNITY_END();
 }
