@@ -1,6 +1,7 @@
 # Sprint-Prompts – Demoanlage ADD (Slim) · V3.0
 
-**Stand:** 2026-10-13 · **Autor:** Norbert Walter
+**Stand:** 2026-10-13
+**Autor:** Norbert Walter
 **Basis:** Pflichtenheft V1.7.6, `docs/CONTRACT.md` V1.5.4 (Änderungen seit V1.3: Anhänge am Ende)
 **Werkzeuge:** code-server + Cline, Modell Qwen3.6-35B-A3B (64k Kontext), Review mit Claude
 ---
