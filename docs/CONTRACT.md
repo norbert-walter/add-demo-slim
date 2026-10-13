@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.7 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-12
+**Version:** 1.5.8 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-12
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.6
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -74,6 +74,14 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 |---|---|---|
 | 1 | `motionTick`: timeout and settle time are uint32 wrap-around safe | `motion_seq.h` |
 | 2 | New tests: motion_seq +10 (config used for conversions and speeds, check order, every start clears `error_latched`, emergency stop while the driver still runs, timeout boundary and wrap, arrival by position and by settle time, `motionAcquiring`, one-shot events), sound_logic +2 (all names, full priority matrix), wifi_logic +6 (names, config used, link in BACKOFF, unconfigured from every state, link before timeout, remaining time). 72 mutants: all caught except 2 equivalent ones. Reference: 13 suites, **321/321** | `test/native` |
+
+**Clarifications 1.5.8 (review of Sprint L3, differential test, 2026-10-13, no behaviour change):**
+
+| # | Clarification | Where |
+|---|---|---|
+| 1 | Every motion start checks BUSY first, then PRECONDITION, then BAD_PARAM (the L3 code checked `homed` first: a start during homing returned PRECONDITION) | `motion_seq.h` |
+| 2 | `mmToSteps` / `mmPerSecToHz` are exactly `lroundf(x * steps_per_mm)`, also for negative values | `motion_seq.h` |
+| 3 | New tests: `test_busy_before_precondition_during_homing`, `test_conversions_are_lroundf`. Reference: 13 suites, **323/323** | `test/native` |
 
 **Scope note:** plant coordinates for several gauges (offset/sign transformation at the
 API boundary, common time base) are an extension idea for later (Pflichtenheft §11.1);
