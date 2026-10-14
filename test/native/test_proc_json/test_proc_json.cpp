@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.3) – Sprint L5 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.11) – Sprint L5 must make these pass. Do not modify.
 // Covers: src/logic/proc_json.cpp (CONTRACT §5)
 #include <unity.h>
 #include <string.h>
@@ -150,6 +150,38 @@ void test_response_local_control() {
         "{\"status\":\"error\",\"err\":-10,\"cmd\":\"HV_ON\",\"msg\":\"local control active\"}", B);
 }
 
+// ---- V1.5.11: mutation test before Sprint L5 ----
+void test_v1511_zero_band_and_rounding() {
+    ProcData d; d.motion.pos = -0.045f; d.motion.vel = 0.07f; d.measure.dist = -0.06f;
+    procToJson(d, B, sizeof(B));
+    TEST_ASSERT_NOT_NULL(strstr(B, "\"pos\":0.0,\"vel\":0.1,"));    // |v| < 0.05 -> 0.0, else %.1f
+    TEST_ASSERT_NOT_NULL(strstr(B, "\"dist\":-0.1,"));
+}
+void test_v1511_limit_switch_order() {
+    ProcData d; d.motion.limit_fwd = true;
+    procToJson(d, B, sizeof(B));
+    TEST_ASSERT_NOT_NULL(strstr(B, "\"limit_fwd\":true,\"limit_bwd\":false}"));
+}
+void test_v1511_temp_sanitised() {
+    ProcData d; d.safety.temp = NAN;
+    procToJson(d, B, sizeof(B));
+    TEST_ASSERT_NOT_NULL(strstr(B, "\"temp\":0.0,"));
+    d.safety.temp = 1e30f;
+    procToJson(d, B, sizeof(B));
+    TEST_ASSERT_NOT_NULL(strstr(B, "\"temp\":99999.9,"));
+}
+void test_v1511_response_status_only_ok_for_ok() {
+    responseToJson(CmdId::MOVE, ApiError::BUSY, nullptr, nullptr, B, sizeof(B));
+    TEST_ASSERT_EQUAL_INT(0, strncmp(B, "{\"status\":\"error\",\"err\":-7,\"cmd\":\"MOVE\",\"msg\":", 46));
+}
+void test_v1511_error_response_with_extra() {
+    int n = responseToJson(CmdId::SET, ApiError::BAD_PARAM, "bad value", "\"key\":\"x\"", B, sizeof(B));
+    TEST_ASSERT_TRUE(crcFrameVerify(B, (size_t)n));
+    stripCrc(B);
+    TEST_ASSERT_EQUAL_STRING(
+        "{\"status\":\"error\",\"err\":-4,\"cmd\":\"SET\",\"msg\":\"bad value\",\"key\":\"x\"}", B);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_proc_default_exact);
@@ -167,5 +199,10 @@ int main(int, char**) {
     RUN_TEST(test_state_extra_exact);
     RUN_TEST(test_state_extra_worst_case_and_in_response);
     RUN_TEST(test_response_local_control);
+    RUN_TEST(test_v1511_zero_band_and_rounding);
+    RUN_TEST(test_v1511_limit_switch_order);
+    RUN_TEST(test_v1511_temp_sanitised);
+    RUN_TEST(test_v1511_response_status_only_ok_for_ok);
+    RUN_TEST(test_v1511_error_response_with_extra);
     return UNITY_END();
 }

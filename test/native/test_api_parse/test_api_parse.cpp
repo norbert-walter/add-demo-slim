@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.3) – Sprint L5 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.11) – Sprint L5 must make these pass. Do not modify.
 // Covers: src/logic/api_parse.cpp (CONTRACT §4, §5.2)
 #include <unity.h>
 #include <stdio.h>
@@ -168,6 +168,13 @@ void test_command_is_reset_between_parses() {
     TEST_ASSERT_TRUE(Cm.vtype == ValueType::NONE);
 }
 
+// ---- V1.5.11: mutation test before Sprint L5 ----
+void test_v1511_set_number_keeps_double_precision() {
+    API(ApiError::OK, parse("{\"cmd\":\"SET\",\"params\":{\"key\":\"k\",\"value\":16777217}}"));
+    TEST_ASSERT_TRUE(Cm.vtype == ValueType::NUMBER);
+    TEST_ASSERT_TRUE(Cm.num == 16777217.0);          // not representable as float
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_bad_crc);
@@ -190,5 +197,6 @@ int main(int, char**) {
     RUN_TEST(test_set_string_too_long);
     RUN_TEST(test_calib_actions);
     RUN_TEST(test_command_is_reset_between_parses);
+    RUN_TEST(test_v1511_set_number_keeps_double_precision);
     return UNITY_END();
 }

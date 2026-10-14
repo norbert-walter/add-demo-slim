@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.10 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-14
+**Version:** 1.5.11 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-14
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.6
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -97,6 +97,13 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 |---|---|---|
 | 1 | `appMeasure`: `in_range` only from the unfiltered `mm`; out of range `raw_mm = dist_mm = mm` (not 0) and only `stab.initialized` is reset; statistics only in `TRAV_RUN`/`MEAS_HOLD` (`motionAcquiring`), not in every non-IDLE phase. Qwen's L4.1b deviated in all four points and still passed all 80 tests | `app_logic.h` |
 | 2 | New tests in `test_app_logic` (+4): `test_v1510_in_range_uses_unfiltered_mm_not_calibrated_dist`, `test_v1510_out_of_range_raw_and_dist_are_mm`, `test_v1510_out_of_range_keeps_stability_settings`, `test_v1510_stats_only_in_trav_run_or_meas_hold`. Reference: 13 suites, **344/344** | `test/native` |
+
+**Clarifications 1.5.11 (test hardening before Sprint L5, mutation test against the reference,
+2026-10-14, no behaviour change):**
+
+| # | Clarification | Where |
+|---|---|---|
+| 1 | New tests (+7): zero band and rounding of floats (`-0.045` → `0.0`, `0.07` → `0.1`), order of `limit_fwd`/`limit_bwd`, `temp` sanitised, `"status":"ok"` only for OK, error response with extra members, SET number keeps double precision, leaving the ACK screen cancels a running press. 77 mutants of proc_json/api_parse/display_logic: all caught except 9 equivalent / without practical effect (documented in `docs/sprints/L5.md`). Reference: 13 suites, **351/351** | `test/native` |
 
 **Scope note:** plant coordinates for several gauges (offset/sign transformation at the
 API boundary, common time base) are an extension idea for later (Pflichtenheft §11.1);

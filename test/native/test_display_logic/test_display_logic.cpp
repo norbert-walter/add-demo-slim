@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.3) – Sprint L5 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.11) – Sprint L5 must make these pass. Do not modify.
 // Covers: src/logic/display_logic.cpp (CONTRACT §13)
 #include <unity.h>
 #include "logic/display_logic.h"
@@ -97,6 +97,14 @@ void test_wraparound() {
     TEST_ASSERT_TRUE(poll(ScreenMode::ACK, true));
 }
 
+// ---- V1.5.11: mutation test before Sprint L5 ----
+void test_v1511_leaving_ack_screen_cancels_running_press() {
+    poll(ScreenMode::ACK, false);
+    TEST_ASSERT_EQUAL_INT(0, pollFor(400, ScreenMode::ACK, true));       // press started
+    TEST_ASSERT_EQUAL_INT(0, pollFor(100, ScreenMode::NORMAL, true));    // screen changes, finger stays
+    TEST_ASSERT_EQUAL_INT(0, pollFor(2000, ScreenMode::ACK, true));      // back: no new touch-down edge
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_screen_mode);
@@ -108,5 +116,6 @@ int main(int, char**) {
     RUN_TEST(test_new_episode_after_leaving_wait_ack);
     RUN_TEST(test_progress);
     RUN_TEST(test_wraparound);
+    RUN_TEST(test_v1511_leaving_ack_screen_cancels_running_press);
     return UNITY_END();
 }
