@@ -369,14 +369,16 @@ ApiError appCommand(AppState& s, const Command& cmd, const HwInputs& hw, const A
             if (!cmd.has_pos) return ApiError::BAD_PARAM;
             { float spd = cmd.has_speed ? cmd.speed : cfg.motion.approach_speed;
               motionStartMove(s.seq, cmd.pos, spd, mi, cfg.motion, d); } break;
-        case CmdId::START_MEASURE:
-            { float pos = cmd.has_pos ? cmd.pos : s.params.measure_pos;
-              motionStartMeasure(s.seq, pos, mi, cfg.motion, d); } break;
-        case CmdId::START_TRAVERSE:
-            { float st = cmd.has_start ? cmd.start : s.params.traverse_start;
-              float en = cmd.has_end   ? cmd.end   : s.params.traverse_end;
-              float sp = cmd.has_speed ? cmd.speed : s.params.traverse_speed;
-              motionStartTraverse(s.seq, st, en, sp, mi, cfg.motion, d); } break;
+        case CmdId::START_MEASURE: {
+            float pos = cmd.has_pos ? cmd.pos : s.params.measure_pos;
+            ApiError mr = motionStartMeasure(s.seq, pos, mi, cfg.motion, d);
+            if (mr != ApiError::OK) return mr; } break;
+        case CmdId::START_TRAVERSE: {
+            float st = cmd.has_start ? cmd.start : s.params.traverse_start;
+            float en = cmd.has_end   ? cmd.end   : s.params.traverse_end;
+            float sp = cmd.has_speed ? cmd.speed : s.params.traverse_speed;
+            ApiError mr = motionStartTraverse(s.seq, st, en, sp, mi, cfg.motion, d);
+            if (mr != ApiError::OK) return mr; } break;
         case CmdId::PARK:
             motionStartMove(s.seq, cfg.motion.park_target_mm, cfg.motion.approach_speed, mi, cfg.motion, d); break;
         case CmdId::SERVICE:
@@ -388,7 +390,12 @@ ApiError appCommand(AppState& s, const Command& cmd, const HwInputs& hw, const A
             break;
         case CmdId::SET: {
             bool persist = false;
-            ApiError r = paramSet(s.params, s.flags, cmd.key, cmd.vtype, cmd.num, cmd.b, cmd.str, &persist);
+            ApiError r = ApiError::OK;
+            if (cmd.key == "estop_nc") {
+                if (s.seq.phase != SeqPhase::IDLE || s.safety.hv_on)
+                    return ApiError::PRECONDITION;
+            }
+            r = paramSet(s.params, s.flags, cmd.key, cmd.vtype, cmd.num, cmd.b, cmd.str, &persist);
             if (r == ApiError::OK && persist) out.persist = true;
             break;
         }
@@ -397,10 +404,10 @@ ApiError appCommand(AppState& s, const Command& cmd, const HwInputs& hw, const A
             switch (cmd.calib) {
                 case CalibAction::NEAR:
                     if (!stabilityIsStable(s.stab, now_ms)) return ApiError::NOT_STABLE;
-                    s.params.calib.near_raw = s.dist_mm; break;
+                    s.params.calib.near_raw = s.raw_mm; break;
                 case CalibAction::FAR:
                     if (!stabilityIsStable(s.stab, now_ms)) return ApiError::NOT_STABLE;
-                    s.params.calib.far_raw = s.dist_mm; break;
+                    s.params.calib.far_raw = s.raw_mm; break;
                 case CalibAction::BASE:
                     if (!s.in_range || !stabilityIsStable(s.stab, now_ms)) return ApiError::PRECONDITION;
                     s.params.base_dist = s.dist_mm; break;
@@ -410,7 +417,7 @@ ApiError appCommand(AppState& s, const Command& cmd, const HwInputs& hw, const A
                 case CalibAction::RESET: s.params.calib = CalibPoints{}; break;
                 default: return ApiError::UNKNOWN_CMD;
             } break;
-        case CmdId::ACK: applySafety(s, SafetyEvent::INIT_DONE, in, hw, cfg, d, enteredFault); break;
+        case CmdId::ACK: applySafety(s, SafetyEvent::ACK, in, hw, cfg, d, enteredFault); break;
         case CmdId::HV_ON: {
             ApiError r = applySafety(s, SafetyEvent::HV_ON, in, hw, cfg, d, enteredFault);
             if (r != ApiError::OK) return r;
