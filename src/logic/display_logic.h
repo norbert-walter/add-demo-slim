@@ -47,6 +47,7 @@ struct AckPress {
  *   - Release, leaving the area or cause_active becoming true cancels the press.
  *   - (now - t0) >= hold_ms -> sent = true, return true.
  *   - progress (0..1) is written if not NULL (0 when not pressing, 1 after sent).
+ *     V1.5.13: "1 after sent" holds on every call while sent (not computed from time).
  * prev_touch is updated at the end of every call (also in mode != ACK).
  */
 bool ackPressUpdate(AckPress& a, ScreenMode mode, bool cause_active, bool touch_in_area,
