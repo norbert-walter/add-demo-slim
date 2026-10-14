@@ -150,31 +150,31 @@ void appInit(AppState& s) {
 
 void appMeasure(AppState& s, const AppConfig& cfg, float median_mv, uint32_t now_ms) {
     // 1. Convert MV → mm (unfiltered)
-    float raw_unfiltered = sensorMvToMm(median_mv, cfg.sensor);
+    float mm = sensorMvToMm(median_mv, cfg.sensor);
 
     // 2. Range check on the unfiltered reading
-    bool in_range = sensorInRange(raw_unfiltered, cfg.sensor);
+    bool in_range = sensorInRange(mm, cfg.sensor);
 
     if (!in_range) {
         // Reset filter and stability tracker
         iirReset(s.iir);
-        s.stab = StabilityTracker{};
-        s.raw_mm      = 0.0f;
-        s.dist_mm     = 0.0f;
+        s.raw_mm      = mm;          // out of range: raw = mm (e.g. SENSOR_NO_SIGNAL_MM)
+        s.dist_mm     = mm;          // out of range: dist = mm
         s.thick_mm    = 0.0f;
         s.in_range    = false;
         s.on_material = false;
+        s.stab.initialized = false;  // only reset initialized flag (window_ms/tol_mm stay)
         return;
     }
 
     // 3. IIR filter → raw_mm (uncalibrated)
-    s.raw_mm = iirUpdate(s.iir, raw_unfiltered);
+    s.raw_mm = iirUpdate(s.iir, mm);
 
     // 4. Calibration → dist_mm
     s.dist_mm = calibApply(s.raw_mm, s.params.calib);
 
-    // 5. Range flag on the calibrated reading
-    s.in_range = sensorInRange(s.dist_mm, cfg.sensor);
+    // 5. Range flag stays from step 2 (in_range decided on unfiltered mm only)
+    s.in_range = in_range;
 
     // 6. Thickness and on_material
     s.thick_mm   = thickness(s.dist_mm, s.params.base_dist);
@@ -183,10 +183,9 @@ void appMeasure(AppState& s, const AppConfig& cfg, float median_mv, uint32_t now
     // 7. Stability update (always when in range)
     stabilityUpdate(s.stab, now_ms, s.dist_mm);
 
-    // 8. Statistics: only while acquiring AND shutter open
-    bool acquiring = (s.seq.phase != SeqPhase::IDLE);
-    if (acquiring && s.safety.shutter_open) {
-        statsAdd(s.stats, s.thick_mm, s.on_material, true);
+    // 8. Statistics: only while acquiring AND shutter open && in_range
+    if (motionAcquiring(s.seq)) {
+        statsAdd(s.stats, s.thick_mm, s.on_material, s.safety.shutter_open && in_range);
     }
 }
 
