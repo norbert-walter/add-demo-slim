@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5.9) – speeds in mm/s – Sprint L4 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.10) – speeds in mm/s – Sprint L4 must make these pass. Do not modify.
 // Covers: src/logic/app_logic.cpp (CONTRACT §10) – complete scenarios with a
 // simulated axis (fake_axis.h) and a simulated distance sensor.
 #include <unity.h>
@@ -1139,6 +1139,53 @@ void test_v159_comm_timeout_uses_config() {
     TEST_ASSERT_EQUAL_INT((int)ErrorCode::COMM_TIMEOUT, (int)S.safety.err);
 }
 
+// ---- V1.5.10: review of L4.1b (appMeasure exactly as in app_logic.h) ----
+void test_v1510_in_range_uses_unfiltered_mm_not_calibrated_dist() {
+    appInit(S);
+    S.params.calib.near_raw = 40; S.params.calib.near_ref = 45;     // offset +5 mm
+    S.params.calib.far_raw = 65;  S.params.calib.far_ref = 70;
+    appMeasure(S, C, mvForDist(297.0f), 1000);                      // mm 297 in range (max 300)
+    TEST_ASSERT_TRUE(S.in_range);                                   // although dist 302 > max
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 302.0f, S.dist_mm);
+    TEST_ASSERT_TRUE(S.stab.initialized);
+}
+void test_v1510_out_of_range_raw_and_dist_are_mm() {
+    appInit(S);
+    for (int i = 0; i < 5; ++i) appMeasure(S, C, mvForDist(60.0f), 1000 + 20 * i);
+    appMeasure(S, C, 0.0f, 1200);                                   // no signal
+    TEST_ASSERT_EQUAL_FLOAT(SENSOR_NO_SIGNAL_MM, S.raw_mm);
+    TEST_ASSERT_EQUAL_FLOAT(SENSOR_NO_SIGNAL_MM, S.dist_mm);
+    TEST_ASSERT_EQUAL_FLOAT(SENSOR_NO_SIGNAL_MM, proc().measure.dist);
+    appMeasure(S, C, mvForDist(400.0f), 1220);                      // beyond max_mm
+    TEST_ASSERT_FALSE(S.in_range);
+    TEST_ASSERT_FLOAT_WITHIN(1.0f, 400.0f, S.raw_mm);
+    TEST_ASSERT_FLOAT_WITHIN(1.0f, 400.0f, S.dist_mm);
+}
+void test_v1510_out_of_range_keeps_stability_settings() {
+    appInit(S);
+    S.stab.window_ms = 1234; S.stab.tol_mm = 0.9f;
+    appMeasure(S, C, mvForDist(60.0f), 1000);
+    appMeasure(S, C, 0.0f, 1020);
+    TEST_ASSERT_FALSE(S.stab.initialized);                          // only this flag is reset
+    TEST_ASSERT_EQUAL_UINT32(1234, S.stab.window_ms);
+    TEST_ASSERT_EQUAL_FLOAT(0.9f, S.stab.tol_mm);
+}
+void test_v1510_stats_only_in_trav_run_or_meas_hold() {
+    static const SeqPhase no[] = { SeqPhase::HOME_SEEK, SeqPhase::HOME_LATCH, SeqPhase::HOME_PULLOFF,
+                                   SeqPhase::MOVE, SeqPhase::TRAV_APPROACH, SeqPhase::MEAS_APPROACH };
+    appInit(S);
+    S.safety.shutter_open = true;
+    uint32_t t = 1000;
+    for (SeqPhase ph : no) {
+        S.seq.phase = ph;
+        appMeasure(S, C, mvForDist(50.0f), t += 20);
+        TEST_ASSERT_EQUAL_UINT32(0, S.stats.n);
+    }
+    S.seq.phase = SeqPhase::MEAS_HOLD;
+    appMeasure(S, C, mvForDist(50.0f), t += 20);
+    TEST_ASSERT_EQUAL_UINT32(1, S.stats.n);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_boot_state);
@@ -1221,5 +1268,9 @@ int main(int, char**) {
     RUN_TEST(test_v159_proc_fields);
     RUN_TEST(test_v159_safety_position_uses_motion_config);
     RUN_TEST(test_v159_comm_timeout_uses_config);
+    RUN_TEST(test_v1510_in_range_uses_unfiltered_mm_not_calibrated_dist);
+    RUN_TEST(test_v1510_out_of_range_raw_and_dist_are_mm);
+    RUN_TEST(test_v1510_out_of_range_keeps_stability_settings);
+    RUN_TEST(test_v1510_stats_only_in_trav_run_or_meas_hold);
     return UNITY_END();
 }

@@ -1,6 +1,6 @@
 /**
  * @file app_logic.h
- * @brief Complete application logic as pure functions (FROZEN CONTRACT V1.5.9 §10).
+ * @brief Complete application logic as pure functions (FROZEN CONTRACT V1.5.10 §10).
  *
  * Implementation: src/logic/app_logic.cpp (Sprint L4).
  *
@@ -136,6 +136,10 @@ void appInit(AppState& s);
  *   !in_range: iirReset(iir); raw = dist = mm; thick = 0; on_material = false;
  *              stab.initialized = false
  *   if motionAcquiring(seq): statsAdd(stats, thick, on_material, valid = shutter_open && in_range)
+ *   V1.5.10: in_range is decided ONLY on the unfiltered mm (never on dist);
+ *   out of range raw_mm = dist_mm = mm (e.g. SENSOR_NO_SIGNAL_MM), not 0;
+ *   only stab.initialized is reset (window_ms/tol_mm stay);
+ *   motionAcquiring() is true only in TRAV_RUN / MEAS_HOLD (not phase != IDLE).
  */
 void appMeasure(AppState& s, const AppConfig& cfg, float median_mv, uint32_t now_ms);
 
