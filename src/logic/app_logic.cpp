@@ -361,28 +361,29 @@ ApiError appCommand(AppState& s, const Command& cmd, const HwInputs& hw, const A
     MotionInputs mi = motionIn(hw);
     DrvRequest d{};
     bool enteredFault = false;
+    ApiError r = ApiError::OK;
+    bool arm = false;
     switch (cmd.id) {
         case CmdId::INIT:
-            if (s.seq.phase != SeqPhase::IDLE || s.seq.homed) return ApiError::BUSY;
-            motionStartHoming(s.seq, mi, cfg.motion, d); break;
-        case CmdId::MOVE:
-            if (!cmd.has_pos) return ApiError::BAD_PARAM;
-            { float spd = cmd.has_speed ? cmd.speed : cfg.motion.approach_speed;
-              motionStartMove(s.seq, cmd.pos, spd, mi, cfg.motion, d); } break;
+            r = motionStartHoming(s.seq, mi, cfg.motion, d); arm = true; break;
+        case CmdId::MOVE: {
+            float spd = cmd.has_speed ? cmd.speed : cfg.motion.approach_speed;
+            r = motionStartMove(s.seq, cmd.pos, spd, mi, cfg.motion, d); arm = true; break;
+        }
         case CmdId::START_MEASURE: {
             float pos = cmd.has_pos ? cmd.pos : s.params.measure_pos;
-            ApiError mr = motionStartMeasure(s.seq, pos, mi, cfg.motion, d);
-            if (mr != ApiError::OK) return mr; } break;
+            r = motionStartMeasure(s.seq, pos, mi, cfg.motion, d); arm = true; break;
+        }
         case CmdId::START_TRAVERSE: {
             float st = cmd.has_start ? cmd.start : s.params.traverse_start;
             float en = cmd.has_end   ? cmd.end   : s.params.traverse_end;
             float sp = cmd.has_speed ? cmd.speed : s.params.traverse_speed;
-            ApiError mr = motionStartTraverse(s.seq, st, en, sp, mi, cfg.motion, d);
-            if (mr != ApiError::OK) return mr; } break;
+            r = motionStartTraverse(s.seq, st, en, sp, mi, cfg.motion, d); arm = true; break;
+        }
         case CmdId::PARK:
-            motionStartMove(s.seq, cfg.motion.park_target_mm, cfg.motion.approach_speed, mi, cfg.motion, d); break;
+            r = motionStartMove(s.seq, cfg.motion.park_target_mm, cfg.motion.approach_speed, mi, cfg.motion, d); arm = true; break;
         case CmdId::SERVICE:
-            motionStartMove(s.seq, s.params.maint_pos, cfg.motion.approach_speed, mi, cfg.motion, d); break;
+            r = motionStartMove(s.seq, s.params.maint_pos, cfg.motion.approach_speed, mi, cfg.motion, d); arm = true; break;
         case CmdId::STOP:
             motionStop(s.seq, d);
             if (s.safety.shutter_open && s.safety.shutter_auto)
@@ -390,68 +391,53 @@ ApiError appCommand(AppState& s, const Command& cmd, const HwInputs& hw, const A
             break;
         case CmdId::SET: {
             bool persist = false;
-            ApiError r = ApiError::OK;
-            if (cmd.key == "estop_nc") {
-                if (s.seq.phase != SeqPhase::IDLE || s.safety.hv_on)
-                    return ApiError::PRECONDITION;
+            if (strcmp(cmd.key, "estop_nc") == 0 && (s.seq.phase != SeqPhase::IDLE || s.safety.hv_on)) {
+                r = ApiError::PRECONDITION; break;
             }
             r = paramSet(s.params, s.flags, cmd.key, cmd.vtype, cmd.num, cmd.b, cmd.str, &persist);
             if (r == ApiError::OK && persist) out.persist = true;
             break;
         }
         case CmdId::CALIB:
-            if (s.seq.phase != SeqPhase::IDLE) return ApiError::BUSY;
+            if (s.seq.phase != SeqPhase::IDLE) { r = ApiError::BUSY; break; }
             switch (cmd.calib) {
                 case CalibAction::NEAR:
-                    if (!stabilityIsStable(s.stab, now_ms)) return ApiError::NOT_STABLE;
+                    if (!stabilityIsStable(s.stab, now_ms)) { r = ApiError::NOT_STABLE; break; }
                     s.params.calib.near_raw = s.raw_mm; break;
                 case CalibAction::FAR:
-                    if (!stabilityIsStable(s.stab, now_ms)) return ApiError::NOT_STABLE;
+                    if (!stabilityIsStable(s.stab, now_ms)) { r = ApiError::NOT_STABLE; break; }
                     s.params.calib.far_raw = s.raw_mm; break;
                 case CalibAction::BASE:
-                    if (!s.in_range || !stabilityIsStable(s.stab, now_ms)) return ApiError::PRECONDITION;
+                    if (!s.in_range) { r = ApiError::PRECONDITION; break; }
+                    if (!stabilityIsStable(s.stab, now_ms)) { r = ApiError::NOT_STABLE; break; }
                     s.params.base_dist = s.dist_mm; break;
                 case CalibAction::SAVE:
-                    if (!calibValid(s.params.calib)) return ApiError::CALIB_INVALID;
+                    if (!calibValid(s.params.calib)) { r = ApiError::CALIB_INVALID; break; }
                     out.persist = true; break;
                 case CalibAction::RESET: s.params.calib = CalibPoints{}; break;
-                default: return ApiError::UNKNOWN_CMD;
+                default: r = ApiError::BAD_PARAM; break;
             } break;
-        case CmdId::ACK: applySafety(s, SafetyEvent::ACK, in, hw, cfg, d, enteredFault); break;
-        case CmdId::HV_ON: {
-            ApiError r = applySafety(s, SafetyEvent::HV_ON, in, hw, cfg, d, enteredFault);
-            if (r != ApiError::OK) return r;
-            break;
-        }
-        case CmdId::HV_OFF: {
-            ApiError r = applySafety(s, SafetyEvent::HV_OFF, in, hw, cfg, d, enteredFault);
-            if (r != ApiError::OK) return r;
-            break;
-        }
-        case CmdId::SHUTTER_OPEN: applySafety(s, SafetyEvent::SHUTTER_OPEN, in, hw, cfg, d, enteredFault); break;
-        case CmdId::SHUTTER_CLOSE: applySafety(s, SafetyEvent::SHUTTER_CLOSE, in, hw, cfg, d, enteredFault); break;
+        case CmdId::ACK: r = applySafety(s, SafetyEvent::ACK, in, hw, cfg, d, enteredFault); break;
+        case CmdId::HV_ON: r = applySafety(s, SafetyEvent::HV_ON, in, hw, cfg, d, enteredFault); arm = true; break;
+        case CmdId::HV_OFF: r = applySafety(s, SafetyEvent::HV_OFF, in, hw, cfg, d, enteredFault); break;
+        case CmdId::SHUTTER_OPEN: r = applySafety(s, SafetyEvent::SHUTTER_OPEN, in, hw, cfg, d, enteredFault); break;
+        case CmdId::SHUTTER_CLOSE: r = applySafety(s, SafetyEvent::SHUTTER_CLOSE, in, hw, cfg, d, enteredFault); break;
         case CmdId::REBOOT:
-            if (s.safety.hv_on) return ApiError::PRECONDITION;
+            if (s.safety.hv_on) { r = ApiError::PRECONDITION; break; }
             out.reboot = true; startSound(s, Sound::REBOOT, now_ms, out); break;
-        default: return ApiError::UNKNOWN_CMD;
+        default: r = ApiError::UNKNOWN_CMD; break;
     }
-    switch (cmd.id) {
-        case CmdId::INIT: case CmdId::MOVE: case CmdId::PARK:
-        case CmdId::SERVICE: case CmdId::START_MEASURE:
-        case CmdId::START_TRAVERSE: case CmdId::HV_ON:
-            s.comm_armed = (cmd.source == CmdSource::API); break;
-        default: break;
-    }
+    if (r == ApiError::OK && arm) s.comm_armed = (cmd.source == CmdSource::API);
     if (drvRank(d) >= drvRank(out.drv)) out.drv = d;
     if (enteredFault) {
         startSound(s, (s.safety.err == ErrorCode::ESTOP) ? Sound::ESTOP : Sound::FAULT, now_ms, out);
     }
-    if (cmd.source == CmdSource::LOCAL && cmd.id != CmdId::NONE)
+    if (r == ApiError::OK && cmd.source == CmdSource::LOCAL && cmd.id != CmdId::NONE)
         startSound(s, Sound::CLICK, now_ms, out);
     out.hv_on = s.safety.hv_on;
     out.shutter_open = s.safety.shutter_open;
     out.buzzer = soundOutput(s.snd, now_ms);
-    return ApiError::OK;
+    return r;
 }
 
 void appFillProc(const AppState& s, const AppConfig& cfg, const HwInputs& hw, ProcData& out) {
