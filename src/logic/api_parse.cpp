@@ -94,20 +94,21 @@ ApiError apiParseRequest(const char* body, size_t len, Command& out) {
         case CmdId::START_MEASURE: {
             float v; bool has;
             if (!getNum(params, "pos", v, has, false)) return ApiError::BAD_PARAM;
-            out.pos = v;
             out.has_pos = has;
+            if (has) out.pos = v;
             break;
         }
         case CmdId::START_TRAVERSE: {
             float v; bool has;
             if (!getNum(params, "start", v, has, false)) return ApiError::BAD_PARAM;
-            out.start = v;
             out.has_start = has;
+            if (has) out.start = v;
             if (!getNum(params, "end", v, has, false)) return ApiError::BAD_PARAM;
-            out.end = v;
             out.has_end = has;
+            if (has) out.end = v;
             if (!getNum(params, "speed", v, has, false)) return ApiError::BAD_PARAM;
-            out.speed = v;
+            out.has_speed = has;
+            if (has) out.speed = v;
             out.has_speed = has;
             break;
         }
@@ -119,8 +120,8 @@ ApiError apiParseRequest(const char* body, size_t len, Command& out) {
             out.has_pos = has;
             // speed is optional
             if (!getNum(params, "speed", v, has, false)) return ApiError::BAD_PARAM;
-            out.speed = v;
             out.has_speed = has;
+            if (has) out.speed = v;
             break;
         }
         case CmdId::SET: {

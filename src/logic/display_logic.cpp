@@ -58,7 +58,7 @@ bool ackPressUpdate(AckPress& a, ScreenMode mode, bool cause_active, bool touch_
 
     // Update progress
     if (progress) {
-        if (!a.pressing) {
+        if (!a.pressing && !a.sent) {
             *progress = 0.0f;
         } else {
             uint32_t elapsed = (uint32_t)(now_ms - a.t0_ms);
