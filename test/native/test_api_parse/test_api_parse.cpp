@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5.11) – Sprint L5 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.12) – Sprint L5 must make these pass. Do not modify.
 // Covers: src/logic/api_parse.cpp (CONTRACT §4, §5.2)
 #include <unity.h>
 #include <stdio.h>
@@ -175,6 +175,17 @@ void test_v1511_set_number_keeps_double_precision() {
     TEST_ASSERT_TRUE(Cm.num == 16777217.0);          // not representable as float
 }
 
+// ---- V1.5.12: review of L5.3 ----
+void test_v1512_absent_numbers_stay_zero() {
+    API(ApiError::OK, parse("{\"cmd\":\"START_TRAVERSE\",\"params\":{\"start\":100}}"));
+    TEST_ASSERT_TRUE(Cm.has_start);
+    TEST_ASSERT_EQUAL_FLOAT(100.0f, Cm.start);
+    TEST_ASSERT_FALSE(Cm.has_end);   TEST_ASSERT_EQUAL_FLOAT(0.0f, Cm.end);     // out fully reset
+    TEST_ASSERT_FALSE(Cm.has_speed); TEST_ASSERT_EQUAL_FLOAT(0.0f, Cm.speed);
+    API(ApiError::OK, parse("{\"cmd\":\"MOVE\",\"params\":{\"pos\":50}}"));
+    TEST_ASSERT_FALSE(Cm.has_speed); TEST_ASSERT_EQUAL_FLOAT(0.0f, Cm.speed);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_bad_crc);
@@ -198,5 +209,6 @@ int main(int, char**) {
     RUN_TEST(test_calib_actions);
     RUN_TEST(test_command_is_reset_between_parses);
     RUN_TEST(test_v1511_set_number_keeps_double_precision);
+    RUN_TEST(test_v1512_absent_numbers_stay_zero);
     return UNITY_END();
 }

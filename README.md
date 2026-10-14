@@ -20,7 +20,7 @@ agentenbasierte Entwicklung mit code-server + Cline.
 | `src/app/*` | Snapshot, Command-Queue, Control-Task (vorgegeben) |
 | `src/hal/*.h`, `src/system/*.h`, `src/comm/*.h`, `src/display/*.h` | Hardware-Verträge |
 | `src/smoketest/smoketest.cpp` | Sprint 0a |
-| `test/native/*` | eingefrorene Host-Tests (351 Testfälle, 13 Suiten, Contract V1.5.11; `test_command_queue` braucht einen Linux/macOS-Host mit pthreads) |
+| `test/native/*` | eingefrorene Host-Tests (353 Testfälle, 13 Suiten, Contract V1.5.12; `test_command_queue` braucht einen Linux/macOS-Host mit pthreads) |
 | `test/embedded/*` | On-Target-Tests (S5) |
 | `scripts/serial_cmd.py` | nicht-interaktiver Serial-Client (auch für Cline) |
 | `scripts/add_client.py` | REST-Client mit CRC-Rahmenregel (Referenz) |
@@ -39,14 +39,14 @@ pio device monitor -e smoketest           # "help"
 
 ## Status der Module
 
-**Stand: 14.10.2026 · Contract V1.5.11 · Pflichtenheft V1.7.6**
+**Stand: 14.10.2026 · Contract V1.5.12 · Pflichtenheft V1.7.6**
 Diese Tabelle wird **nach jedem Sprint** aktualisiert (Implementierung **und** Tests) –
 Teil der Definition of Done in `.clinerules`.
 
 | Sprint | Dateien | Implementierung | Tests auf dem Gerät / nativ | Stand |
 |---|---|---|---|---|
 | 0a | `src/smoketest/smoketest.cpp` (0a.3) | ✅ fertig | Smoketest-Protokoll freigegeben (5.2 bekannte Einschränkung) | ✅ 11.10.2026, Tag `sprint-0a` |
-| 0b | Header, CONTRACT, Tests, `src/app/*` | ✅ fertig (Claude) | 351/351 gegen Referenzimplementierung | ✅ Contract V1.5.11 |
+| 0b | Header, CONTRACT, Tests, `src/app/*` | ✅ fertig (Claude) | 353/353 gegen Referenzimplementierung | ✅ Contract V1.5.12 |
 | L1 | `logic/types.cpp`, `crc32.cpp`, `safety_logic.cpp` | ✅ fertig (Qwen) | `test_types_crc` 22/22 · `test_safety_logic` 62/62 | ✅ 12.10.2026, Tag `sprint-2.1` |
 | L2 | `logic/measure_logic.cpp`, `params.cpp` | ✅ fertig (Qwen) | `test_measure_logic` 40/40 · `test_params` 20/20 | ✅ 13.10.2026, Tag `sprint-l2` |
 | L3 | `logic/motion_seq.cpp`, `sound_logic.cpp`, `wifi_logic.cpp` | ✅ fertig (Qwen) | `test_motion_seq` 38/38 · `test_sound_logic` 9/9 · `test_wifi_logic` 15/15 | ✅ 14.10.2026, Tag `sprint-l3` |
@@ -78,4 +78,4 @@ alle erkannt. Contract V1.5.2: 8 zusätzliche Tests aus dem Review von S2.1
 vollständige API-Tabelle (Differenztest gegen die Referenz hatte eine Lücke bei `INIT_DONE` gezeigt). Contract V1.5.5: Mutationstest vor L2
 (43 Mutanten von measure_logic/params, alle bis auf 2 gleichwertige erkannt, +14 Tests). Contract V1.5.6: +2 Tests aus dem Review von L2. Contract V1.5.7: Mutationstest vor L3 (72 Mutanten von
 motion_seq/sound_logic/wifi_logic, auch gegen `test_app_logic`; +18 Tests). Contract V1.5.8: +2 Tests aus dem Review von L3. Contract V1.5.9: Mutationstest vor L4 (72 Mutanten von
-app_logic, 33 überlebten; +17 Tests, danach nur noch 6 gleichwertige). Contract V1.5.10: +4 Tests aus der Zwischenprüfung von L4.1b (`appMeasure`). Contract V1.5.11: Mutationstest vor L5 (77 Mutanten von proc_json/api_parse/display_logic, 17 überlebten; +7 Tests, danach nur noch 9 gleichwertige).
+app_logic, 33 überlebten; +17 Tests, danach nur noch 6 gleichwertige). Contract V1.5.10: +4 Tests aus der Zwischenprüfung von L4.1b (`appMeasure`). Contract V1.5.11: Mutationstest vor L5 (77 Mutanten von proc_json/api_parse/display_logic, 17 überlebten; +7 Tests, danach nur noch 9 gleichwertige). Contract V1.5.12: +2 Tests aus dem Review von L5.

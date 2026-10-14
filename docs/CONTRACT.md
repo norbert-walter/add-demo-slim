@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.11 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-14
+**Version:** 1.5.12 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-14
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.6
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -104,6 +104,14 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | # | Clarification | Where |
 |---|---|---|
 | 1 | New tests (+7): zero band and rounding of floats (`-0.045` → `0.0`, `0.07` → `0.1`), order of `limit_fwd`/`limit_bwd`, `temp` sanitised, `"status":"ok"` only for OK, error response with extra members, SET number keeps double precision, leaving the ACK screen cancels a running press. 77 mutants of proc_json/api_parse/display_logic: all caught except 9 equivalent / without practical effect (documented in `docs/sprints/L5.md`). Reference: 13 suites, **351/351** | `test/native` |
+
+**Clarifications 1.5.12 (review of L5, 2026-10-14, no behaviour change):**
+
+| # | Clarification | Where |
+|---|---|---|
+| 1 | `apiParseRequest`: a number parameter that is absent leaves its value at 0 (`out` fully reset). Qwen's L5.3 copied an uninitialised local into `end`/`speed` etc. | `api_parse.h` |
+| 2 | `ackPressUpdate`: progress stays 1 after the ACK was sent while the ACK screen is shown (header already said so; Qwen's L5.1 returned 0 from the next poll on) | `display_logic.h` |
+| 3 | New tests (+2): `test_v1512_progress_stays_1_after_sent`, `test_v1512_absent_numbers_stay_zero`. Reference: 13 suites, **353/353** | `test/native` |
 
 **Scope note:** plant coordinates for several gauges (offset/sign transformation at the
 API boundary, common time base) are an extension idea for later (Pflichtenheft §11.1);
