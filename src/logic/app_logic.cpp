@@ -189,7 +189,147 @@ void appMeasure(AppState& s, const AppConfig& cfg, float median_mv, uint32_t now
     }
 }
 
-HwOutputs appTick(AppState& s, const HwInputs& hw, const AppConfig& cfg) { return HwOutputs{}; }
+// ---------------------------------------------------------------------------
+// V1.3 / safety – Static helpers
+// ---------------------------------------------------------------------------
+
+static ApiError applySafety(AppState& s, SafetyEvent ev, const SafetyInputs& in,
+                            const HwInputs& hw, const AppConfig& cfg,
+                            DrvRequest& d, bool& enteredFault) {
+    // Step: safetyStep -> next state
+    SafetyResult r = safetyStep(s.safety, ev, in, cfg.safety);
+    bool was_fault = (s.safety.state == SafetyState::FAULT);
+    s.safety = r.next;
+
+    // Track fault entry (transitioned INTO fault this cycle)
+    enteredFault |= (r.next.state == SafetyState::FAULT && !was_fault);
+
+    // Motor stop -> emergency stop the sequencer
+    if (r.motor_stop && (s.seq.phase != SeqPhase::IDLE || hw.drv_running)) {
+        motionEmergencyStop(s.seq, motionIn(hw), d);
+    }
+
+    return r.api;
+}
+
+static void startSound(AppState& s, Sound snd, uint32_t now, HwOutputs& out) {
+    if (soundStart(s.snd, snd, now)) {
+        out.sound = snd;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// appTick – 11 steps from the header comment
+// ---------------------------------------------------------------------------
+
+HwOutputs appTick(AppState& s, const HwInputs& hw, const AppConfig& cfg) {
+    HwOutputs out{};
+
+    // ---- Step 1: motion tick + events -----------------------------------
+    MotionInputs mi = motionIn(hw);
+    DrvRequest d = motionTick(s.seq, mi, cfg.motion);
+    MotionEvents ev = motionTakeEvents(s.seq);
+
+    // ---- Step 2: build SafetyInputs ------------------------------------
+    SafetyInputs si = safetyIn(s, hw, cfg, ev.motor_fault);
+
+    // ---- Steps 3/4: homing events + TICK through safetyStep ------------
+    bool enteredFault = false;
+    if (ev.homing_done) {
+        applySafety(s, SafetyEvent::INIT_DONE, si, hw, cfg, d, enteredFault);
+    }
+    if (ev.homing_failed) {
+        applySafety(s, SafetyEvent::INIT_FAILED, si, hw, cfg, d, enteredFault);
+    }
+    // TICK on every cycle
+    applySafety(s, SafetyEvent::TICK, si, hw, cfg, d, enteredFault);
+
+    // ---- Step 5: motor_stop emergency stop (steps 3/4) ------------------
+    // Already handled inside applySafety above.
+
+    // ---- Step 6: state != RUNNING -> motionStop -------------------------
+    if (s.safety.state != SafetyState::RUNNING && s.seq.mode != OpMode::NONE) {
+        motionStop(s.seq, d);
+        if (d.op == DrvOp::NONE) {
+            d.op = DrvOp::STOP;
+        }
+    }
+
+    // ---- Step 7: acq_started -> statsReset ------------------------------
+    if (ev.acq_started) {
+        statsReset(s.stats);
+    }
+
+    // ---- Step 8: active tracking + shutter automation --------------------
+    bool active = (s.seq.mode != OpMode::NONE);
+    if (active) {
+        s.prog_active_ms = hw.now_ms;
+    }
+
+    uint32_t idle_ms;
+    if (hw.now_ms >= s.prog_active_ms) {
+        idle_ms = hw.now_ms - s.prog_active_ms;
+    } else {
+        // wrap-around safe
+        idle_ms = (0xFFFFFFFFu - s.prog_active_ms) + hw.now_ms + 1u;
+    }
+
+    SafetyEvent shutter_ev = safetyShutterAutomation(
+        motionAcquiring(s.seq), active, idle_ms,
+        static_cast<uint32_t>(lroundf(s.params.shutter_hold * 1000.0f)),
+        s.safety, si.pos_mm, cfg.safety);
+
+    if (shutter_ev != SafetyEvent::TICK) {
+        applySafety(s, shutter_ev, si, hw, cfg, d, enteredFault);
+    }
+
+    // ---- Step 9: comm_armed release ------------------------------------
+    if (s.comm_armed && s.seq.phase == SeqPhase::IDLE && !s.safety.hv_on) {
+        s.comm_armed = false;
+    }
+
+    // ---- Step 9b: V1.1 local release -----------------------------------
+    if (s.local && s.seq.phase == SeqPhase::IDLE && !s.safety.hv_on) {
+        uint32_t elapsed;
+        if (hw.now_ms >= s.local_last_ms) {
+            elapsed = hw.now_ms - s.local_last_ms;
+        } else {
+            elapsed = (0xFFFFFFFFu - s.local_last_ms) + hw.now_ms + 1u;
+        }
+        if (elapsed >= cfg.local_hold_ms) {
+            s.local = false;
+        }
+    }
+
+    // ---- Step 10: outputs from safety status ----------------------------
+    out.hv_on       = s.safety.hv_on;
+    out.shutter_open = s.safety.shutter_open;
+    out.drv         = d;
+
+    // ---- Step 11: V1.3 sounds -------------------------------------------
+    // BOOT sound on first appTick after init
+    if (!s.boot_sound_done) {
+        startSound(s, Sound::BOOT, hw.now_ms, out);
+        s.boot_sound_done = true;
+    }
+
+    // ESTOP / FAULT sound when entering FAULT this cycle
+    if (enteredFault) {
+        Sound fault_snd = (s.safety.err == ErrorCode::ESTOP) ? Sound::ESTOP : Sound::FAULT;
+        startSound(s, fault_snd, hw.now_ms, out);
+    }
+
+    // HOMED sound when homing just completed
+    if (ev.homing_done) {
+        startSound(s, Sound::HOMED, hw.now_ms, out);
+    }
+
+    // Buzzer output and heartbeat
+    out.buzzer  = soundOutput(s.snd, hw.now_ms);
+    out.heartbeat = ((hw.now_ms / 1000u) % 2u) == 0u;
+
+    return out;
+}
 
 ApiError appCommand(AppState& s, const Command& cmd, const HwInputs& hw, const AppConfig& cfg,
                     HwOutputs& out) { return ApiError::UNKNOWN_CMD; }
