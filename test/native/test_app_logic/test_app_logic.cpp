@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5) – speeds in mm/s – Sprint L4 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.9) – speeds in mm/s – Sprint L4 must make these pass. Do not modify.
 // Covers: src/logic/app_logic.cpp (CONTRACT §10) – complete scenarios with a
 // simulated axis (fake_axis.h) and a simulated distance sensor.
 #include <unity.h>
@@ -967,6 +967,178 @@ void test_non_finite_command_values_rejected() {
     STATE(SafetyState::RUNNING);                                   // no fault, nothing changed
 }
 
+// ---- V1.5.9: mutation test before Sprint L4 (direct calls, independent of the scenario) ----
+static HwInputs hwAt(uint32_t t, int32_t pos_steps = 0, bool running_ = false, bool estop_ = false) {
+    HwInputs h; h.now_ms = t; h.drv_pos_steps = pos_steps; h.drv_running = running_; h.estop = estop_;
+    h.last_api_rx_ms = t; return h;
+}
+static void forceRunning(AppState& s) {          // RUNNING with HV on and all conditions met
+    s.flags.interlock = true; s.flags.cooling_flow = true;
+    s.seq.homed = true; s.safety.state = SafetyState::RUNNING; s.safety.hv_on = true;
+}
+void test_v159_measure_chain_uses_calibrated_distance() {
+    appInit(S);
+    S.params.calib.near_raw = 40; S.params.calib.near_ref = 45;     // offset +5 mm
+    S.params.calib.far_raw = 65;  S.params.calib.far_ref = 70;
+    appMeasure(S, C, mvForDist(50.0f), 1000);
+    TEST_ASSERT_FLOAT_WITHIN(0.2f, 50.0f, S.raw_mm);                // uncalibrated
+    TEST_ASSERT_FLOAT_WITHIN(0.2f, 55.0f, S.dist_mm);               // calibrated
+    TEST_ASSERT_FLOAT_WITHIN(0.2f, 15.0f, S.thick_mm);              // 70 - 55
+    TEST_ASSERT_FLOAT_WITHIN(0.2f, 55.0f, S.stab.ref);              // stability on dist
+}
+void test_v159_measure_out_of_range_resets_filter_and_stability() {
+    appInit(S);
+    for (int i = 0; i < 5; ++i) appMeasure(S, C, mvForDist(60.0f), 1000 + 20 * i);
+    appMeasure(S, C, 0.0f, 1200);                                   // no signal
+    TEST_ASSERT_FALSE(S.in_range);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, S.thick_mm);
+    TEST_ASSERT_FALSE(S.on_material);
+    TEST_ASSERT_FALSE(S.stab.initialized);
+    appMeasure(S, C, mvForDist(45.0f), 1220);                       // filter starts again
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 45.0f, S.raw_mm);
+}
+void test_v159_stats_only_while_acquiring_with_open_shutter() {
+    appInit(S);
+    S.safety.shutter_open = true;                                   // e.g. manual shutter, idle
+    appMeasure(S, C, mvForDist(50.0f), 1000);                       // idle: no statistics
+    TEST_ASSERT_EQUAL_UINT32(0, S.stats.n);
+    S.safety.shutter_open = false;
+    S.seq.phase = SeqPhase::TRAV_RUN;                               // acquiring, shutter closed
+    appMeasure(S, C, mvForDist(50.0f), 1020);
+    TEST_ASSERT_EQUAL_UINT32(0, S.stats.n);
+    S.safety.shutter_open = true;
+    appMeasure(S, C, mvForDist(50.0f), 1040);
+    TEST_ASSERT_EQUAL_UINT32(1, S.stats.n);
+}
+void test_v159_homing_failure_faults() {
+    C.motion.homing_timeout_ms = 500;                               // axis is ~110 mm away
+    API(ApiError::OK, send(CmdId::INIT));
+    run(1000);
+    TEST_ASSERT_TRUE(S.safety.state == SafetyState::FAULT || S.safety.state == SafetyState::WAIT_ACK);
+    TEST_ASSERT_EQUAL_INT((int)ErrorCode::HOMING_FAILED, (int)S.safety.err);
+    TEST_ASSERT_TRUE(snd[(int)Sound::FAULT] >= 1);
+}
+void test_v159_fault_stops_sequencer_before_driver_runs() {
+    appInit(S); S.seq.homed = true; S.safety.state = SafetyState::READY;
+    HwOutputs o;
+    Command m = mk(CmdId::MOVE); m.has_pos = true; m.pos = 100;
+    API(ApiError::OK, appCommand(S, m, hwAt(20000), C, o));        // sequencer MOVE, driver not yet running
+    HwOutputs t = appTick(S, hwAt(20001, 0, false, true), C);       // E-stop
+    TEST_ASSERT_EQUAL_INT((int)DrvOp::FORCE_STOP, (int)t.drv.op);
+    TEST_ASSERT_EQUAL_INT((int)SeqPhase::IDLE, (int)S.seq.phase);
+    TEST_ASSERT_FALSE(S.seq.homed);
+}
+void test_v159_stats_reset_on_new_acquisition() {
+    running();
+    API(ApiError::OK, traverse(110, 130, 10));
+    int closings = 0;
+    TEST_ASSERT_TRUE(runUntilIdle(30000, closings));
+    S.stats.sum = 1.0e6; S.stats.n = 1;                              // garbage from an old run
+    API(ApiError::OK, traverse(130, 110, 10));
+    TEST_ASSERT_TRUE(runUntilIdle(30000, closings));
+    TEST_ASSERT_TRUE(statsMean(S.stats) < 100.0f);
+}
+void test_v159_shutter_closed_during_approach_in_measuring_zone() {
+    running();
+    API(ApiError::OK, traverse(150, 200, 10));                       // approach 0 -> 150 mm
+    int opened_early = 0;
+    for (int i = 0; i < 30000 && S.seq.phase == SeqPhase::TRAV_APPROACH; ++i) {
+        cycle();
+        if (S.seq.phase == SeqPhase::TRAV_APPROACH && last_out.shutter_open) opened_early++;
+    }
+    TEST_ASSERT_EQUAL_INT((int)SeqPhase::TRAV_RUN, (int)S.seq.phase);
+    TEST_ASSERT_EQUAL_INT(0, opened_early);
+}
+void test_v159_local_release_uses_config_and_wraps() {
+    appInit(S); C.local_hold_ms = 1000;
+    S.local = true; S.local_last_ms = 50000;
+    appTick(S, hwAt(50999), C); TEST_ASSERT_TRUE(S.local);
+    appTick(S, hwAt(51000), C); TEST_ASSERT_FALSE(S.local);
+    S.local = true; S.local_last_ms = 0xFFFFFF00u;                   // timer wraps
+    appTick(S, hwAt(0xFFFFFF10u), C); TEST_ASSERT_TRUE(S.local);
+    appTick(S, hwAt(0xFFFFFF00u + 1000u), C); TEST_ASSERT_FALSE(S.local);
+}
+void test_v159_heartbeat_phase() {
+    appInit(S);
+    TEST_ASSERT_TRUE(appTick(S, hwAt(12500), C).heartbeat);         // 12 s: even -> on
+    TEST_ASSERT_FALSE(appTick(S, hwAt(13500), C).heartbeat);        // 13 s: odd -> off
+}
+void test_v159_park_speed_and_traverse_speed_default() {
+    appInit(S); S.seq.homed = true; S.safety.state = SafetyState::READY;
+    HwOutputs o;
+    API(ApiError::OK, appCommand(S, mk(CmdId::PARK), hwAt(20000, 8000), C, o));
+    TEST_ASSERT_EQUAL_UINT32(mmPerSecToHz(C.motion.approach_speed, C.motion), o.drv.speed_hz);
+    appInit(S); forceRunning(S); S.params.traverse_speed = 3.0f;
+    HwOutputs o2;
+    API(ApiError::OK, appCommand(S, mk(CmdId::START_TRAVERSE), hwAt(20000, 8000), C, o2));
+    TEST_ASSERT_EQUAL_UINT32(mmPerSecToHz(3.0f, C.motion), S.seq.trav_speed_hz);
+}
+void test_v159_driver_request_merge_equal_rank_replaces() {
+    appInit(S);                                                      // SAFE_START, idle
+    HwOutputs o; o.drv.op = DrvOp::FORCE_STOP;
+    HwInputs h = hwAt(20000); h.limit_bwd = true;                    // already on the home switch
+    API(ApiError::OK, appCommand(S, mk(CmdId::INIT), h, C, o));
+    TEST_ASSERT_EQUAL_INT((int)DrvOp::ZERO_HERE, (int)o.drv.op);     // rank 3 >= rank 3
+    appInit(S); S.seq.homed = true; S.safety.state = SafetyState::READY;
+    HwOutputs o2; o2.drv.op = DrvOp::STOP;
+    Command m = mk(CmdId::MOVE); m.has_pos = true; m.pos = 100;
+    API(ApiError::OK, appCommand(S, m, hwAt(20000), C, o2));
+    TEST_ASSERT_EQUAL_INT((int)DrvOp::STOP, (int)o2.drv.op);         // MOVE_TO never weakens STOP
+}
+void test_v159_calib_base_uses_dist_near_uses_raw() {
+    homeAndReady();
+    S.params.calib.near_raw = 40; S.params.calib.near_ref = 45;     // offset +5 mm
+    S.params.calib.far_raw = 65;  S.params.calib.far_ref = 70;
+    run(800);
+    API(ApiError::OK, calib(CalibAction::BASE));
+    TEST_ASSERT_FLOAT_WITHIN(0.6f, S.raw_mm + 5.0f, S.params.base_dist);
+    API(ApiError::OK, calib(CalibAction::NEAR));
+    TEST_ASSERT_FLOAT_WITHIN(0.6f, 135.0f, S.params.calib.near_raw); // raw, not calibrated
+}
+void test_v159_rejected_hv_on_does_not_arm_watchdog() {
+    homeAndReady();
+    run(100);
+    TEST_ASSERT_FALSE(S.comm_armed);
+    API(ApiError::PRECONDITION, send(CmdId::HV_ON));                 // flags missing
+    TEST_ASSERT_FALSE(S.comm_armed);
+}
+void test_v159_fault_entered_by_command_starts_sound() {
+    appInit(S); S.seq.homed = true; S.safety.state = SafetyState::READY;
+    S.flags.interlock = true; S.flags.cooling_flow = true;
+    HwOutputs o;
+    appCommand(S, mk(CmdId::HV_ON), hwAt(20000, 0, false, true), C, o);   // E-stop pressed
+    TEST_ASSERT_EQUAL_INT((int)SafetyState::FAULT, (int)S.safety.state);
+    TEST_ASSERT_EQUAL_INT((int)Sound::ESTOP, (int)o.sound);
+}
+void test_v159_proc_fields() {
+    appInit(S);
+    S.flags.interlock = true; S.flags.cooling_flow = true; S.flags.temp_c = C.safety.temp_warn_c;
+    HwInputs h = hwAt(23456); h.limit_fwd = true;
+    ProcData p; appFillProc(S, C, h, p);
+    TEST_ASSERT_EQUAL_UINT32(23456, p.ts_ms);
+    TEST_ASSERT_TRUE(p.safety.temp_ok);                              // temp == warn is ok
+    TEST_ASSERT_TRUE(p.safety.hv_ok);
+    TEST_ASSERT_TRUE(p.motion.limit_fwd);
+    TEST_ASSERT_FALSE(p.motion.limit_bwd);
+    h.estop = true; appFillProc(S, C, h, p);
+    TEST_ASSERT_FALSE(p.safety.hv_ok);                               // E-stop blocks HV
+    TEST_ASSERT_TRUE(p.safety.estop);
+}
+void test_v159_safety_position_uses_motion_config() {
+    appInit(S); C.motion.steps_per_mm = 100.0f; forceRunning(S);
+    HwOutputs o;                                                     // 5500 steps = 55 mm: service zone
+    API(ApiError::OK, appCommand(S, mk(CmdId::SHUTTER_OPEN), hwAt(20000, 5500), C, o));
+    TEST_ASSERT_TRUE(o.shutter_open);
+}
+void test_v159_comm_timeout_uses_config() {
+    C.comm_timeout_ms = 1000;
+    running();                                                       // HV_ON from API arms
+    TEST_ASSERT_TRUE(S.comm_armed);
+    heartbeat = false; last_rx = now;
+    run(1200);
+    TEST_ASSERT_EQUAL_INT((int)ErrorCode::COMM_TIMEOUT, (int)S.safety.err);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_boot_state);
@@ -1032,5 +1204,22 @@ int main(int, char**) {
     RUN_TEST(test_estop_nc_only_while_idle_and_hv_off);
     RUN_TEST(test_speeds_mm_per_s);
     RUN_TEST(test_non_finite_command_values_rejected);
+    RUN_TEST(test_v159_measure_chain_uses_calibrated_distance);
+    RUN_TEST(test_v159_measure_out_of_range_resets_filter_and_stability);
+    RUN_TEST(test_v159_stats_only_while_acquiring_with_open_shutter);
+    RUN_TEST(test_v159_homing_failure_faults);
+    RUN_TEST(test_v159_fault_stops_sequencer_before_driver_runs);
+    RUN_TEST(test_v159_stats_reset_on_new_acquisition);
+    RUN_TEST(test_v159_shutter_closed_during_approach_in_measuring_zone);
+    RUN_TEST(test_v159_local_release_uses_config_and_wraps);
+    RUN_TEST(test_v159_heartbeat_phase);
+    RUN_TEST(test_v159_park_speed_and_traverse_speed_default);
+    RUN_TEST(test_v159_driver_request_merge_equal_rank_replaces);
+    RUN_TEST(test_v159_calib_base_uses_dist_near_uses_raw);
+    RUN_TEST(test_v159_rejected_hv_on_does_not_arm_watchdog);
+    RUN_TEST(test_v159_fault_entered_by_command_starts_sound);
+    RUN_TEST(test_v159_proc_fields);
+    RUN_TEST(test_v159_safety_position_uses_motion_config);
+    RUN_TEST(test_v159_comm_timeout_uses_config);
     return UNITY_END();
 }

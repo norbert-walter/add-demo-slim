@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.8 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-12
+**Version:** 1.5.9 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-12
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.6
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -82,6 +82,14 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 1 | Every motion start checks BUSY first, then PRECONDITION, then BAD_PARAM (the L3 code checked `homed` first: a start during homing returned PRECONDITION) | `motion_seq.h` |
 | 2 | `mmToSteps` / `mmPerSecToHz` are exactly `lroundf(x * steps_per_mm)`, also for negative values | `motion_seq.h` |
 | 3 | New tests: `test_busy_before_precondition_during_homing`, `test_conversions_are_lroundf`. Reference: 13 suites, **323/323** | `test/native` |
+
+**Clarifications 1.5.9 (test hardening before Sprint L4, mutation test against the reference,
+2026-10-14, no behaviour change):**
+
+| # | Clarification | Where |
+|---|---|---|
+| 1 | `appTick` step 2: `pos_mm = stepsToMm(drv_pos_steps, cfg.motion)`; all time limits and conversions use the `AppConfig` fields | `app_logic.h` |
+| 2 | New tests in `test_app_logic` (+17, direct calls independent of the scenario): measuring chain with calibration, out-of-range reset, statistics only while acquiring with open shutter, homing failure → FAULT, fault before the driver runs, statistics reset, shutter closed during the approach, LOCAL release with config and wrap-around, heartbeat phase, PARK/traverse speeds, driver request merge, CALIB BASE/NEAR, rejected HV_ON does not arm, fault sound from a command, process image fields, position and comm timeout from the config. 72 mutants: all caught except 6 equivalent / without practical effect (documented in `docs/sprints/L4.md`). Reference: 13 suites, **340/340** | `test/native` |
 
 **Scope note:** plant coordinates for several gauges (offset/sign transformation at the
 API boundary, common time base) are an extension idea for later (Pflichtenheft §11.1);

@@ -1,6 +1,6 @@
 /**
  * @file app_logic.h
- * @brief Complete application logic as pure functions (FROZEN CONTRACT V1.5 §10).
+ * @brief Complete application logic as pure functions (FROZEN CONTRACT V1.5.9 §10).
  *
  * Implementation: src/logic/app_logic.cpp (Sprint L4).
  *
@@ -143,8 +143,10 @@ void appMeasure(AppState& s, const AppConfig& cfg, float median_mv, uint32_t now
  * Cyclic logic (every cycle). Steps in this exact order:
  *  1. d = motionTick(seq, mi); ev = motionTakeEvents(seq)
  *  2. build SafetyInputs (estop, flags, ev.motor_fault, comm timeout via
- *     safetyCommTimeout(comm_armed, now, last_api_rx_ms, comm_timeout_ms),
- *     pos from drv_pos_steps, homed)
+ *     safetyCommTimeout(comm_armed, now, last_api_rx_ms, cfg.comm_timeout_ms),
+ *     pos_mm = stepsToMm(drv_pos_steps, cfg.motion), homed)
+ *     V1.5.9: always use the cfg fields (cfg.motion, cfg.comm_timeout_ms,
+ *     cfg.local_hold_ms, ...), never their default values.
  *  3. ev.homing_done -> safetyStep(INIT_DONE); ev.homing_failed -> safetyStep(INIT_FAILED)
  *  4. safetyStep(TICK)
  *  5. any step in 3/4 with motor_stop && (seq.phase != IDLE || drv_running)
