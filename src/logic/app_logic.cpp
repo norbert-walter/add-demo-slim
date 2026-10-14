@@ -331,8 +331,121 @@ HwOutputs appTick(AppState& s, const HwInputs& hw, const AppConfig& cfg) {
     return out;
 }
 
+// ---------------------------------------------------------------------------
+// Driver request merge helper (V1.1)
+// ---------------------------------------------------------------------------
+static int drvRank(const DrvRequest& r) {
+    switch (r.op) {
+        case DrvOp::NONE:           return 0;
+        case DrvOp::MOVE_TO:        return 1;
+        case DrvOp::RUN_BACKWARD:   return 1;
+        case DrvOp::STOP:           return 2;
+        case DrvOp::FORCE_STOP:     return 3;
+        case DrvOp::ZERO_HERE:      return 3;
+        default:                    return 0;
+    }
+}
+
 ApiError appCommand(AppState& s, const Command& cmd, const HwInputs& hw, const AppConfig& cfg,
-                    HwOutputs& out) { return ApiError::UNKNOWN_CMD; }
+                    HwOutputs& out) {
+    if (cmd.id == CmdId::GET_STATE || cmd.id == CmdId::GET_CONFIG) return ApiError::OK;
+    uint32_t now_ms = hw.now_ms;
+    if (cmd.source == CmdSource::LOCAL) {
+        s.local = true; s.local_last_ms = now_ms; s.comm_armed = false;
+    } else if (s.local && appLocalBlocksApi(cmd.id)) {
+        return ApiError::LOCAL_CONTROL;
+    }
+    ApiError gate = safetyCmdAllowed(s.safety.state, cmd.id);
+    if (gate != ApiError::OK) return gate;
+    SafetyInputs in = safetyIn(s, hw, cfg, false);
+    MotionInputs mi = motionIn(hw);
+    DrvRequest d{};
+    bool enteredFault = false;
+    switch (cmd.id) {
+        case CmdId::INIT:
+            if (s.seq.phase != SeqPhase::IDLE || s.seq.homed) return ApiError::BUSY;
+            motionStartHoming(s.seq, mi, cfg.motion, d); break;
+        case CmdId::MOVE:
+            if (!cmd.has_pos) return ApiError::BAD_PARAM;
+            { float spd = cmd.has_speed ? cmd.speed : cfg.motion.approach_speed;
+              motionStartMove(s.seq, cmd.pos, spd, mi, cfg.motion, d); } break;
+        case CmdId::START_MEASURE:
+            { float pos = cmd.has_pos ? cmd.pos : s.params.measure_pos;
+              motionStartMeasure(s.seq, pos, mi, cfg.motion, d); } break;
+        case CmdId::START_TRAVERSE:
+            { float st = cmd.has_start ? cmd.start : s.params.traverse_start;
+              float en = cmd.has_end   ? cmd.end   : s.params.traverse_end;
+              float sp = cmd.has_speed ? cmd.speed : s.params.traverse_speed;
+              motionStartTraverse(s.seq, st, en, sp, mi, cfg.motion, d); } break;
+        case CmdId::PARK:
+            motionStartMove(s.seq, cfg.motion.park_target_mm, cfg.motion.approach_speed, mi, cfg.motion, d); break;
+        case CmdId::SERVICE:
+            motionStartMove(s.seq, s.params.maint_pos, cfg.motion.approach_speed, mi, cfg.motion, d); break;
+        case CmdId::STOP:
+            motionStop(s.seq, d);
+            if (s.safety.shutter_open && s.safety.shutter_auto)
+                applySafety(s, SafetyEvent::SHUTTER_CLOSE, in, hw, cfg, d, enteredFault);
+            break;
+        case CmdId::SET: {
+            bool persist = false;
+            ApiError r = paramSet(s.params, s.flags, cmd.key, cmd.vtype, cmd.num, cmd.b, cmd.str, &persist);
+            if (r == ApiError::OK && persist) out.persist = true;
+            break;
+        }
+        case CmdId::CALIB:
+            if (s.seq.phase != SeqPhase::IDLE) return ApiError::BUSY;
+            switch (cmd.calib) {
+                case CalibAction::NEAR:
+                    if (!stabilityIsStable(s.stab, now_ms)) return ApiError::NOT_STABLE;
+                    s.params.calib.near_raw = s.dist_mm; break;
+                case CalibAction::FAR:
+                    if (!stabilityIsStable(s.stab, now_ms)) return ApiError::NOT_STABLE;
+                    s.params.calib.far_raw = s.dist_mm; break;
+                case CalibAction::BASE:
+                    if (!s.in_range || !stabilityIsStable(s.stab, now_ms)) return ApiError::PRECONDITION;
+                    s.params.base_dist = s.dist_mm; break;
+                case CalibAction::SAVE:
+                    if (!calibValid(s.params.calib)) return ApiError::CALIB_INVALID;
+                    out.persist = true; break;
+                case CalibAction::RESET: s.params.calib = CalibPoints{}; break;
+                default: return ApiError::UNKNOWN_CMD;
+            } break;
+        case CmdId::ACK: applySafety(s, SafetyEvent::INIT_DONE, in, hw, cfg, d, enteredFault); break;
+        case CmdId::HV_ON: {
+            ApiError r = applySafety(s, SafetyEvent::HV_ON, in, hw, cfg, d, enteredFault);
+            if (r != ApiError::OK) return r;
+            break;
+        }
+        case CmdId::HV_OFF: {
+            ApiError r = applySafety(s, SafetyEvent::HV_OFF, in, hw, cfg, d, enteredFault);
+            if (r != ApiError::OK) return r;
+            break;
+        }
+        case CmdId::SHUTTER_OPEN: applySafety(s, SafetyEvent::SHUTTER_OPEN, in, hw, cfg, d, enteredFault); break;
+        case CmdId::SHUTTER_CLOSE: applySafety(s, SafetyEvent::SHUTTER_CLOSE, in, hw, cfg, d, enteredFault); break;
+        case CmdId::REBOOT:
+            if (s.safety.hv_on) return ApiError::PRECONDITION;
+            out.reboot = true; startSound(s, Sound::REBOOT, now_ms, out); break;
+        default: return ApiError::UNKNOWN_CMD;
+    }
+    switch (cmd.id) {
+        case CmdId::INIT: case CmdId::MOVE: case CmdId::PARK:
+        case CmdId::SERVICE: case CmdId::START_MEASURE:
+        case CmdId::START_TRAVERSE: case CmdId::HV_ON:
+            s.comm_armed = (cmd.source == CmdSource::API); break;
+        default: break;
+    }
+    if (drvRank(d) >= drvRank(out.drv)) out.drv = d;
+    if (enteredFault) {
+        startSound(s, (s.safety.err == ErrorCode::ESTOP) ? Sound::ESTOP : Sound::FAULT, now_ms, out);
+    }
+    if (cmd.source == CmdSource::LOCAL && cmd.id != CmdId::NONE)
+        startSound(s, Sound::CLICK, now_ms, out);
+    out.hv_on = s.safety.hv_on;
+    out.shutter_open = s.safety.shutter_open;
+    out.buzzer = soundOutput(s.snd, now_ms);
+    return ApiError::OK;
+}
 
 void appFillProc(const AppState& s, const AppConfig& cfg, const HwInputs& hw, ProcData& out) {
     // Motion inputs
