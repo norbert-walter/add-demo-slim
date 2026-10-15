@@ -74,15 +74,13 @@ void wifiLoop(uint32_t now_ms) {
         }
     }
 
-    // One step: read status under lock into local copy, keep prev copy,
-    // call staStep, write back under lock.
+    // V1.5.17: read link_up BEFORE any critical section
+    bool link_up = (WiFi.status() == WL_CONNECTED);
+
     taskENTER_CRITICAL(&mux);
 
-    StaStatus local_s = status;       // read current status into local copy
+    StaStatus local_s = status;       // copy of current status
     StaStatus prev_s = status;        // second copy "prev" for change detection
-
-    // link_up = (WiFi.status() == WL_CONNECTED)
-    bool link_up = (WiFi.status() == WL_CONNECTED);
 
     // action = staStep(status, ssid[0] != 0, link_up, now, cfg)
     StaAction action = staStep(local_s, ssid_buf[0] != '\0', link_up, now_ms, cfg);
