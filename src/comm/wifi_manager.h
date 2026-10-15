@@ -38,6 +38,10 @@
  *      entering OFF from another state:          "sta: off"
  *    The StaStatus is written under a file-static portMUX (taskENTER/EXIT_CRITICAL);
  *    wifiStaStatus() copies it under the same lock (the display task reads it on Core 1).
+ *    V1.5.17: the critical sections contain ONLY the copy of the StaStatus (read before staStep,
+ *    write after it). WiFi.status() is read BEFORE the first critical section, staStep runs on
+ *    a local copy outside it, and no WiFi.* call or logLine happens inside a critical section
+ *    (on the ESP32 they use FreeRTOS/lwIP and must not run with interrupts masked).
  *  wifiGetApIp: WiFi.softAPIP().toString() with snprintf into buf (cap > 0, always terminated).
  *  wifiGetStaIp: WiFi.localIP().toString() if the station state is CONNECTED, else "".
  */

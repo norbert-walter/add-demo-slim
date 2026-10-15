@@ -12,6 +12,7 @@
 #include <condition_variable>
 #include <deque>
 #include <mutex>
+#include <atomic>
 #include <stdio.h>
 #include <stdlib.h>
 #include <thread>
@@ -46,7 +47,7 @@ struct portMUX_TYPE { std::mutex m; };
 // V1.5.14: critical-section depth of the calling thread (test_log_buffer checks that Serial
 // is never used inside a critical section).
 inline int& shimCritDepth() { thread_local int d = 0; return d; }
-inline int& shimCritEnters() { static int n = 0; return n; }   // V1.5.14: number of critical sections
+inline std::atomic<int>& shimCritEnters() { static std::atomic<int> n{0}; return n; }   // V1.5.14: number of critical sections (V1.5.17: atomic, several tasks)
 inline void taskENTER_CRITICAL(portMUX_TYPE* p) { p->m.lock(); ++shimCritDepth(); ++shimCritEnters(); }
 inline void taskEXIT_CRITICAL(portMUX_TYPE* p) { --shimCritDepth(); p->m.unlock(); }
 

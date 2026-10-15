@@ -12,10 +12,11 @@ struct ShimWiFi {
     std::string ap_ssid, ap_pass, sta_ssid, sta_pass;
     int begins = 0, disconnects = 0, disconnect_wifioff = 0, soft_aps = 0;
     bool auto_reconnect = true;
+    std::atomic<int> in_critical{0};      // V1.5.17: WiFi calls made inside taskENTER/EXIT_CRITICAL
     wl_status_t status = WL_DISCONNECTED;
     IPAddress ap_ip{192, 168, 4, 1}, sta_ip{192, 168, 1, 57};
 };
-inline ShimWiFi& shimWiFi() { static ShimWiFi w; return w; }
+inline ShimWiFi& shimWiFi() { static ShimWiFi w; if (shimCritDepth() > 0) ++w.in_critical; return w; }
 class WiFiClass {
 public:
     bool mode(wifi_mode_t m) { shimWiFi().mode = m; return true; }

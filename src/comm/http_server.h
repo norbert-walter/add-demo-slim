@@ -44,6 +44,10 @@
  *      JSON, with & < > written as &amp; &lt; &gt;
  *      </pre></body></html>
  *    (each line above ends with '\n'; the JSON is copied byte for byte otherwise.)
+ *    V1.5.17: the JSON is read in blocks (e.g. 256 bytes) and sent block-wise: at most 2
+ *    sendContent calls per started 64 bytes of JSON (one sendContent = one HTTP chunk = one TCP
+ *    write on the device; never one call per character). A '<' held back at the end of a block
+ *    belongs to the next block; a '<' as the very last byte of the file is sent as well.
  *  - /llms.txt: text/plain, exactly these 4 lines, each ending with '\n':
  *      # AI Device Description (ADD)
  *      - ADD (JSON): [Device Description](/add)
@@ -53,7 +57,8 @@
  *  - /proc: snapshotGet + procToJson into char[PROC_JSON_MAX]; application/json, Cache-Control: no-store.
  *  - POST /api: body = server.arg("plain"). No body or length > API_BODY_MAX -> BAD_JSON.
  *    Otherwise apiParseRequest(body, length, cmd). Packet is "valid" if the result is OK or
- *    BAD_PARAM (CRC ok, known cmd) -> snapshotSetLastApiRx(millis()). Error -> responseToJson
+ *    BAD_PARAM (CRC ok, known cmd) -> snapshotSetLastApiRx(millis()). Every error (V1.5.17: also BAD_PARAM
+ *    for GET_STATE / GET_CONFIG) -> responseToJson
  *    (cmd.id, err, nullptr, nullptr, ...) with HTTP 400 for BAD_CRC/BAD_JSON, else 200.
  *    OK: GET_STATE / GET_CONFIG answered locally (extra as listed above, ProcData from
  *    snapshotGet), all other commands: err = cmdQueueSendAndWait(cmd, API_REPLY_TIMEOUT_MS),
