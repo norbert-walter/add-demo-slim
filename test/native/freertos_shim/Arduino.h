@@ -42,3 +42,42 @@ struct ShimEsp {
     uint32_t getFreeHeap() { return 200000; }
 };
 inline ShimEsp ESP;
+
+// ---- V1.5.18: GPIO and ADC (Arduino-ESP32 3.x signatures) for the H1 host tests ------------
+// Every call is appended to shimHwLog() ("pinMode 32 3", "dw 32 0", "dr 22", "adc 34",
+// "atten 34 3", ...), so tests can check the ORDER of hardware accesses across GPIO and stepper.
+#include <vector>
+#define INPUT          0x01
+#define OUTPUT         0x03
+#define INPUT_PULLUP   0x05
+typedef enum { ADC_0db = 0, ADC_2_5db = 1, ADC_6db = 2, ADC_11db = 3 } adc_attenuation_t;
+inline std::vector<std::string>& shimHwLog() { static std::vector<std::string> v; return v; }
+inline void shimHw(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
+inline void shimHw(const char* fmt, ...) {
+    char b[96]; va_list ap; va_start(ap, fmt); vsnprintf(b, sizeof b, fmt, ap); va_end(ap);
+    shimHwLog().push_back(b);
+}
+struct ShimGpio {
+    int mode[40];         ///< -1 = never configured
+    int out[40];          ///< last written level, -1 = never written
+    int in[40];           ///< level returned by digitalRead (set by the test)
+    uint32_t mv[40];      ///< value returned by analogReadMilliVolts (set by the test)
+    int atten[40];        ///< -1 = never set
+    int writes[40];       ///< number of digitalWrite calls per pin
+    int reads[40];        ///< number of digitalRead calls per pin
+    int adc_reads[40];
+    ShimGpio() { reset(); }
+    void reset() {
+        for (int i = 0; i < 40; ++i) { mode[i] = -1; out[i] = -1; in[i] = HIGH; mv[i] = 0; atten[i] = -1; writes[i] = 0; reads[i] = 0; adc_reads[i] = 0; }
+    }
+};
+inline ShimGpio& shimGpio() { static ShimGpio g; return g; }
+inline void pinMode(uint8_t pin, uint8_t mode) { shimHw("pinMode %u %u", pin, mode); if (pin < 40) shimGpio().mode[pin] = mode; }
+inline void digitalWrite(uint8_t pin, uint8_t val) {
+    shimHw("dw %u %u", pin, val ? 1u : 0u);
+    if (pin < 40) { shimGpio().out[pin] = val ? HIGH : LOW; ++shimGpio().writes[pin]; }
+}
+inline int digitalRead(uint8_t pin) { shimHw("dr %u", pin); if (pin >= 40) return LOW; ++shimGpio().reads[pin]; return shimGpio().in[pin]; }
+inline uint32_t analogReadMilliVolts(uint8_t pin) { shimHw("adc %u", pin); if (pin >= 40) return 0; ++shimGpio().adc_reads[pin]; return shimGpio().mv[pin]; }
+inline uint16_t analogRead(uint8_t pin) { shimHw("adcraw %u", pin); return pin < 40 ? (uint16_t)(shimGpio().mv[pin] * 4095u / 3100u) : 0; }
+inline void analogSetPinAttenuation(uint8_t pin, adc_attenuation_t a) { shimHw("atten %u %d", pin, (int)a); if (pin < 40) shimGpio().atten[pin] = (int)a; }

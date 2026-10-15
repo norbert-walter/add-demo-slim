@@ -9,6 +9,37 @@
  * (engine.i2sMuxSetBit), therefore halInit() needs the engine pointer from
  * motion_drv (call motionDrvInit() first). HV LED, shutter LED and heartbeat
  * LED are plain GPIOs, driven LOW in halInit() before anything else.
+ *
+ * V1.5.18 – exact behaviour (tested natively with GPIO/ADC/FastAccelStepper shims: test/native/test_hal_io):
+ *  halInit(), in this order:
+ *    1. for PIN_SHUTTER, PIN_HV_LED, PIN_HEARTBEAT_LED (in this order): pinMode(pin, OUTPUT);
+ *       digitalWrite(pin, LOW)                      <- the very first hardware accesses
+ *    2. pinMode(PIN_LIMIT_FWD / PIN_LIMIT_BWD / PIN_ESTOP, INPUT)   (external pull-ups)
+ *    3. (void)analogReadMilliVolts(PIN_SENSOR_ADC), then analogSetPinAttenuation(PIN_SENSOR_ADC,
+ *       ADC_11db)   (Arduino 3.x: the pin must be an ADC channel before the attenuation is set)
+ *    4. engine = motionDrvEngine() (stored); if not NULL: engine->i2sMuxSetBit(buzzer slot, false)
+ *    5. output cache "unknown": the next call of every output setter writes.
+ *       Input state "not sampled yet": halEstop(), halLimitFwd(), halLimitBwd() return TRUE until
+ *       the first halUpdateInputs() (fail-safe: E-stop and both limits count as active).
+ *  halUpdateInputs(now): reads each input exactly once (digitalRead) and decodes it:
+ *    limit active  = (level == LIMIT_ACTIVE_LEVEL); E-stop active = (level == HIGH) if active_high,
+ *    else (level == LOW).
+ *    First call after halInit: every state takes the decoded sample directly (no debounce).
+ *    Limit switches (both directions): the state changes only after the decoded sample has
+ *      differed from the state continuously for >= INPUT_DEBOUNCE_MS (time of the first differing
+ *      sample = start; a sample equal to the state cancels; uint32 wrap-around safe).
+ *    E-stop: an active sample sets the state active IMMEDIATELY (and cancels a pending release);
+ *      release as for the limits (inactive continuously for >= INPUT_DEBOUNCE_MS).
+ *    halSetEstopActiveHigh: only stores the polarity. If it differs from the polarity used by the
+ *      previous halUpdateInputs, that call discards a pending E-stop release (the release debounce
+ *      starts again with the first sample under the new polarity).
+ *  halReadSensorSamples(buf, n): buf NULL or n == 0 -> nothing; else n x
+ *    analogReadMilliVolts(PIN_SENSOR_ADC) into buf[0..n-1] (uint16_t, values > 65535 -> 65535).
+ *  Output setters: shutter / HV LED / heartbeat: digitalWrite(pin, on ? HIGH : LOW);
+ *    buzzer: engine->i2sMuxSetBit(I2SO_TO_SLOT(I2SO_BUZZER), on) - if the stored engine is NULL,
+ *    nothing is written and the cache stays "unknown". Each setter writes only if the value
+ *    differs from its cache or the cache is "unknown", then updates the cache.
+ *  No delay(), no Serial, no heap, no locks: only the control task calls these functions.
  */
 #pragma once
 

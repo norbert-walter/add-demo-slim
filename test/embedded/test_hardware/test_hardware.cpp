@@ -1,6 +1,6 @@
 /**
  * @file test_hardware.cpp
- * @brief On-target tests (Sprint S5). Uses the REAL firmware modules (HAL,
+ * @brief On-target tests (Sprint S5; first run in H1, V1.5.18). Uses the REAL firmware modules (HAL,
  *        motion driver, NVS, logic). Run only after user approval:
  *            pio test -e esp32-test
  *
@@ -65,14 +65,16 @@ void test_estop_polarity_change() {
     TEST_ASSERT_FALSE(halEstop());
 }
 void test_nvs_roundtrip() {
-    Params p; paramsDefaults(p);
+    // V1.5.18: the stored parameters (WLAN credentials, calibration, estop_nc) are restored at the
+    // end - before, the test overwrote them with the defaults.
+    Params orig; nvsLoadParams(orig);
+    Params p = orig;
     p.measure_pos = 111.0f; strcpy(p.wifi_ssid, "TestNet");
     TEST_ASSERT_TRUE(nvsSaveParams(p));
     Params q; nvsLoadParams(q);
-    TEST_ASSERT_EQUAL_FLOAT(111.0f, q.measure_pos);
-    TEST_ASSERT_EQUAL_STRING("TestNet", q.wifi_ssid);
-    paramsDefaults(p);
-    TEST_ASSERT_TRUE(nvsSaveParams(p));
+    const bool ok = q.measure_pos == 111.0f && strcmp(q.wifi_ssid, "TestNet") == 0;
+    TEST_ASSERT_TRUE_MESSAGE(nvsSaveParams(orig), "restoring the original parameters failed");
+    TEST_ASSERT_TRUE_MESSAGE(ok, "NVS roundtrip: measure_pos / wifi_ssid not read back");
 }
 void test_motor_moves_2mm_and_back() {
     halUpdateInputs(millis());

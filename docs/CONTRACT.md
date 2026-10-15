@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.17 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-15
+**Version:** 1.5.18 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-15
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.6
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -152,6 +152,15 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 2 | `/add.html`: the JSON is sent block-wise (at most 2 `sendContent` calls per started 64 bytes); a `<` as the last byte is sent too. Qwen's P2.2 sent every character as its own chunk (on the device: one TCP write per byte, ~8 000 writes for 4 kB) and lost a trailing `<`. The WebServer shim counts chunks; new test `test_v1517_add_html_sends_blocks_not_bytes` | `http_server.h`, `WebServer.h`, `test/native` |
 | 3 | `POST /api`: `BAD_PARAM` is an error response also for `GET_STATE`/`GET_CONFIG` (Qwen's P2.3 answered them locally with OK, e.g. `"params":[1]`; found by the differential test). New test `test_v1517_bad_param_is_an_error_also_for_get_state_and_get_config` | `http_server.h`, `test/native` |
 | 4 | Shim correction: `shimCritEnters()` is atomic (two tasks entering different critical sections raced on the counter; ThreadSanitizer reported it also for the reference – the statement "clean under ThreadSanitizer" in 1.5.16 was based on a truncated output). Reference: 18 suites, **413/413**, `test_wifi_manager`/`test_http_server` now really clean under ThreadSanitizer | `shim_core.h` |
+
+**Clarifications 1.5.18 (preparation of Sprint H1, 2026-10-15, no behaviour change):**
+
+| # | Clarification | Where |
+|---|---|---|
+| 1 | Exact `hal_io` behaviour: order in `halInit` (outputs LOW first, inputs, ADC read before 11 dB attenuation, buzzer bit off, engine stored), inputs fail-safe (active) until the first `halUpdateInputs`, first sample taken directly, debounce rule (continuous difference ≥ `INPUT_DEBOUNCE_MS`, wrap-safe), E-stop activation immediate, polarity change restarts a pending release, each input read once per update, output cache "unknown" after `halInit`, buzzer only with an engine | `hal_io.h` |
+| 2 | Exact `motion_drv` behaviour: init sequence as verified in smoketest 0a (all 32 mux slots cleared, driver enable HIGH = off, then connect/dir/enable/auto-enable/acceleration), failure at each step, `motionDrvEngine()` only after a working mux, exact library calls per request (no extra checks, repeated FORCE_STOP executed every call), speed = abs(realtime mHz) / 1000 / `STEPS_PER_MM` | `motion_drv.h` |
+| 3 | Host shims: GPIO/ADC functions in `Arduino.h` (`pinMode`, `digitalRead/Write`, `analogReadMilliVolts`, `analogSetPinAttenuation`) and `FastAccelStepper.h` (signatures of master 96459ed, the pinned version). Every hardware access is recorded in call order (`shimHwLog`). New suites `test_hal_io` (16) and `test_motion_drv` (10). Mutation test: 64 mutants, 3 survived the first run (output cache after a second `halInit`, first setter call with `true`, engine taken at call time) → `test_setters_write_again_after_halInit` and an extra check; afterwards all 64 caught. Reference: 20 suites, **439/439**, also under ThreadSanitizer | `test/native` |
+| 4 | On-device test `test_nvs_roundtrip` restores the stored parameters (WLAN credentials, calibration, `estop_nc`) instead of writing the defaults | `test/embedded` |
 
 **Scope note:** plant coordinates for several gauges (offset/sign transformation at the
 API boundary, common time base) are an extension idea for later (Pflichtenheft §11.1);
