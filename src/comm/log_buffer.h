@@ -11,7 +11,9 @@
  *    (taskENTER_CRITICAL / taskEXIT_CRITICAL). Nothing else happens inside it.
  *  - Echo: Serial.println(line) AFTER taskEXIT_CRITICAL (Serial may block - never inside).
  *  - The ring keeps the newest LOG_LINES lines; the oldest is overwritten.
- *  - logDump copies the ring inside the same critical section, then writes the lines oldest
+ *  - logDump copies the ring TEXT (all lines, not only indices or lengths) inside the same
+ *    critical section into a local/static copy and reads only that copy afterwards (V1.5.15),
+ *    then writes the lines oldest
  *    first, each followed by '\n', plus a terminating NUL. If not all lines fit into cap-1
  *    chars, the OLDEST lines are left out (only complete lines; the newest that fit are kept).
  *    cap == 0 -> writes nothing, returns 0. Otherwise returns strlen(buf).
