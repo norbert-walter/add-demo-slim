@@ -9,6 +9,25 @@
  * Safety flags (interlock, cooling_flow, temp) are NEVER stored.
  * Called only from setup() and from the network task (Core 0) – never from
  * the control task (flash writes take milliseconds).
+ *
+ * V1.5.14 – exact behaviour (tested natively with a Preferences shim: test/native/test_nvs_config):
+ *  Types: floats with putFloat/getFloat, "ver" with putUChar/getUChar, estnc with
+ *  putBool/getBool, ssid/pass with putString/getString(key, char* buf, sizeof(field)).
+ *  Key -> field: mpos measure_pos, maint maint_pos, tstart traverse_start, tend traverse_end,
+ *  tspeed traverse_speed, shold shutter_hold, edge edge_threshold, base base_dist,
+ *  cnraw calib.near_raw, cnref calib.near_ref, cfraw calib.far_raw, cfref calib.far_ref,
+ *  estnc estop_nc, ssid wifi_ssid, pass wifi_pass.
+ *  Load: paramsDefaults(p) first. begin(NVS_NAMESPACE, true) (read-only); begin fails or
+ *    getUChar("ver", 0) != 4 -> keep the defaults. Otherwise every value read is applied with
+ *    paramSet() under its SET key name (measure_pos, ..., calib_near_ref, calib_far_ref,
+ *    estop_nc, wifi_ssid, wifi_pass); a value paramSet rejects (range, NaN, string rules) keeps
+ *    its default. A missing key keeps its default. near_raw / far_raw (no SET key) are taken
+ *    if finite. Finally: !calibValid(p.calib) -> p.calib = CalibPoints{}. end() before return.
+ *  Save: begin(NVS_NAMESPACE, false); failure -> return false. Write "ver" = 4 and all 15 keys.
+ *    A put returning 0 is an error, EXCEPT putString of an empty string (Preferences returns
+ *    strlen = 0 there). end() always after a successful begin. Returns true only if begin and
+ *    every put succeeded.
+ *  Erase: begin(NVS_NAMESPACE, false); clear(); end().
  */
 #pragma once
 #include "logic/params.h"

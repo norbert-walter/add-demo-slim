@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.13 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-14
+**Version:** 1.5.14 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-14
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.6
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -118,6 +118,15 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | # | Clarification | Where |
 |---|---|---|
 | 1 | `ackPressUpdate`: "1 after sent" is a rule of its own, not the result of clamping elapsed/hold. Qwen's L5.4 computed the progress from `now - t0` also after sending; after a release `t0` was 0, so shortly after the uint32 wrap-around the progress dropped below 1. New test `test_v1513_progress_1_after_sent_across_wraparound`. Reference: 13 suites, **354/354** | `display_logic.h`, `test/native` |
+
+**Clarifications 1.5.14 (preparation of Sprint P1, 2026-10-15, no behaviour change):**
+
+| # | Clarification | Where |
+|---|---|---|
+| 1 | Exact behaviour of the log ring (truncation, one trailing `\n` removed, Serial echo outside the critical section, `logDump` keeps the newest complete lines) | `log_buffer.h` |
+| 2 | Exact NVS behaviour: types per key, read-only load, values applied with `paramSet` (same ranges as SET), raw calibration values if finite, `calibValid` check, save error rules (incl. `putString("")` returning 0), erase | `nvs_config.h` |
+| 3 | `systemInit`: banner content, watchdog `esp_task_wdt_reconfigure` first, `esp_task_wdt_init` only on `ESP_ERR_INVALID_STATE`, `idle_core_mask = 0`; `systemRestart` = `ESP.restart()` | `system.h` |
+| 4 | Host shims (same signatures as Arduino-ESP32 / ESP-IDF 5.x): `Serial`, `ESP`, `Preferences`, `esp_task_wdt.h`, `esp_system.h`, `esp_idf_version.h` in `test/native/freertos_shim`. New suites `test_log_buffer` (11), `test_nvs_config` (14), `test_system` (4). Mutation test: 49 mutants, all caught except 2 (NVS save without begin check: equivalent; logDump reading the ring outside the lock: only ThreadSanitizer finds it – part of the review). Reference: 16 suites, **383/383** | `test/native` |
 
 **Scope note:** plant coordinates for several gauges (offset/sign transformation at the
 API boundary, common time base) are an extension idea for later (Pflichtenheft §11.1);

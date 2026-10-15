@@ -1,5 +1,6 @@
-// Host shim of the few Arduino / FreeRTOS / ESP-IDF calls used by src/app/command_queue.cpp.
-// ONLY for test/native/test_command_queue. Threads = tasks, 1 tick = 1 ms.
+// Host shim of the few Arduino / FreeRTOS / ESP-IDF calls used by src/app/command_queue.cpp
+// and (V1.5.14) src/comm/log_buffer.cpp, src/system/*.cpp. ONLY for test/native tests that
+// #define ADD_HOST_SHIM. Threads = tasks, 1 tick = 1 ms.
 // The guard makes sure src/logic can never compile against these headers by accident.
 #pragma once
 #ifndef ADD_HOST_SHIM
@@ -42,8 +43,12 @@ inline int64_t esp_timer_get_time() {
 
 struct portMUX_TYPE { std::mutex m; };
 #define portMUX_INITIALIZER_UNLOCKED {}
-inline void taskENTER_CRITICAL(portMUX_TYPE* p) { p->m.lock(); }
-inline void taskEXIT_CRITICAL(portMUX_TYPE* p) { p->m.unlock(); }
+// V1.5.14: critical-section depth of the calling thread (test_log_buffer checks that Serial
+// is never used inside a critical section).
+inline int& shimCritDepth() { thread_local int d = 0; return d; }
+inline int& shimCritEnters() { static int n = 0; return n; }   // V1.5.14: number of critical sections
+inline void taskENTER_CRITICAL(portMUX_TYPE* p) { p->m.lock(); ++shimCritDepth(); ++shimCritEnters(); }
+inline void taskEXIT_CRITICAL(portMUX_TYPE* p) { --shimCritDepth(); p->m.unlock(); }
 
 struct ShimQueue {
     std::mutex m;
