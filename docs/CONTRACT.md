@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.18 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-15
+**Version:** 1.5.19 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-15
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.6
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -161,6 +161,14 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 2 | Exact `motion_drv` behaviour: init sequence as verified in smoketest 0a (all 32 mux slots cleared, driver enable HIGH = off, then connect/dir/enable/auto-enable/acceleration), failure at each step, `motionDrvEngine()` only after a working mux, exact library calls per request (no extra checks, repeated FORCE_STOP executed every call), speed = abs(realtime mHz) / 1000 / `STEPS_PER_MM` | `motion_drv.h` |
 | 3 | Host shims: GPIO/ADC functions in `Arduino.h` (`pinMode`, `digitalRead/Write`, `analogReadMilliVolts`, `analogSetPinAttenuation`) and `FastAccelStepper.h` (signatures of master 96459ed, the pinned version). Every hardware access is recorded in call order (`shimHwLog`). New suites `test_hal_io` (16) and `test_motion_drv` (10). Mutation test: 64 mutants, 3 survived the first run (output cache after a second `halInit`, first setter call with `true`, engine taken at call time) → `test_setters_write_again_after_halInit` and an extra check; afterwards all 64 caught. Reference: 20 suites, **439/439**, also under ThreadSanitizer | `test/native` |
 | 4 | On-device test `test_nvs_roundtrip` restores the stored parameters (WLAN credentials, calibration, `estop_nc`) instead of writing the defaults | `test/embedded` |
+
+**Clarifications 1.5.19 (first on-device test of H1, 2026-10-15, no behaviour change):**
+
+| # | Clarification | Where |
+|---|---|---|
+| 1 | `test_hardware` crashed in `test_nvs_roundtrip` (Guru Meditation "Cache disabled but cached memory region accessed", PC in `StepperQueue::fill_i2s_buffer`). Cause in FastAccelStepper 96459ed: the I2S TX-done interrupt runs permanently with I2S_MUX and is IRAM-safe, but `fill_i2s_buffer()` and `I2sManager::i2sMuxSetBit()` were in flash; every flash operation (NVS write, SPIFFS read, OTA) crashed the board, also with the motor idle. Fix: both functions `IRAM_ATTR` (fork `norbert-walter/FastAccelStepper`, commit a64ceff on 96459ed; pull request to gin66 pending). Checked with nm/objdump: every function reachable from the interrupt is in IRAM, no literals into flash | `platformio.ini` |
+| 2 | Post-build check `scripts/check_iram.py` (all ESP32 environments): the build fails if one of the I2S interrupt functions is linked into flash (protects against library updates). Verified: fails with 96459ed, passes with a64ceff | `platformio.ini`, `scripts/` |
+| 3 | The nine native H1 tests could not see this (no flash cache on the host); the first five on-device tests were green (inputs, sensor, outputs, E-stop polarity change) | – |
 
 **Scope note:** plant coordinates for several gauges (offset/sign transformation at the
 API boundary, common time base) are an extension idea for later (Pflichtenheft §11.1);
