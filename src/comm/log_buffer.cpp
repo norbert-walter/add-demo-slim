@@ -33,6 +33,9 @@ static char ring[LOG_LINES][LOG_LINE_LEN];  // ring buffer of lines
 static uint32_t writeIdx = 0;               // next slot to overwrite
 static uint32_t lineCount = 0;              // how many lines are stored (<= LOG_LINES)
 
+// V1.5.15: file-static copy of the TEXT for use after critical section.
+static char textCopy[LOG_LINES][LOG_LINE_LEN];
+
 // ---------------------------------------------------------------------------
 // logLine – format, truncate, store, echo
 // ---------------------------------------------------------------------------
@@ -88,6 +91,7 @@ size_t logDump(char* buf, size_t cap) {
         uint32_t idx = (start + i) % LOG_LINES;
         lines[i].idx = idx;
         lines[i].len = strlen(ring[idx]);
+        memcpy(textCopy[idx], ring[idx], LOG_LINE_LEN);   // V1.5.15: copy TEXT inside CS
     }
 
     taskEXIT_CRITICAL(&logMux);
@@ -105,10 +109,10 @@ size_t logDump(char* buf, size_t cap) {
         ++outStart;
     }
 
-    // Write remaining lines oldest-first.
+    // Write remaining lines oldest-first (use copied TEXT, not ring).
     size_t outLen = 0;
     for (uint32_t i = outStart; i < lineCount; ++i) {
-        memcpy(buf + outLen, ring[lines[i].idx], lines[i].len);
+        memcpy(buf + outLen, textCopy[lines[i].idx], lines[i].len);
         outLen += lines[i].len;
         buf[outLen++] = '\n';
     }
