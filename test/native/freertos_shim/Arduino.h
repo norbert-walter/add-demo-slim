@@ -2,6 +2,7 @@
 #include "shim_core.h"
 #include <stdarg.h>
 #include <string>
+#include "WString.h"   // V1.5.16
 
 // ---- V1.5.14: Serial, ESP and core version for the P1 host tests ----------------------------
 #define ESP_ARDUINO_VERSION_MAJOR 3

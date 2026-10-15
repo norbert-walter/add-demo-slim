@@ -18,6 +18,28 @@
  * wifiLoop() is called from the network task and never blocks > 50 ms.
  * Every state change is written to the log (log_buffer), e.g.
  * "sta: connected 192.168.1.57" / "sta: attempt 2/3 failed" / "sta: backoff 120 s".
+ *
+ * V1.5.16 – exact behaviour (tested natively with WiFi/MDNS shims: test/native/test_wifi_manager):
+ *  wifiInit: copies ssid and pass into file-static buffers (sizes as Params::wifi_ssid /
+ *    wifi_pass, truncated), WiFi.mode(WIFI_AP_STA), WiFi.setAutoReconnect(false) (the state
+ *    machine reconnects, not the core), WiFi.softAP(WIFI_AP_SSID, WIFI_AP_PASS),
+ *    MDNS.begin("add-demo"), MDNS.addService("http", "tcp", HTTP_PORT),
+ *    logLine("ap: %s %s", WIFI_AP_SSID, <AP IP>). StaConfig = defaults (3 x 10 s, 120 s).
+ *  wifiLoop(now): the FIRST call steps immediately, afterwards only if (now - last step) >= 100
+ *    (uint32 wrap-around safe); otherwise it returns at once. One step:
+ *      link_up = (WiFi.status() == WL_CONNECTED);
+ *      action = staStep(status, ssid[0] != 0, link_up, now, cfg);
+ *      BEGIN -> WiFi.begin(ssid, pass); DISCONNECT -> WiFi.disconnect(false) (AP stays on).
+ *    Log lines after the step, exactly (only when something changed):
+ *      CONNECTED -> CONNECTING (link lost):      "sta: connection lost"
+ *      CONNECTING with a new attempt number n:   "sta: attempt %u/%u"  (n, cfg.attempts)
+ *      entering CONNECTED:                       "sta: connected %s"   (WiFi.localIP())
+ *      entering BACKOFF:                         "sta: backoff %lu s"  (cfg.backoff_ms / 1000)
+ *      entering OFF from another state:          "sta: off"
+ *    The StaStatus is written under a file-static portMUX (taskENTER/EXIT_CRITICAL);
+ *    wifiStaStatus() copies it under the same lock (the display task reads it on Core 1).
+ *  wifiGetApIp: WiFi.softAPIP().toString() with snprintf into buf (cap > 0, always terminated).
+ *  wifiGetStaIp: WiFi.localIP().toString() if the station state is CONNECTED, else "".
  */
 #pragma once
 #include <stddef.h>

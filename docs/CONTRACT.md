@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.15 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-14
+**Version:** 1.5.16 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-15
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.6
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -134,6 +134,15 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 |---|---|---|
 | 1 | `logDump` copies the ring text under the lock and reads only the copy. Qwen's P1.1 copied only indices and lengths and read the text afterwards without the lock (ThreadSanitizer: data race; mixed lines possible). New test `test_v1515_dump_never_mixes_lines`. Reference: 16 suites, **384/384** | `log_buffer.h`, `test/native` |
 | 2 | `firmware-partial`: weak empty `setup()`/`loop()` (`src/partial_stub.cpp`, only with `-DADD_PARTIAL_BUILD`) so that the compile check links until `main.cpp` exists (Sprint I1) | `platformio.ini` |
+
+**Clarifications 1.5.16 (preparation of Sprint P2, 2026-10-15, one addition):**
+
+| # | Clarification | Where |
+|---|---|---|
+| 1 | Exact `wifi_manager` behaviour: copies of SSID/password, `WIFI_AP_STA`, no auto-reconnect of the core (the state machine reconnects), mDNS `add-demo` + `_http._tcp`, first `wifiLoop` steps at once and then every ≥ 100 ms (wrap-around safe), `DISCONNECT` keeps the AP (`disconnect(false)`), exact log lines, `StaStatus` under a portMUX | `wifi_manager.h` |
+| 2 | Exact `http_server` behaviour: one static `WebServer`, CORS header on every response, file routes via `SPIFFS` and `streamFile`, `/add.html` chunked with a fixed template (`</` → `<\/` in the script block, `& < >` escaped in the `pre` block, no-cache headers), `/llms.txt` exactly 4 lines, `/log`, `/proc`, `POST /api` (body limit, heartbeat on OK/BAD_PARAM, 400 only for BAD_CRC/BAD_JSON, GET_STATE/GET_CONFIG local, everything else through the command queue with `API_REPLY_TIMEOUT_MS`), 404 body | `http_server.h` |
+| 3 | **Addition:** `OPTIONS /api` → 204 with `Access-Control-Allow-Methods: GET, POST, OPTIONS` and `Access-Control-Allow-Headers: Content-Type`. Without it, a browser on another host cannot POST JSON to `/api` (CORS preflight); the Pflichtenheft only required the `Allow-Origin` header | `http_server.h` |
+| 4 | Host shims with the signatures of Arduino-ESP32 3.x: `WString.h` (minimal `String`), `IPAddress.h`, `WiFi.h`, `ESPmDNS.h`, `FS.h`, `SPIFFS.h`, `WebServer.h` (records requests and responses). New suites `test_wifi_manager` (9, one ordered scenario) and `test_http_server` (17, a thread plays the control task, parallel `/proc` test with self-checking data). Mutation test: 47 mutants, all caught except 1 (`wifiStaStatus` reading without the lock: only ThreadSanitizer finds it – part of the review); 3 survivors of the first run led to the tests `test_step_gap_near_wraparound`, `test_v1516_slow_reply_within_timeout_is_ok` and a first `wifiLoop` 40 ms after boot. Reference: 18 suites, **410/410**, `test_wifi_manager`/`test_http_server` also clean under ThreadSanitizer | `test/native` |
 
 **Scope note:** plant coordinates for several gauges (offset/sign transformation at the
 API boundary, common time base) are an extension idea for later (Pflichtenheft §11.1);
