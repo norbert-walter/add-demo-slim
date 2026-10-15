@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5.16) – Sprint P2 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.17) – Sprint P2 must make these pass. Do not modify.
 // Host test of the REAL src/comm/wifi_manager.cpp with WiFi/ESPmDNS shims
 // (test/native/freertos_shim). The tests form ONE scenario and must run in this order
 // (wifi_manager keeps its state in file-static variables, like on the device).
@@ -158,6 +158,12 @@ void test_empty_ssid_switches_off() {
     TEST_ASSERT_EQUAL_STRING("", ip);
 }
 
+void test_v1517_no_wifi_call_inside_critical_section() {
+    // WiFi.status(), begin(), localIP() ... use FreeRTOS/lwIP internally and must never run while
+    // interrupts are masked (taskENTER_CRITICAL). The shim counts every call made inside one.
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, shimWiFi().in_critical.load(), "WiFi called inside taskENTER_CRITICAL");
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_init_starts_ap_and_mdns);
@@ -169,5 +175,6 @@ int main(int, char**) {
     RUN_TEST(test_status_read_from_other_task);
     RUN_TEST(test_ip_buffers);
     RUN_TEST(test_empty_ssid_switches_off);
+    RUN_TEST(test_v1517_no_wifi_call_inside_critical_section);
     return UNITY_END();
 }

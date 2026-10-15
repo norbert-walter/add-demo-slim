@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5.16) – Sprint P2 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.17) – Sprint P2 must make these pass. Do not modify.
 // Host test of the REAL src/comm/http_server.cpp together with the real snapshot.cpp,
 // command_queue.cpp and log_buffer.cpp, using the WebServer/SPIFFS shims in
 // test/native/freertos_shim. A thread plays the control task (replies to queued commands).
@@ -280,6 +280,41 @@ void test_proc_while_control_task_publishes() {
     pub = false; w.join();
     TEST_ASSERT_EQUAL_INT(0, bad);
 }
+void test_v1517_add_html_sends_blocks_not_bytes() {
+    // one sendContent() = one HTTP chunk = one TCP write on the device: never per character.
+    std::string json;
+    for (int i = 0; json.size() < 4000; ++i) json += (i % 7 == 0) ? "</" : (i % 5 == 0 ? "&<>" : "{\"k\":1},");
+    json += "<";                                            // a '<' as the very last byte is sent too
+    shimFiles()["/add.json"] = json;
+    const ShimResponse& r = request(HTTP_GET, "/add.html");
+    std::string script, pre;
+    for (size_t i = 0; i < json.size(); ++i) {
+        if (json[i] == '<' && i + 1 < json.size() && json[i + 1] == '/') { script += "<\\/"; ++i; } else script += json[i];
+    }
+    for (char c : json) { if (c == '&') pre += "&amp;"; else if (c == '<') pre += "&lt;"; else if (c == '>') pre += "&gt;"; else pre += c; }
+    std::string exp = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>ADD</title>\n"
+                      "<script type=\"application/ld+json\">\n" + script + "\n</script></head><body><pre>\n" +
+                      pre + "\n</pre></body></html>\n";
+    TEST_ASSERT_EQUAL_STRING(exp.c_str(), r.body.c_str());
+    int maxChunks = 10 + 2 * (int)((json.size() + 63) / 64);
+    if (r.chunks > maxChunks) {
+        char m[96]; snprintf(m, sizeof m, "%d sendContent calls for %u bytes (max %d)", r.chunks, (unsigned)json.size(), maxChunks);
+        TEST_FAIL_MESSAGE(m);
+    }
+    TEST_ASSERT_EQUAL_INT(0, shimOpenFiles());
+}
+void test_v1517_bad_param_is_an_error_also_for_get_state_and_get_config() {
+    const char* bodies[] = {"{\"cmd\":\"GET_STATE\",\"params\":[1]}", "{\"cmd\":\"GET_CONFIG\",\"params\":[1]}"};
+    const char* names[] = {"GET_STATE", "GET_CONFIG"};
+    for (int k = 0; k < 2; ++k) {
+        std::string b = framed(bodies[k]);
+        snapshotSetLastApiRx(0);
+        const ShimResponse& r = request(HTTP_POST, "/api", &b);
+        TEST_ASSERT_EQUAL_INT(200, r.code);
+        TEST_ASSERT_EQUAL_STRING(errBody(ApiError::BAD_PARAM, names[k]).c_str(), unframe(r.body).c_str());
+        TEST_ASSERT_TRUE(snapshotLastApiRx() != 0 || millis() == 0);       // still a heartbeat
+    }
+}
 void test_zz_shutdown() { g_run = false; g_ctrl.join(); TEST_PASS(); }
 
 int main(int, char**) {
@@ -300,6 +335,8 @@ int main(int, char**) {
     RUN_TEST(test_v1516_slow_reply_within_timeout_is_ok);
     RUN_TEST(test_api_busy_when_control_task_does_not_answer);
     RUN_TEST(test_proc_while_control_task_publishes);
+    RUN_TEST(test_v1517_add_html_sends_blocks_not_bytes);
+    RUN_TEST(test_v1517_bad_param_is_an_error_also_for_get_state_and_get_config);
     RUN_TEST(test_zz_shutdown);
     return UNITY_END();
 }

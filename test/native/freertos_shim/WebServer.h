@@ -14,6 +14,7 @@ struct ShimResponse {
     int code = 0; std::string type; std::string body;
     std::vector<std::pair<std::string, std::string>> headers;
     int sends = 0; bool chunked = false; bool chunk_end = false;
+    int chunks = 0;                       // V1.5.17: non-empty sendContent calls (= HTTP chunks / TCP writes)
     std::string header(const std::string& n) const { for (auto& h : headers) if (h.first == n) return h.second; return "<none>"; }
 };
 class WebServer;
@@ -53,6 +54,7 @@ public:
         if (responses.empty()) return;
         ShimResponse& r = responses.back();
         if (n == 0) { r.chunk_end = true; return; }
+        ++r.chunks;
         r.body.append(c, n);
     }
     void sendContent(const char* c) { sendContent(c, strlen(c)); }

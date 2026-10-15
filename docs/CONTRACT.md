@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.16 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-15
+**Version:** 1.5.17 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-15
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.6
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -143,6 +143,15 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 2 | Exact `http_server` behaviour: one static `WebServer`, CORS header on every response, file routes via `SPIFFS` and `streamFile`, `/add.html` chunked with a fixed template (`</` → `<\/` in the script block, `& < >` escaped in the `pre` block, no-cache headers), `/llms.txt` exactly 4 lines, `/log`, `/proc`, `POST /api` (body limit, heartbeat on OK/BAD_PARAM, 400 only for BAD_CRC/BAD_JSON, GET_STATE/GET_CONFIG local, everything else through the command queue with `API_REPLY_TIMEOUT_MS`), 404 body | `http_server.h` |
 | 3 | **Addition:** `OPTIONS /api` → 204 with `Access-Control-Allow-Methods: GET, POST, OPTIONS` and `Access-Control-Allow-Headers: Content-Type`. Without it, a browser on another host cannot POST JSON to `/api` (CORS preflight); the Pflichtenheft only required the `Allow-Origin` header | `http_server.h` |
 | 4 | Host shims with the signatures of Arduino-ESP32 3.x: `WString.h` (minimal `String`), `IPAddress.h`, `WiFi.h`, `ESPmDNS.h`, `FS.h`, `SPIFFS.h`, `WebServer.h` (records requests and responses). New suites `test_wifi_manager` (9, one ordered scenario) and `test_http_server` (17, a thread plays the control task, parallel `/proc` test with self-checking data). Mutation test: 47 mutants, all caught except 1 (`wifiStaStatus` reading without the lock: only ThreadSanitizer finds it – part of the review); 3 survivors of the first run led to the tests `test_step_gap_near_wraparound`, `test_v1516_slow_reply_within_timeout_is_ok` and a first `wifiLoop` 40 ms after boot. Reference: 18 suites, **410/410**, `test_wifi_manager`/`test_http_server` also clean under ThreadSanitizer | `test/native` |
+
+**Clarifications 1.5.17 (review of P2, 2026-10-15, no behaviour change):**
+
+| # | Clarification | Where |
+|---|---|---|
+| 1 | `wifiLoop`: the critical sections contain only the copy of the `StaStatus`; `WiFi.status()` is read before, `staStep` runs on the local copy, no `WiFi.*`/`logLine` inside a critical section. Qwen's P2.1 called `WiFi.status()` and `staStep` with interrupts masked (on the ESP32: FreeRTOS/lwIP calls inside a spinlock section). The WiFi shim now counts calls made inside a critical section; new test `test_v1517_no_wifi_call_inside_critical_section` | `wifi_manager.h`, `WiFi.h`, `test/native` |
+| 2 | `/add.html`: the JSON is sent block-wise (at most 2 `sendContent` calls per started 64 bytes); a `<` as the last byte is sent too. Qwen's P2.2 sent every character as its own chunk (on the device: one TCP write per byte, ~8 000 writes for 4 kB) and lost a trailing `<`. The WebServer shim counts chunks; new test `test_v1517_add_html_sends_blocks_not_bytes` | `http_server.h`, `WebServer.h`, `test/native` |
+| 3 | `POST /api`: `BAD_PARAM` is an error response also for `GET_STATE`/`GET_CONFIG` (Qwen's P2.3 answered them locally with OK, e.g. `"params":[1]`; found by the differential test). New test `test_v1517_bad_param_is_an_error_also_for_get_state_and_get_config` | `http_server.h`, `test/native` |
+| 4 | Shim correction: `shimCritEnters()` is atomic (two tasks entering different critical sections raced on the counter; ThreadSanitizer reported it also for the reference – the statement "clean under ThreadSanitizer" in 1.5.16 was based on a truncated output). Reference: 18 suites, **413/413**, `test_wifi_manager`/`test_http_server` now really clean under ThreadSanitizer | `shim_core.h` |
 
 **Scope note:** plant coordinates for several gauges (offset/sign transformation at the
 API boundary, common time base) are an extension idea for later (Pflichtenheft §11.1);
