@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5.14) – Sprint P1 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.15) – Sprint P1 must make these pass. Do not modify.
 // Host test of the REAL src/comm/log_buffer.cpp with test/native/freertos_shim
 // (Serial capture, portMUX = std::mutex with critical-section depth tracking).
 #define ADD_HOST_SHIM 1
@@ -127,6 +127,44 @@ void test_parallel_logging_and_dumping() {
     TEST_ASSERT_EQUAL_INT(0, Serial.writes_in_critical);
 }
 
+// ---- V1.5.15: review of P1.1 - logDump must copy the TEXT of the ring under the lock ----
+// Lines of different length whose content encodes its own length ("<len>:" + filler). A dump
+// that reads the text outside the critical section mixes old and new lines of other lengths.
+static void lenLine(int len, char c) {
+    char b[LOG_LINE_LEN];
+    int h = snprintf(b, sizeof b, "%02d:", len);
+    for (int k = h; k < len; ++k) b[k] = c;
+    b[len] = 0;
+    logLine("%s", b);
+}
+static bool consistent(const char* s, const char* e) {
+    int len = (int)(e - s);
+    if (len < 4 || s[2] != ':') return false;
+    if ((s[0] - '0') * 10 + (s[1] - '0') != len) return false;
+    for (const char* q = s + 3; q < e; ++q) if (*q != s[3]) return false;   // one filler char per line
+    return true;
+}
+void test_v1515_dump_never_mixes_lines() {
+    for (int i = 0; i < LOG_LINES; ++i) lenLine(10 + i % 40, 'a');
+    std::vector<std::thread> th;
+    for (int t = 0; t < 4; ++t)
+        th.emplace_back([t] { for (int i = 0; i < 20000; ++i) lenLine(10 + (i * 7 + t * 13) % 80, (char)('b' + t)); });
+    static char d[sizeof B];
+    int bad = 0;
+    for (int k = 0; k < 4000; ++k) {
+        size_t n = logDump(d, sizeof d);
+        if (n != strlen(d)) { ++bad; continue; }
+        const char* s = d;
+        while (*s) {
+            const char* e = strchr(s, '\n');
+            if (!e || !consistent(s, e)) { ++bad; break; }
+            s = e + 1;
+        }
+    }
+    for (auto& x : th) x.join();
+    TEST_ASSERT_EQUAL_INT(0, bad);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_empty_at_start);
@@ -140,5 +178,6 @@ int main(int, char**) {
     RUN_TEST(test_each_call_uses_the_critical_section);
     RUN_TEST(test_dump_cap_zero);
     RUN_TEST(test_parallel_logging_and_dumping);
+    RUN_TEST(test_v1515_dump_never_mixes_lines);
     return UNITY_END();
 }
