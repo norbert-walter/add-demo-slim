@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5.12) – Sprint L5 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.13) – Sprint L5 must make these pass. Do not modify.
 // Covers: src/logic/display_logic.cpp (CONTRACT §13)
 #include <unity.h>
 #include "logic/display_logic.h"
@@ -115,6 +115,18 @@ void test_v1512_progress_stays_1_after_sent() {
     poll(ScreenMode::NORMAL, false, false, &pr); TEST_ASSERT_EQUAL_FLOAT(0.0f, pr);
 }
 
+// ---- V1.5.13: review of L5.4 ----
+void test_v1513_progress_1_after_sent_across_wraparound() {
+    float pr = -1.0f;
+    T = 0xFFFFFFFFu - 1500;
+    poll(ScreenMode::ACK, false);
+    TEST_ASSERT_EQUAL_INT(1, pollFor(1100, ScreenMode::ACK, true));    // fires before the wrap
+    for (int i = 0; i < 40; ++i) {                                     // released, time wraps past 0
+        poll(ScreenMode::ACK, false, false, &pr);
+        TEST_ASSERT_EQUAL_FLOAT(1.0f, pr);                             // sent -> always 1
+    }
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_screen_mode);
@@ -128,5 +140,6 @@ int main(int, char**) {
     RUN_TEST(test_wraparound);
     RUN_TEST(test_v1511_leaving_ack_screen_cancels_running_press);
     RUN_TEST(test_v1512_progress_stays_1_after_sent);
+    RUN_TEST(test_v1513_progress_1_after_sent_across_wraparound);
     return UNITY_END();
 }

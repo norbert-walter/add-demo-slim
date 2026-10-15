@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.12 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-14
+**Version:** 1.5.13 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-14
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.6
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -112,6 +112,12 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 1 | `apiParseRequest`: a number parameter that is absent leaves its value at 0 (`out` fully reset). Qwen's L5.3 copied an uninitialised local into `end`/`speed` etc. | `api_parse.h` |
 | 2 | `ackPressUpdate`: progress stays 1 after the ACK was sent while the ACK screen is shown (header already said so; Qwen's L5.1 returned 0 from the next poll on) | `display_logic.h` |
 | 3 | New tests (+2): `test_v1512_progress_stays_1_after_sent`, `test_v1512_absent_numbers_stay_zero`. Reference: 13 suites, **353/353** | `test/native` |
+
+**Clarifications 1.5.13 (review of L5.4, 2026-10-15, no behaviour change):**
+
+| # | Clarification | Where |
+|---|---|---|
+| 1 | `ackPressUpdate`: "1 after sent" is a rule of its own, not the result of clamping elapsed/hold. Qwen's L5.4 computed the progress from `now - t0` also after sending; after a release `t0` was 0, so shortly after the uint32 wrap-around the progress dropped below 1. New test `test_v1513_progress_1_after_sent_across_wraparound`. Reference: 13 suites, **354/354** | `display_logic.h`, `test/native` |
 
 **Scope note:** plant coordinates for several gauges (offset/sign transformation at the
 API boundary, common time base) are an extension idea for later (Pflichtenheft §11.1);
