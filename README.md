@@ -53,7 +53,7 @@ Teil der Definition of Done in `.clinerules`.
 | L4 | `logic/app_logic.cpp` | ✅ fertig (Qwen) | `test_app_logic` 84/84 | ✅ 14.10.2026, Tag `sprint-l4` |
 | L5 | `logic/proc_json.cpp`, `api_parse.cpp`, `display_logic.cpp` | ✅ fertig (Qwen) | `test_proc_json` 20/20 · `test_api_parse` 22/22 · `test_display_logic` 12/12 | ✅ 15.10.2026, Tag `sprint-l5` |
 | P1 | `comm/log_buffer.cpp`, `system/nvs_config.cpp`, `system/system.cpp` | ✅ fertig (Qwen) | `test_log_buffer` 12/12 · `test_nvs_config` 14/14 · `test_system` 4/4 · firmware-partial ✅ | ✅ 15.10.2026, Tag `sprint-p1` |
-| P2 | `comm/wifi_manager.cpp`, `comm/http_server.cpp` | ⬜ offen | `test_wifi_manager` 9 · `test_http_server` 17 · firmware-partial | – |
+| P2 | `comm/wifi_manager.cpp`, `comm/http_server.cpp` | ✅ fertig (Qwen) | `test_wifi_manager` 10/10 · `test_http_server` 19/19 · firmware-partial ✅ | in Review |
 | H1 | `hal/hal_io.cpp`, `hal/motion_drv.cpp` | ⬜ offen | Hardware-Prüfung | – |
 | I1 | `display/display.cpp`, `main.cpp`, Gesamt-Build | ⬜ offen | `pio run -e firmware`, `test_command_queue`, Prüfliste am Gerät | – |
 | W1 | `data/www/index.html`, `settings.html` | ⬜ offen | Sichtprüfung | – |
