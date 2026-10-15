@@ -2,4 +2,5 @@
 .vscode/
 *.pyc
 __pycache__/
+tmp/
 compile_commands.json
