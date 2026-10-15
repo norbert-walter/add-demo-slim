@@ -51,7 +51,7 @@ Teil der Definition of Done in `.clinerules`.
 | L2 | `logic/measure_logic.cpp`, `params.cpp` | ✅ fertig (Qwen) | `test_measure_logic` 40/40 · `test_params` 20/20 | ✅ 13.10.2026, Tag `sprint-l2` |
 | L3 | `logic/motion_seq.cpp`, `sound_logic.cpp`, `wifi_logic.cpp` | ✅ fertig (Qwen) | `test_motion_seq` 38/38 · `test_sound_logic` 9/9 · `test_wifi_logic` 15/15 | ✅ 14.10.2026, Tag `sprint-l3` |
 | L4 | `logic/app_logic.cpp` | ✅ fertig (Qwen) | `test_app_logic` 84/84 | ✅ 14.10.2026, Tag `sprint-l4` |
-| L5 | `logic/proc_json.cpp`, `api_parse.cpp`, `display_logic.cpp` | ✅ fertig (Qwen) | `test_proc_json` 20/20 · `test_api_parse` 22/22 · `test_display_logic` 11/11 | in Review |
+| L5 | `logic/proc_json.cpp`, `api_parse.cpp`, `display_logic.cpp` | ✅ fertig (Qwen) | `test_proc_json` 20/20 · `test_api_parse` 22/22 · `test_display_logic` 12/12 | in Review |
 | P1 | `comm/log_buffer.cpp`, `system/nvs_config.cpp`, `system/system.cpp` | ⬜ offen | native Tests mit Nachbildung (folgen), firmware-partial | – |
 | P2 | `comm/wifi_manager.cpp`, `comm/http_server.cpp` | ⬜ offen | firmware-partial, Review | – |
 | H1 | `hal/hal_io.cpp`, `hal/motion_drv.cpp` | ⬜ offen | Hardware-Prüfung | – |
