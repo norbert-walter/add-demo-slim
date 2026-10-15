@@ -164,6 +164,70 @@ static void handleOptions() {
 }
 
 // ---------------------------------------------------------------------------
+// Task 3: POST /api handler (V1.5.16)
+// ---------------------------------------------------------------------------
+
+/// Build an API response: responseToJson → cors → send.
+static void reply(int code, CmdId id, ApiError err, const char* extra) {
+    responseToJson(id, err, nullptr, extra, response, sizeof(response));
+    cors();
+    server.send(code, "application/json", response);
+}
+
+/// POST /api handler (V1.5.16 block, step by step).
+static void handleApi() {
+    // 1. Read body: no body or length > API_BODY_MAX -> BAD_JSON (HTTP 400)
+    if (!server.hasArg("plain") || server.arg("plain").length() > API_BODY_MAX) {
+        reply(400, CmdId::NONE, ApiError::BAD_JSON, nullptr);
+        return;
+    }
+
+    String bodyStr = server.arg("plain");
+    const char* body = bodyStr.c_str();
+    size_t length = bodyStr.length();
+
+    // 2. Parse request
+    Command cmd;
+    ApiError parseErr = apiParseRequest(body, length, cmd);
+
+    if (parseErr == ApiError::OK || parseErr == ApiError::BAD_PARAM) {
+        // Valid packet: CRC ok, known cmd -> heartbeat
+        snapshotSetLastApiRx(millis());
+    }
+
+    // 3. Handle based on command type
+    if (parseErr != ApiError::OK && parseErr != ApiError::BAD_PARAM) {
+        // Parse error: HTTP 400 for BAD_CRC/BAD_JSON, else 200
+        int code = (parseErr == ApiError::BAD_CRC || parseErr == ApiError::BAD_JSON) ? 400 : 200;
+        reply(code, cmd.id, parseErr, nullptr);
+    } else if (cmd.id == CmdId::GET_STATE) {
+        // Local response with stateExtraToJson
+        ProcData d;
+        snapshotGet(d);
+        CycleStats cs;
+        snapshotGetCycleStats(cs);
+        static char extra[600];
+        stateExtraToJson(d.state, d.err, d.local, cs, extra, sizeof(extra));
+        reply(200, cmd.id, ApiError::OK, extra);
+    } else if (cmd.id == CmdId::GET_CONFIG) {
+        // Local response with paramsToJsonMember
+        Params p;
+        SafetyFlags f;
+        snapshotGetConfig(p, f);
+        static char extra[600];
+        paramsToJsonMember(p, f, extra, sizeof(extra));
+        reply(200, cmd.id, ApiError::OK, extra);
+    } else if (parseErr == ApiError::BAD_PARAM) {
+        // Bad params but valid packet -> respond locally, don't queue
+        reply(200, cmd.id, parseErr, nullptr);
+    } else {
+        // OK -> queue and wait for reply
+        ApiError err = cmdQueueSendAndWait(cmd, API_REPLY_TIMEOUT_MS);
+        reply(200, cmd.id, err, nullptr);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Public API (V1.5.16)
 // ---------------------------------------------------------------------------
 
@@ -180,7 +244,10 @@ void httpServerInit() {
     server.on("/log", HTTP_GET, handleLog);
     server.on("/proc", HTTP_GET, handleProc);
 
-    // OPTIONS /api (CORS preflight) — NOT POST /api (task 3)
+    // POST /api (task 3) — before OPTIONS route
+    server.on("/api", HTTP_POST, handleApi);
+
+    // OPTIONS /api (CORS preflight)
     server.on("/api", HTTP_OPTIONS, handleOptions);
 
     server.onNotFound(notFound);
