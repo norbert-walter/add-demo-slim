@@ -48,46 +48,63 @@ static void sendFile(const char* path, const char* type, bool noStore) {
     f.close();
 }
 
-/// Read a file in blocks and escape "</" as "<\/".
+/// Read a file in blocks and escape "</" as "<\/". Block-wise sendContent (V1.5.17).
 static void sendScriptJson(File& f) {
     uint8_t buf[64];
-    bool prev_lt = false;
+    char out[2048];  // plenty for worst case: every byte → 3 chars ('</' → '<\/')
+    int oi = 0;        // output index
+    bool pending_lt = false;
+
+    auto flush_out = [&]() {
+        if (oi > 0) { server.sendContent(out, oi); oi = 0; }
+    };
+
     while (f.available()) {
         size_t n = f.read(buf, sizeof buf);
         for (size_t i = 0; i < n; ++i) {
-            if (prev_lt && buf[i] == '/') {
-                server.sendContent("<\\/");
-                prev_lt = false;
+            if (pending_lt && buf[i] == '/') {
+                // '</' across block boundary → '<\/'
+                out[oi++] = '<'; out[oi++] = '\\'; out[oi++] = '/';
+                pending_lt = false;
             } else {
                 // flush any pending '<' from previous block
-                if (prev_lt) {
-                    server.sendContent("<");
-                    prev_lt = false;
+                if (pending_lt) {
+                    out[oi++] = '<';
+                    pending_lt = false;
                 }
                 if (buf[i] == '<') {
-                    prev_lt = true;
+                    pending_lt = true;
                 } else {
-                    char c = (char)buf[i];
-                    String s; s += c;
-                    server.sendContent(s);
+                    out[oi++] = (char)buf[i];
                 }
             }
         }
+        flush_out();
     }
+    // A '<' as the very last byte of the file is sent too
+    if (pending_lt) server.sendContent("<");
 }
 
-/// Read a file in blocks and HTML-escape & < >.
+/// Read a file in blocks and HTML-escape & < >. Block-wise sendContent (V1.5.17).
 static void sendHtmlEscaped(File& f) {
     uint8_t buf[64];
+    char out[2048];  // worst case: '&' → '&amp;' = 5 chars per input byte
+    int oi = 0;
+
+    auto flush_out = [&]() {
+        if (oi > 0) { server.sendContent(out, oi); oi = 0; }
+    };
+
     while (f.available()) {
         size_t n = f.read(buf, sizeof buf);
         for (size_t i = 0; i < n; ++i) {
             char c = (char)buf[i];
-            if (c == '&')      server.sendContent("&amp;");
-            else if (c == '<') server.sendContent("&lt;");
-            else if (c == '>') server.sendContent("&gt;");
-            else { String s; s += c; server.sendContent(s); }
+            if      (c == '&') { out[oi++] = '&'; out[oi++] = 'a'; out[oi++] = 'm'; out[oi++] = 'p'; out[oi++] = ';'; }
+            else if (c == '<') { out[oi++] = '&'; out[oi++] = 'l'; out[oi++] = 't'; out[oi++] = ';'; }
+            else if (c == '>') { out[oi++] = '&'; out[oi++] = 'g'; out[oi++] = 't'; out[oi++] = ';'; }
+            else               { out[oi++] = c; }
         }
+        flush_out();
     }
 }
 
@@ -195,11 +212,14 @@ static void handleApi() {
         snapshotSetLastApiRx(millis());
     }
 
-    // 3. Handle based on command type
+    // 3. Handle based on command type — BAD_PARAM before GET_STATE/GET_CONFIG (V1.5.17)
     if (parseErr != ApiError::OK && parseErr != ApiError::BAD_PARAM) {
         // Parse error: HTTP 400 for BAD_CRC/BAD_JSON, else 200
         int code = (parseErr == ApiError::BAD_CRC || parseErr == ApiError::BAD_JSON) ? 400 : 200;
         reply(code, cmd.id, parseErr, nullptr);
+    } else if (parseErr == ApiError::BAD_PARAM) {
+        // Bad params -> respond with error (also for GET_STATE / GET_CONFIG, V1.5.17)
+        reply(200, cmd.id, parseErr, nullptr);
     } else if (cmd.id == CmdId::GET_STATE) {
         // Local response with stateExtraToJson
         ProcData d;
@@ -217,9 +237,6 @@ static void handleApi() {
         static char extra[600];
         paramsToJsonMember(p, f, extra, sizeof(extra));
         reply(200, cmd.id, ApiError::OK, extra);
-    } else if (parseErr == ApiError::BAD_PARAM) {
-        // Bad params but valid packet -> respond locally, don't queue
-        reply(200, cmd.id, parseErr, nullptr);
     } else {
         // OK -> queue and wait for reply
         ApiError err = cmdQueueSendAndWait(cmd, API_REPLY_TIMEOUT_MS);
