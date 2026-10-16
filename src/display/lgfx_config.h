@@ -54,7 +54,7 @@ public:
         {
             auto cfg = _light.config();
             cfg.pin_bl      = PIN_DISP_BL;
-            cfg.invert      = false;
+            cfg.invert      = true;    // V1.5.21: backlight active LOW (verified on the device 2026-10-16)
             cfg.freq        = 44100;
             cfg.pwm_channel = 7;
             _light.config(cfg);

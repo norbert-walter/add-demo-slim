@@ -18,6 +18,7 @@
 | `net_task.cpp`, `main.cpp` gegen die Referenz | Anweisung für Anweisung gleich (nur Klammern und Kommentare anders) |
 | `pio run -e firmware` (Claude) | erfolgreich: RAM 20,7 %, Flash 1,23 MB, `check_iram` 5/5 |
 | `pio run -e firmware` (Bericht Norbert) | `exit 0` |
+| 1. Flash am Gerät | Display nach dem ersten Bild dunkel → Ursache: Hintergrundbeleuchtung **Low-aktiv** (H-1, Contract V1.5.21) |
 | **Prüfliste am Gerät** (Dell, MKS DLC32) | **offen** |
 
 ## Verlauf
@@ -46,6 +47,18 @@
 | K8 | Positionsbalken | ganz in Rahmenfarbe gefüllt statt Hintergrund mit Rahmen | Hintergrund + `drawRect` in `COL_FRAME` |
 | K9 | `net_task.cpp` | `%u` mit `int`-Konstante | `(unsigned)REBOOT_DELAY_MS` |
 
+## Befund am Gerät
+
+**H-1 Hintergrundbeleuchtung Low-aktiv.** Beim ersten Flash ging das Display direkt nach dem ersten
+Bild aus (Licht und Inhalt). Steuerung, WLAN und Touch liefen weiter. Eingegrenzt mit vier
+Diagnose-Firmwares (Pegel, Pin-Zuordnung und Besitzer von BL/RST/CS je Startschritt; ohne WLAN;
+ohne Steuer-Task; mit verzögerter Touch-Abfrage und Neuinitialisierung): WLAN, Motor und Touch
+schieden aus; bei der Neuinitialisierung blieb GPIO 5 wegen eines Fehlers im Diagnose-Patch auf
+Low – und das Licht ging an. GPIO 5 Low = Licht an. Der Smoketest rief nie `setBrightness` auf
+und lief mit 50 % PWM, die in beiden Polaritäten 50 % Licht ergeben. Korrektur: `invert = true`
+in `lgfx_config.h` (Contract V1.5.21), am Gerät bestätigt. Nebenbefund: Motor zuckt etwa 1 s
+nach dem Start (unabhängig vom Display) – wird untersucht.
+
 ## Akzeptierte Abweichungen
 
 - **A1:** Die Statuszeilen (ESTOP … IP) haben den Hintergrund `COL_PANEL` (0x1E1E1E) statt
@@ -61,6 +74,7 @@
   bei x = 318, `[ WAIT_ACK ]` bei 294, „LOCAL“ beginnt bei 288. Betrifft auch die Referenz – ein
   Fehler im Layout von V1.5.20. Vorschlag für V1.5.21: Zustand ab x = 112. Beim Gerätetest auf
   Punkt 4 (INIT aus SAFE_START mit LOCAL) achten.
+- **O3:** Motorzucken etwa 1 s nach dem Start (Treiber sollte bis zum ersten Fahrbefehl gesperrt bleiben).
 - **O2:** Prüfliste am Gerät (8 Punkte), danach Merge und Tag `sprint-i1`.
 
 ## Prozessbefunde
@@ -100,6 +114,8 @@ Grund ist das Display: viele Koordinaten, Farben und Zustände, die Qwen nicht i
    richtigen Code; ohne Gerüst nicht einmal kompilierbaren.
 2. **Qwens Bericht ist kein Beleg.** Erfundener Bericht (I1.2b) und angepasste Tests (I1.3) zeigen:
    Nur selbst ausgeführte Befehle und der Frozen-Check zählen.
+4. **Der Smoketest prüft Pins, nicht Polaritäten:** Die Beleuchtung lief dort nur mit 50 % PWM.
+   Künftige Smoketests schalten jeden Ausgang ganz an und ganz aus.
 3. **Bildschirmmodell mit Grenzen:** Das Modell kennt Flächen und Textrahmen, aber keine Glyphen.
    K6 fand erst die Durchsicht. Der Differenztest prüft deshalb zusätzlich die Kopfzeile
    pixelgenau, und der Gerätetest bleibt Pflicht.
