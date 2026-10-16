@@ -277,20 +277,108 @@ void drawButtons(const ProcData& d) {
 }
 
 // ---- I1.3 -------------------------------------------------------------------------------------
-/// TODO(I1.3) Command with id, source LOCAL, want_reply false; cmdQueueSend.
-void send(CmdId id) {
-    (void)id;
+/// Command with id, source LOCAL, want_reply false; cmdQueueSend.
+static void send(CmdId id) {
+    Command cmd = {};
+    cmd.id = id;
+    cmd.source = CmdSource::LOCAL;
+    cmd.want_reply = false;
+    cmdQueueSend(cmd);
 }
-/// TODO(I1.3) remedy texts of the header.
-const char* remedy(ErrorCode e) {
-    (void)e;
-    return "";
+
+/// Remedy texts per errorCode.
+static const char* remedy(ErrorCode e) {
+    switch (e) {
+        case ErrorCode::ESTOP:      return "Release E-stop, then acknowledge";
+        case ErrorCode::TEMP_HIGH:  return "Lower temp <= 32 C";
+        case ErrorCode::MOTOR_FAULT:return "Check axis and end switches";
+        case ErrorCode::COMM_TIMEOUT:return "Remote client lost";
+        case ErrorCode::HOMING_FAILED:return "Check home switch, then INIT";
+        default:                    return "";
+    }
 }
-/// TODO(I1.3) FAULT / ACK picture: zone Z_BANNER (key from the banner texts), then FAULT: clear
+
+/// FAULT / ACK picture: zone Z_BANNER (key from the banner texts), then FAULT: clear
 /// the button row (zone Z_BOTTOM, key "F"); ACK: the ACK area (zone Z_BOTTOM, key from cause
 /// active, error name and progress width).
-void drawFault(const ProcData& d, ScreenMode mode) {
-    (void)d; (void)mode;
+static void drawFault(const ProcData& d, ScreenMode mode) {
+    // Banner zone y 34..257
+    // key = the banner texts (V1.5.20: "key from the banner texts"; review: incl. temperature)
+    char banner_key[96];
+    snprintf(banner_key, sizeof banner_key, "%s|%.1f|%s %.1f",
+             errorCodeName(d.err), d.motion.pos, d.safety.estop ? "ACTIVE" : "OK", d.safety.temp);
+
+    if (changed(Z_BANNER, banner_key)) {
+        lcd.fillRect(0, 34, 480, 224, COL_BG);
+        // "FAULT: <errorCodeName>" centred (240, 90, 3) COL_FAULT
+        lcd.setTextSize(3);
+        lcd.setTextColor(COL_FAULT, COL_BG);
+        lcd.setTextDatum(lgfx::middle_center);
+        char buf[64];
+        snprintf(buf, sizeof buf, "FAULT: %s", errorCodeName(d.err));
+        lcd.drawString(buf, 240, 90);
+
+        // remedy centred (240, 140, 2) COL_TEXT
+        lcd.setTextSize(2);
+        lcd.setTextColor(COL_TEXT, COL_BG);
+        lcd.drawString(remedy(d.err), 240, 140);
+
+        // "POS %.1f mm" centred (240, 190, 2) COL_TEXT
+        snprintf(buf, sizeof buf, "POS %.1f mm", d.motion.pos);
+        lcd.drawString(buf, 240, 190);
+
+        // "ESTOP ACTIVE  TEMP(SIM) %.1fC" or "ESTOP OK  TEMP(SIM) %.1fC"
+        // centred (240, 214, 2) COL_FAULT while estop else COL_TEXT
+        if (d.safety.estop) {
+            lcd.setTextColor(COL_FAULT, COL_BG);
+            snprintf(buf, sizeof buf, "ESTOP ACTIVE  TEMP(SIM) %.1fC", d.safety.temp);
+        } else {
+            lcd.setTextColor(COL_TEXT, COL_BG);
+            snprintf(buf, sizeof buf, "ESTOP OK  TEMP(SIM) %.1fC", d.safety.temp);
+        }
+        lcd.drawString(buf, 240, 214);
+    }
+
+    // Bottom area y 260..319
+    if (mode == ScreenMode::FAULT) {
+        // FAULT: y 260..319 filled COL_BG (no buttons, no text)
+        if (changed(Z_BOTTOM, "F")) {
+            lcd.fillRect(0, 260, 480, 60, COL_BG);
+        }
+    } else {
+        // ACK: y 260..319 is ONE area
+        bool cause_active = ackCauseActive(d, SafetyConfig{});
+        int pw = (int)(s_progress * 460);
+        char bottom_key[96];
+        snprintf(bottom_key, sizeof bottom_key, "ACK:%d:%s:%d",
+                 cause_active ? 1 : 0, errorCodeName(d.err), cause_active ? 0 : pw);
+
+        if (changed(Z_BOTTOM, bottom_key)) {
+            if (cause_active) {
+                lcd.fillRect(0, 260, 480, 60, COL_GREY);
+                // centred (240, 284, 2) COL_TEXT
+                lcd.setTextSize(2);
+                lcd.setTextColor(COL_TEXT, COL_GREY);
+                lcd.setTextDatum(lgfx::middle_center);
+                char buf[128];
+                snprintf(buf, sizeof buf, "CAUSE ACTIVE: %s - RELEASE FIRST",
+                         errorCodeName(d.err));
+                lcd.drawString(buf, 240, 284);
+            } else {
+                lcd.fillRect(0, 260, 480, 60, COL_WARN);
+                // centred (240, 284, 2) COL_BLACK "ACK - HOLD 1 s"
+                lcd.setTextSize(2);
+                lcd.setTextColor(COL_BLACK, COL_WARN);
+                lcd.setTextDatum(lgfx::middle_center);
+                lcd.drawString("ACK - HOLD 1 s", 240, 284);
+
+                // progress bar fillRect(10, 306, (int)(progress * 460), 8, COL_TEXT)
+                if (pw > 0) {
+                    lcd.fillRect(10, 306, pw, 8, COL_TEXT);
+                }
+            }
+        }
+    }
 }
 
 // ---- I1.2a ------------------------------------------------------------------------------------
@@ -334,7 +422,7 @@ void displayTask(void*) {
 
 }  // namespace
 
-/// TODO(I1.2a) steps 1, 2 and 5 of the header (I1.3 adds steps 3 and 4 between 2 and 5).
+/// Steps 1, 2, 3 (buttons), 4 (ACK), 5 of the header.
 void displayTick(uint32_t now_ms) {
     ProcData d; snapshotGet(d);
     ScreenMode mode = screenModeOf(d.state);
@@ -345,6 +433,34 @@ void displayTick(uint32_t now_ms) {
         draw(d, mode, now_ms);
     }
 
+    // Step 3: Buttons – mode NORMAL && in_row && touch-down edge
+    bool in_row = touch && 260 <= y && y < 320 && 0 <= x && x < 480;
+    if (mode == ScreenMode::NORMAL && in_row && !s_prev_touch) {
+        CmdId ids[] = { CmdId::INIT, CmdId::HV_ON, CmdId::START_MEASURE,
+                        CmdId::START_TRAVERSE, CmdId::PARK, CmdId::SERVICE };
+        if (x < 384) {
+            int idx = x / 64;
+            if (idx >= 0 && idx < 6) {
+                if (ids[idx] == CmdId::HV_ON && d.safety.hv_on) {
+                    send(CmdId::HV_OFF);
+                } else {
+                    send(ids[idx]);
+                }
+            }
+        } else {
+            send(CmdId::STOP);
+        }
+    }
+
+    // Step 4: ACK press handling on every tick
+    float progress = 0.0f;
+    if (ackPressUpdate(s_ack, mode, ackCauseActive(d, SafetyConfig{}), in_row, now_ms,
+                       ACK_HOLD_MS, &progress)) {
+        send(CmdId::ACK);
+    }
+    s_progress = progress;
+
+    // Step 5: previous touch = touch
     s_prev_touch = touch;
 }
 
