@@ -164,15 +164,116 @@ void drawValues(const ProcData& d) {
 // ---- I1.2b ------------------------------------------------------------------------------------
 /// TODO(I1.2b) position bar, zone Z_BAR; key = barX(pos) as text.
 void drawBar(const ProcData& d) {
-    (void)d;
+    char key[16];
+    snprintf(key, sizeof key, "%d", barX(d.motion.pos));
+    if (changed(Z_BAR, key)) {
+        lcd.fillRect(4, 112, 472, 20, COL_FRAME);
+        int bx0 = barX(0.0f), bx20 = barX(20.0f), bx60 = barX(60.0f);
+        lcd.fillRect(bx0, 112, bx20 - bx0, 20, COL_PARK);
+        lcd.fillRect(bx20, 112, bx60 - bx20, 20, COL_WARN);
+        lcd.fillRect(barX(d.motion.pos), 112, 4, 20, COL_TEXT);
+    }
 }
 /// TODO(I1.2b) zones Z_ESTOP, Z_TEMP, Z_FLAGS, Z_MODE, Z_IP (IP line from the wifi getters).
 void drawFlags(const ProcData& d, bool estop_nc, uint32_t now) {
-    (void)d; (void)estop_nc; (void)now;
+    // Z_ESTOP
+    char estop_key[64];
+    const char* estop_text = estop_nc ? "ESTOP" : "ESTOP(NO)";
+    uint32_t estop_color = d.safety.estop ? COL_FAULT : (estop_nc ? COL_OK : COL_WARN);
+    snprintf(estop_key, sizeof estop_key, "%s|%x", estop_text, (unsigned)estop_color);
+    if (changed(Z_ESTOP, estop_key)) {
+        lcd.fillRect(0, 144, 168, 20, COL_PANEL);
+        text(estop_text, 6, 144, 2, estop_color, COL_PANEL);
+    }
+
+    // Z_TEMP
+    char temp_key[64];
+    char temp_text[32];
+    snprintf(temp_text, sizeof temp_text, "TEMP(SIM) %.1fC", d.safety.temp);
+    uint32_t temp_color = d.safety.temp_ok ? COL_OK : COL_WARN;
+    snprintf(temp_key, sizeof temp_key, "%s|%x", temp_text, (unsigned)temp_color);
+    if (changed(Z_TEMP, temp_key)) {
+        lcd.fillRect(170, 144, 310, 20, COL_PANEL);
+        text(temp_text, 180, 144, 2, temp_color, COL_PANEL);
+    }
+
+    // Z_FLAGS: INTERLOCK(SIM) and COOLING(SIM)
+    uint32_t il_color = d.safety.interlock ? COL_OK : COL_FAULT;
+    uint32_t cf_color = d.safety.cooling_flow ? COL_OK : COL_FAULT;
+    char flags_key[64];
+    snprintf(flags_key, sizeof flags_key, "%x|%x", (unsigned)il_color, (unsigned)cf_color);
+    if (changed(Z_FLAGS, flags_key)) {
+        lcd.fillRect(0, 170, 480, 20, COL_PANEL);
+        text("INTERLOCK(SIM)", 6, 170, 2, il_color, COL_PANEL);
+        text("COOLING(SIM)", 220, 170, 2, cf_color, COL_PANEL);
+    }
+
+    // Z_MODE: "MODE %s  AVG %.1f (%u)"
+    char mode_text[128];
+    snprintf(mode_text, sizeof mode_text, "MODE %s  AVG %.1f (%u)",
+             opModeName(d.motion.mode), d.measure.avg, (unsigned)d.measure.n);
+    if (changed(Z_MODE, mode_text)) {
+        lcd.fillRect(0, 196, 480, 20, COL_PANEL);
+        text(mode_text, 6, 196, 2, COL_TEXT, COL_PANEL);
+    }
+
+    // Z_IP: "AP <ap_ip>  STA <part>"
+    char ap_ip[32];
+    wifiGetApIp(ap_ip, sizeof ap_ip);
+    StaStatus st = wifiStaStatus();
+    char ip_text[128];
+    switch (st.state) {
+        case StaState::CONNECTED: {
+            char sta_ip[32];
+            wifiGetStaIp(sta_ip, sizeof sta_ip);
+            snprintf(ip_text, sizeof ip_text, "AP %s  STA %s", ap_ip, sta_ip);
+            break;
+        }
+        case StaState::CONNECTING: {
+            snprintf(ip_text, sizeof ip_text, "AP %s  STA connecting %d/%d",
+                     ap_ip, st.attempt, (int)StaConfig{}.attempts);
+            break;
+        }
+        case StaState::BACKOFF: {
+            uint32_t remaining_s = (uint32_t)ceil(staBackoffRemainingMs(st, now, StaConfig{}) / 1000.0);
+            snprintf(ip_text, sizeof ip_text, "AP %s  STA retry %lu s", ap_ip, (unsigned long)remaining_s);
+            break;
+        }
+        default:
+            snprintf(ip_text, sizeof ip_text, "AP %s  STA off", ap_ip);
+            break;
+    }
+    if (changed(Z_IP, ip_text)) {
+        lcd.fillRect(0, 222, 480, 20, COL_PANEL);
+        text(ip_text, 6, 222, 2, COL_LABEL, COL_PANEL);
+    }
 }
 /// TODO(I1.2b) button row, zone Z_BOTTOM; key "B1" while hv_on, else "B0".
 void drawButtons(const ProcData& d) {
-    (void)d;
+    const char* key = d.safety.hv_on ? "B1" : "B0";
+    if (changed(Z_BOTTOM, key)) {
+        lcd.fillRect(0, 260, 480, 60, COL_BG);
+
+        const char* labels[6] = {"INIT", "HV", "MEAS", "TRAV", "PARK", "SERV"};
+        for (int i = 0; i < 6; i++) {
+            uint32_t bg = COL_BTN;
+            if (i == 1) { // HV button
+                bg = d.safety.hv_on ? COL_WARN : COL_BTN;
+            }
+            lcd.fillRect(i * 64 + 1, 261, 62, 58, bg);
+            lcd.setTextSize(2);
+            lcd.setTextColor(COL_TEXT);
+            lcd.setTextDatum(lgfx::middle_center);
+            lcd.drawString(labels[i], i * 64 + 32, 290);
+        }
+
+        // STOP button
+        lcd.fillRect(385, 261, 94, 58, COL_FAULT);
+        lcd.setTextSize(3);
+        lcd.setTextColor(COL_TEXT);
+        lcd.setTextDatum(lgfx::middle_center);
+        lcd.drawString("STOP", 432, 290);
+    }
 }
 
 // ---- I1.3 -------------------------------------------------------------------------------------
