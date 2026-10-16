@@ -74,11 +74,91 @@ uint32_t stateColour(SafetyState s) {
 /// TODO(I1.2a) header zones Z_STATE, Z_LOCAL, Z_HV, Z_SHUTTER (each: build key, if changed():
 /// fillRect of the zone in COL_PANEL where needed, then text()).
 void drawHeader(const ProcData& d) {
-    (void)d;
+    // Z_STATE: "[ <safetyStateName> ]" at (150, 8, 2)
+    char key[32];
+    snprintf(key, sizeof key, "[ %s ]", safetyStateName(d.state));
+    if (changed(Z_STATE, key)) {
+        lcd.fillRect(150, 0, 168, 32, COL_PANEL);
+        text(key, 150, 8, 2, stateColour(d.state), COL_PANEL);
+    }
+
+    // Z_LOCAL: "LOCAL" at (288, 8, 2) only while d.local; colour COL_WARN
+    if (d.local) {
+        if (changed(Z_LOCAL, "LOCAL")) {
+            lcd.fillRect(288, 0, 60, 32, COL_PANEL);
+            text("LOCAL", 288, 8, 2, COL_WARN, COL_PANEL);
+        }
+    } else {
+        if (changed(Z_LOCAL, "")) {
+            lcd.fillRect(288, 0, 60, 32, COL_PANEL);
+        }
+    }
+
+    // Z_HV: "HV" at (360, 8, 2) — COL_WARN while hv_on, else COL_LABEL
+    char hv_key[8];
+    snprintf(hv_key, sizeof hv_key, "%s", d.safety.hv_on ? "HV_ON" : "HV");
+    if (changed(Z_HV, hv_key)) {
+        lcd.fillRect(360, 0, 24, 32, COL_PANEL);
+        text("HV", 360, 8, 2, d.safety.hv_on ? COL_WARN : COL_LABEL, COL_PANEL);
+    }
+
+    // Z_SHUTTER: "SHUTTER" at (396, 8, 2) — COL_WARN while open, else COL_LABEL
+    char sh_key[16];
+    snprintf(sh_key, sizeof sh_key, "%s", d.safety.shutter_open ? "SHUTTER_OPEN" : "SHUTTER");
+    if (changed(Z_SHUTTER, sh_key)) {
+        lcd.fillRect(396, 0, 84, 32, COL_PANEL);
+        text("SHUTTER", 396, 8, 2, d.safety.shutter_open ? COL_WARN : COL_LABEL, COL_PANEL);
+    }
 }
 /// TODO(I1.2a) the four value fields, zones Z_V0..Z_V3; key = the value text ("%.1f" or "---").
 void drawValues(const ProcData& d) {
-    (void)d;
+    char val[16];
+
+    // Z_V0: POS at x=0; label(6,38), value(6,60), unit "mm"(6,92); colour COL_TEXT
+    snprintf(val, sizeof val, "%.1f", d.motion.pos);
+    if (changed(Z_V0, val)) {
+        lcd.fillRect(0, 34, 120, 74, COL_PANEL);
+        text("POS", 6, 38, 2, COL_LABEL, COL_PANEL);
+        text(val, 6, 60, 3, COL_TEXT, COL_PANEL);
+        text("mm", 6, 92, 1, COL_LABEL, COL_PANEL);
+    }
+
+    // Z_V1: SPEED at x=120; label(126,38), value(126,60), unit "mm/s"(126,92)
+    snprintf(val, sizeof val, "%.1f", d.motion.vel);
+    if (changed(Z_V1, val)) {
+        lcd.fillRect(120, 34, 120, 74, COL_PANEL);
+        text("SPEED", 126, 38, 2, COL_LABEL, COL_PANEL);
+        text(val, 126, 60, 3, COL_TEXT, COL_PANEL);
+        text("mm/s", 126, 92, 1, COL_LABEL, COL_PANEL);
+    }
+
+    // Z_V2: DIST at x=240; "---" when !valid; colour COL_DIST / COL_TEXT
+    if (d.measure.valid) {
+        snprintf(val, sizeof val, "%.1f", d.measure.dist);
+    } else {
+        strncpy(val, "---", sizeof val - 1);
+        val[sizeof val - 1] = '\0';
+    }
+    if (changed(Z_V2, val)) {
+        lcd.fillRect(240, 34, 120, 74, COL_PANEL);
+        text("DIST", 246, 38, 2, COL_LABEL, COL_PANEL);
+        text(val, 246, 60, 3, d.measure.valid ? COL_DIST : COL_TEXT, COL_PANEL);
+        text("mm", 246, 92, 1, COL_LABEL, COL_PANEL);
+    }
+
+    // Z_V3: THICK at x=360; "---" when !valid; colour COL_THICK / COL_TEXT
+    if (d.measure.valid) {
+        snprintf(val, sizeof val, "%.1f", d.measure.thick);
+    } else {
+        strncpy(val, "---", sizeof val - 1);
+        val[sizeof val - 1] = '\0';
+    }
+    if (changed(Z_V3, val)) {
+        lcd.fillRect(360, 34, 120, 74, COL_PANEL);
+        text("THICK", 366, 38, 2, COL_LABEL, COL_PANEL);
+        text(val, 366, 60, 3, d.measure.valid ? COL_THICK : COL_TEXT, COL_PANEL);
+        text("mm", 366, 92, 1, COL_LABEL, COL_PANEL);
+    }
 }
 
 // ---- I1.2b ------------------------------------------------------------------------------------
@@ -119,22 +199,60 @@ void drawFault(const ProcData& d, ScreenMode mode) {
 /// drawHeader(d); NORMAL: drawValues, drawBar, drawFlags(d, p.estop_nc, now), drawButtons;
 /// else drawFault(d, mode); lcd.endWrite(); s_drawn = true; s_mode = mode; s_last_draw = now.
 void draw(const ProcData& d, ScreenMode mode, uint32_t now) {
-    (void)d; (void)mode; (void)now;
+    Params p; SafetyFlags f; snapshotGetConfig(p, f);
+    lcd.startWrite();
+    if (!s_drawn || s_mode != mode) {
+        lcd.fillScreen(COL_BG);
+        lcd.fillRect(0, 0, 480, 32, COL_PANEL);
+        text("ADD DEMO", 8, 8, 2, COL_TEXT, COL_PANEL);
+        for (int i = 0; i < Z_COUNT; i++) s_key[i][0] = '\0';
+    }
+    drawHeader(d);
+    if (mode == ScreenMode::NORMAL) {
+        drawValues(d);
+        drawBar(d);
+        drawFlags(d, p.estop_nc, now);
+        drawButtons(d);
+    } else {
+        drawFault(d, mode);
+    }
+    lcd.endWrite();
+    s_drawn = true;
+    s_mode = mode;
+    s_last_draw = now;
 }
 
 /// TODO(I1.2a) the task function: for (;;) { displayTick(millis());
 /// vTaskDelay(pdMS_TO_TICKS(DISPLAY_TOUCH_POLL_MS)); }
 void displayTask(void*) {
+    for (;;) {
+        displayTick(millis());
+        vTaskDelay(pdMS_TO_TICKS(DISPLAY_TOUCH_POLL_MS));
+    }
 }
 
 }  // namespace
 
 /// TODO(I1.2a) steps 1, 2 and 5 of the header (I1.3 adds steps 3 and 4 between 2 and 5).
 void displayTick(uint32_t now_ms) {
-    (void)now_ms;
+    ProcData d; snapshotGet(d);
+    ScreenMode mode = screenModeOf(d.state);
+    int x = 0, y = 0;
+    bool touch = lcd.getTouch(&x, &y) > 0;
+
+    if (!s_drawn || s_mode != mode || (uint32_t)(now_ms - s_last_draw) >= DISPLAY_PERIOD_MS) {
+        draw(d, mode, now_ms);
+    }
+
+    s_prev_touch = touch;
 }
 
 /// TODO(I1.2a) as in the header.
 bool displayStart() {
-    return false;
+    if (!lcd.init()) return false;
+    lcd.setRotation(1);
+    lcd.setBrightness(255);
+    lcd.fillScreen(COL_BG);
+    return xTaskCreatePinnedToCore(displayTask, "disp", DISPLAY_TASK_STACK, nullptr,
+                                   DISPLAY_TASK_PRIO, nullptr, DISPLAY_TASK_CORE) == pdPASS;
 }
