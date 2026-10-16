@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.19 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-15
+**Version:** 1.5.20 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-15
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.6
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -169,6 +169,15 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 1 | `test_hardware` crashed in `test_nvs_roundtrip` (Guru Meditation "Cache disabled but cached memory region accessed", PC in `StepperQueue::fill_i2s_buffer`). Cause in FastAccelStepper 96459ed: the I2S TX-done interrupt runs permanently with I2S_MUX and is IRAM-safe, but `fill_i2s_buffer()` and `I2sManager::i2sMuxSetBit()` were in flash; every flash operation (NVS write, SPIFFS read, OTA) crashed the board, also with the motor idle. Fix: both functions `IRAM_ATTR` (fork `norbert-walter/FastAccelStepper`, commit a64ceff on 96459ed; pull request to gin66 pending). Checked with nm/objdump: every function reachable from the interrupt is in IRAM, no literals into flash | `platformio.ini` |
 | 2 | Post-build check `scripts/check_iram.py` (all ESP32 environments): the build fails if one of the I2S interrupt functions is linked into flash (protects against library updates). Verified: fails with 96459ed, passes with a64ceff | `platformio.ini`, `scripts/` |
 | 3 | The nine native H1 tests could not see this (no flash cache on the host); the first five on-device tests were green (inputs, sensor, outputs, E-stop polarity change) | – |
+
+**Clarifications 1.5.20 (preparation of Sprint I1, 2026-10-16, two additions):**
+
+| # | Clarification | Where |
+|---|---|---|
+| 1 | **Addition:** `src/app/net_task.h` (`netTaskStep`, `netTaskStart`): network task with fixed order (wifiLoop, handleClient, persist, reboot), reboot pending flag (wrap-safe, due time 0 possible), persist before reboot in the same step; exact `setup()` order in `main.cpp`, the device keeps running after a failed step (logged). Config: `NET_TASK_PERIOD_MS` 5, `DISPLAY_TASK_CORE/PRIO/STACK` 1 / 1 / 6144 | `net_task.h`, `config.h` |
+| 2 | **Addition:** `displayTick(now)` in `display.h` plus exact screen layout, colours (RGB888 constants), texts and touch rules: one `getTouch` per tick; the picture is redrawn at once on a mode change BEFORE the touch is evaluated (a tap on a just-hidden button can never hit the new layout); zone cache – an unchanged snapshot issues no draw call; buttons only on a touch-down edge in NORMAL; HV toggles by `hv_on`; ACK via `ackPressUpdate` on every tick | `display.h` |
+| 3 | Deviations from Pflichtenheft §5.8 (layout only): flags on two lines (`ESTOP`/`TEMP(SIM)`, `INTERLOCK(SIM)`/`COOLING(SIM)`), `ERR` not on the normal screen (a fault always shows the fault screen), no visual tap feedback (the control task's CLICK sound confirms an accepted button), DIST/THICK `---` while no valid measurement | `display.h` |
+| 4 | Host shims: `LovyanGFX.hpp` (screen model: pixel colours and visible texts with boxes, touch), task creation (`xTaskCreatePinnedToCore` records, `vTaskDelay` counts), `SPIFFS.begin` result. New suites `test_net_task` (10) and `test_display` (15). Mutation test: 50 mutants, 5 survived the first run → 4 extra checks (STOP from x = 384, touch outside the ACK area, RUNNING colour, shutter colour independent of HV); remaining 1 equivalent (FAULT row cleared twice). Full firmware (`pio run -e firmware`) with the reference: RAM 20.7 %, flash 1.23 MB of 2.9 MB, `check_iram` 5/5. Reference: 22 suites, **464/464** | `test/native` |
 
 **Scope note:** plant coordinates for several gauges (offset/sign transformation at the
 API boundary, common time base) are an extension idea for later (Pflichtenheft §11.1);

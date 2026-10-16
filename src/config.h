@@ -115,6 +115,10 @@
 #define NET_TASK_CORE        0
 #define NET_TASK_PRIO        3
 #define NET_TASK_STACK       8192
+#define NET_TASK_PERIOD_MS   5      // V1.5.20: wifiLoop + handleClient + persist/reboot every 5 ms
+#define DISPLAY_TASK_CORE    1      // V1.5.20
+#define DISPLAY_TASK_PRIO    1      // V1.5.20: below the control task
+#define DISPLAY_TASK_STACK   6144   // V1.5.20
 #define STEPPER_TASK_CORE    1      // FastAccelStepper engine.init(core)
 #define CMD_QUEUE_LEN        8
 #define CMD_PRIO_QUEUE_LEN   4      // V1.1: STOP / HV_OFF / SHUTTER_CLOSE

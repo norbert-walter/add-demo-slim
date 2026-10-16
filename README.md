@@ -20,7 +20,7 @@ agentenbasierte Entwicklung mit code-server + Cline.
 | `src/app/*` | Snapshot, Command-Queue, Control-Task (vorgegeben) |
 | `src/hal/*.h`, `src/system/*.h`, `src/comm/*.h`, `src/display/*.h` | Hardware-Verträge |
 | `src/smoketest/smoketest.cpp` | Sprint 0a |
-| `test/native/*` | eingefrorene Host-Tests (439 Testfälle, 20 Suiten, Contract V1.5.19; `test_command_queue` braucht einen Linux/macOS-Host mit pthreads) |
+| `test/native/*` | eingefrorene Host-Tests (464 Testfälle, 22 Suiten, Contract V1.5.20; `test_command_queue` braucht einen Linux/macOS-Host mit pthreads) |
 | `test/embedded/*` | On-Target-Tests (S5) |
 | `scripts/serial_cmd.py` | nicht-interaktiver Serial-Client (auch für Cline) |
 | `scripts/add_client.py` | REST-Client mit CRC-Rahmenregel (Referenz) |
@@ -39,14 +39,14 @@ pio device monitor -e smoketest           # "help"
 
 ## Status der Module
 
-**Stand: 15.10.2026 · Contract V1.5.19 · Pflichtenheft V1.7.6**
+**Stand: 15.10.2026 · Contract V1.5.20 · Pflichtenheft V1.7.6**
 Diese Tabelle wird **nach jedem Sprint** aktualisiert (Implementierung **und** Tests) –
 Teil der Definition of Done in `.clinerules`.
 
 | Sprint | Dateien | Implementierung | Tests auf dem Gerät / nativ | Stand |
 |---|---|---|---|---|
 | 0a | `src/smoketest/smoketest.cpp` (0a.3) | ✅ fertig | Smoketest-Protokoll freigegeben (5.2 bekannte Einschränkung) | ✅ 11.10.2026, Tag `sprint-0a` |
-| 0b | Header, CONTRACT, Tests, `src/app/*` | ✅ fertig (Claude) | 439/439 gegen Referenzimplementierung | ✅ Contract V1.5.19 |
+| 0b | Header, CONTRACT, Tests, `src/app/*` | ✅ fertig (Claude) | 464/464 gegen Referenzimplementierung | ✅ Contract V1.5.20 |
 | L1 | `logic/types.cpp`, `crc32.cpp`, `safety_logic.cpp` | ✅ fertig (Qwen) | `test_types_crc` 22/22 · `test_safety_logic` 62/62 | ✅ 12.10.2026, Tag `sprint-2.1` |
 | L2 | `logic/measure_logic.cpp`, `params.cpp` | ✅ fertig (Qwen) | `test_measure_logic` 40/40 · `test_params` 20/20 | ✅ 13.10.2026, Tag `sprint-l2` |
 | L3 | `logic/motion_seq.cpp`, `sound_logic.cpp`, `wifi_logic.cpp` | ✅ fertig (Qwen) | `test_motion_seq` 38/38 · `test_sound_logic` 9/9 · `test_wifi_logic` 15/15 | ✅ 14.10.2026, Tag `sprint-l3` |
@@ -55,7 +55,7 @@ Teil der Definition of Done in `.clinerules`.
 | P1 | `comm/log_buffer.cpp`, `system/nvs_config.cpp`, `system/system.cpp` | ✅ fertig (Qwen) | `test_log_buffer` 12/12 · `test_nvs_config` 14/14 · `test_system` 4/4 · firmware-partial ✅ | ✅ 15.10.2026, Tag `sprint-p1` |
 | P2 | `comm/wifi_manager.cpp`, `comm/http_server.cpp` | ✅ fertig (Qwen) | `test_wifi_manager` 10/10 · `test_http_server` 19/19 · firmware-partial ✅ | ✅ 15.10.2026, Tag `sprint-p2` |
 | H1 | `hal/hal_io.cpp`, `hal/motion_drv.cpp` | ✅ fertig (Qwen) | `test_hal_io` 16/16 · `test_motion_drv` 10/10 · firmware-partial ✅ · `test_hardware` am Gerät 8/8 | ✅ 16.10.2026, Tag `sprint-h1` |
-| I1 | `display/display.cpp`, `main.cpp`, Gesamt-Build | ⬜ offen | `pio run -e firmware`, `test_command_queue`, Prüfliste am Gerät | – |
+| I1 | `app/net_task.cpp`, `main.cpp`, `display/display.cpp`, Gesamt-Build | ⬜ offen | `test_net_task` 10 · `test_display` 15 · `pio run -e firmware` · Prüfliste am Gerät | – |
 | W1 | `data/www/index.html`, `settings.html` | ⬜ offen | Sichtprüfung | – |
 | A1 | Abnahme | ⬜ offen | Pflichtenheft Kapitel 10 | – |
 | D1 | `data/add.json`, `data/doc.md`, Demo-Skripte | ⬜ offen | KI-Validierung | – |
@@ -78,4 +78,4 @@ alle erkannt. Contract V1.5.2: 8 zusätzliche Tests aus dem Review von S2.1
 vollständige API-Tabelle (Differenztest gegen die Referenz hatte eine Lücke bei `INIT_DONE` gezeigt). Contract V1.5.5: Mutationstest vor L2
 (43 Mutanten von measure_logic/params, alle bis auf 2 gleichwertige erkannt, +14 Tests). Contract V1.5.6: +2 Tests aus dem Review von L2. Contract V1.5.7: Mutationstest vor L3 (72 Mutanten von
 motion_seq/sound_logic/wifi_logic, auch gegen `test_app_logic`; +18 Tests). Contract V1.5.8: +2 Tests aus dem Review von L3. Contract V1.5.9: Mutationstest vor L4 (72 Mutanten von
-app_logic, 33 überlebten; +17 Tests, danach nur noch 6 gleichwertige). Contract V1.5.10: +4 Tests aus der Zwischenprüfung von L4.1b (`appMeasure`). Contract V1.5.11: Mutationstest vor L5 (77 Mutanten von proc_json/api_parse/display_logic, 17 überlebten; +7 Tests, danach nur noch 9 gleichwertige). Contract V1.5.12/V1.5.13: +3 Tests aus dem Review von L5. Contract V1.5.14: Vorbereitung P1 – Nachbildungen (Serial, Preferences, Watchdog) und drei neue Suiten (+29 Tests), Mutationstest 49 Mutanten, 2 nicht durch Tests erkennbar (1 gleichwertig, 1 nur mit ThreadSanitizer). Contract V1.5.15: +1 Test aus dem Review von P1 (Wettlauf in `logDump`), Platzhalter für `setup()`/`loop()` im firmware-partial-Build. Contract V1.5.16: Vorbereitung P2 – Nachbildungen (WiFi, mDNS, WebServer, SPIFFS) und zwei neue Suiten (+26 Tests), Mutationstest 47 Mutanten, 1 nur mit ThreadSanitizer erkennbar; CORS-Preflight `OPTIONS /api` ergänzt. Contract V1.5.17: +3 Tests aus dem Review von P2 (WiFi-Aufrufe in der Sperre, `/add.html` zeichenweise gesendet, `BAD_PARAM` bei GET_STATE/GET_CONFIG). Contract V1.5.18: Vorbereitung H1 – Nachbildungen für GPIO/ADC und FastAccelStepper mit Aufzeichnung der Aufrufreihenfolge, zwei neue Suiten (+26 Tests), Mutationstest 64 Mutanten, alle erkannt; Gerätetest stellt die NVS-Parameter wieder her. Contract V1.5.19: erster Gerätetest fand einen Absturz in FastAccelStepper (I2S-Interrupt im Flash, jeder NVS-/SPIFFS-Zugriff) – Fork mit Korrektur und Build-Prüfung `scripts/check_iram.py`.
+app_logic, 33 überlebten; +17 Tests, danach nur noch 6 gleichwertige). Contract V1.5.10: +4 Tests aus der Zwischenprüfung von L4.1b (`appMeasure`). Contract V1.5.11: Mutationstest vor L5 (77 Mutanten von proc_json/api_parse/display_logic, 17 überlebten; +7 Tests, danach nur noch 9 gleichwertige). Contract V1.5.12/V1.5.13: +3 Tests aus dem Review von L5. Contract V1.5.14: Vorbereitung P1 – Nachbildungen (Serial, Preferences, Watchdog) und drei neue Suiten (+29 Tests), Mutationstest 49 Mutanten, 2 nicht durch Tests erkennbar (1 gleichwertig, 1 nur mit ThreadSanitizer). Contract V1.5.15: +1 Test aus dem Review von P1 (Wettlauf in `logDump`), Platzhalter für `setup()`/`loop()` im firmware-partial-Build. Contract V1.5.16: Vorbereitung P2 – Nachbildungen (WiFi, mDNS, WebServer, SPIFFS) und zwei neue Suiten (+26 Tests), Mutationstest 47 Mutanten, 1 nur mit ThreadSanitizer erkennbar; CORS-Preflight `OPTIONS /api` ergänzt. Contract V1.5.17: +3 Tests aus dem Review von P2 (WiFi-Aufrufe in der Sperre, `/add.html` zeichenweise gesendet, `BAD_PARAM` bei GET_STATE/GET_CONFIG). Contract V1.5.18: Vorbereitung H1 – Nachbildungen für GPIO/ADC und FastAccelStepper mit Aufzeichnung der Aufrufreihenfolge, zwei neue Suiten (+26 Tests), Mutationstest 64 Mutanten, alle erkannt; Gerätetest stellt die NVS-Parameter wieder her. Contract V1.5.19: erster Gerätetest fand einen Absturz in FastAccelStepper (I2S-Interrupt im Flash, jeder NVS-/SPIFFS-Zugriff) – Fork mit Korrektur und Build-Prüfung `scripts/check_iram.py`. Contract V1.5.20: Vorbereitung I1 – Netzwerk-Task und Startreihenfolge festgelegt, Display mit Nachbildung von LovyanGFX (Bildschirmmodell, Touch), zwei neue Suiten (+25 Tests), Mutationstest 50 Mutanten, 1 gleichwertig.

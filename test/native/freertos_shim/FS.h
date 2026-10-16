@@ -30,7 +30,9 @@ public:
 };
 class ShimFS {
 public:
-    bool begin(bool formatOnFail = false) { return true; }
+    bool mount_ok = true;     ///< V1.5.20: result of begin() (set by the test)
+    int  begins = 0, format_on_fail = -1;
+    bool begin(bool formatOnFail = false) { ++begins; format_on_fail = formatOnFail ? 1 : 0; return mount_ok; }
     bool exists(const char* path) { return shimFiles().count(path) > 0; }
     bool exists(const String& path) { return exists(path.c_str()); }
     File open(const char* path, const char* mode = "r") {

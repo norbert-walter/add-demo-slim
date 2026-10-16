@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <thread>
 #include <vector>
+#include <string>
 
 typedef uint32_t TickType_t;
 typedef int      BaseType_t;
@@ -41,6 +42,26 @@ inline int64_t esp_timer_get_time() {
     return (int64_t)std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now() - shimT0()).count();
 }
+
+
+// ---- V1.5.20: tasks (I1). xTaskCreatePinnedToCore only RECORDS the task (no thread is started);
+// the tests call the task's step function directly. vTaskDelay only counts.
+typedef void* TaskHandle_t;
+typedef void (*TaskFunction_t)(void*);
+#ifndef portMAX_DELAY
+#define portMAX_DELAY 0xFFFFFFFFu
+#endif
+struct ShimTask { std::string name; uint32_t stack; unsigned prio; int core; TaskFunction_t fn; void* param; };
+struct ShimTasks { std::vector<ShimTask> created; BaseType_t result = pdPASS; long delays = 0; };
+inline ShimTasks& shimTasks() { static ShimTasks t; return t; }
+inline BaseType_t xTaskCreatePinnedToCore(TaskFunction_t fn, const char* name, uint32_t stack, void* param,
+                                          unsigned prio, TaskHandle_t* handle, int core) {
+    if (shimTasks().result != pdPASS) return shimTasks().result;
+    shimTasks().created.push_back({name ? name : "", stack, prio, core, fn, param});
+    if (handle) *handle = (TaskHandle_t)(shimTasks().created.size());
+    return pdPASS;
+}
+inline void vTaskDelay(TickType_t) { ++shimTasks().delays; }
 
 struct portMUX_TYPE { std::mutex m; };
 #define portMUX_INITIALIZER_UNLOCKED {}
