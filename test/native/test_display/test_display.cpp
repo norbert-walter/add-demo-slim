@@ -106,7 +106,7 @@ void test_normal_screen_content() {
     TEST_ASSERT_NOT_NULL(exact("STOP")); TEST_ASSERT_EQUAL_INT(3, exact("STOP")->size);
 }
 void test_position_bar_marker() {
-    auto bx = [](float mm) { return 4 + (int)(mm / 242.0f * 468.0f); };
+    auto bx = [](float mm) { return 472 - (int)(mm / 242.0f * 468.0f); };   // V1.5.21: mirrored
     TEST_ASSERT_EQUAL_HEX32(COL_TEXT, L().pixel(bx(155.0f) + 1, 120));
     TEST_ASSERT_EQUAL_HEX32(COL_PARK, L().pixel(bx(10.0f), 120));
     TEST_ASSERT_EQUAL_HEX32(COL_WARN, L().pixel(bx(40.0f), 120));

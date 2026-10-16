@@ -59,6 +59,12 @@ und lief mit 50 % PWM, die in beiden Polaritäten 50 % Licht ergeben. Korrektur:
 in `lgfx_config.h` (Contract V1.5.21), am Gerät bestätigt. Nebenbefund: Motor zuckt etwa 1 s
 nach dem Start (unabhängig vom Display) – wird untersucht.
 
+**H-2 Positionsbalken spiegeln (Wunsch Norbert).** Der Balken soll so aussehen, wie man die Anlage
+von vorn sieht: Achse 0 (hinterer Endschalter, Park) rechts, Serviceposition rechts der Mitte.
+Contract V1.5.21 Nr. 2: `bx(mm) = 472 - …`, Zonen gespiegelt; Header, `barX`, `drawBar`, Test und
+Referenz angepasst (Claude). Der alte Code fällt durch den neuen Test, der neue besteht 15/15 unter
+ASan/TSan, Differenztest 100 Folgen identisch. Die Webseiten (W1) übernehmen dieselbe Richtung.
+
 ## Akzeptierte Abweichungen
 
 - **A1:** Die Statuszeilen (ESTOP … IP) haben den Hintergrund `COL_PANEL` (0x1E1E1E) statt

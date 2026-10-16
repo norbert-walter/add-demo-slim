@@ -59,7 +59,7 @@ void text(const char* s, int x, int y, uint8_t size, uint32_t fg, uint32_t bg,
 int barX(float mm) {
     if (!(mm > 0.0f)) mm = 0.0f;
     if (mm > 242.0f) mm = 242.0f;
-    return 4 + (int)(mm / 242.0f * 468.0f);
+    return 472 - (int)(mm / 242.0f * 468.0f);   // V1.5.21: mirrored, axis 0 on the right
 }
 /// Colour of "[ <state> ]" in the header.
 uint32_t stateColour(SafetyState s) {
@@ -169,8 +169,8 @@ void drawBar(const ProcData& d) {
     if (changed(Z_BAR, key)) {
         lcd.fillRect(4, 112, 472, 20, COL_BG);
         int bx0 = barX(0.0f), bx20 = barX(20.0f), bx60 = barX(60.0f);
-        lcd.fillRect(bx0, 112, bx20 - bx0, 20, COL_PARK);
-        lcd.fillRect(bx20, 112, bx60 - bx20, 20, COL_WARN);
+        lcd.fillRect(bx20 + 4, 112, bx0 - bx20, 20, COL_PARK);    // V1.5.21: mirrored
+        lcd.fillRect(bx60 + 4, 112, bx20 - bx60, 20, COL_WARN);
         lcd.drawRect(4, 112, 472, 20, COL_FRAME);
         lcd.fillRect(barX(d.motion.pos), 112, 4, 20, COL_TEXT);
     }
