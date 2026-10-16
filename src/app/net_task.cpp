@@ -51,7 +51,7 @@ void netTaskStep(uint32_t now_ms) {
     if (snapshotTakeRebootRequest() && !reboot_pending) {
         reboot_pending = true;
         reboot_at = now_ms + REBOOT_DELAY_MS;
-        logLine("reboot: in %u ms", REBOOT_DELAY_MS);
+        logLine("reboot: in %u ms", (unsigned)REBOOT_DELAY_MS);
     }
 
     // 5. Reboot execution (wrap-around safe signed comparison)

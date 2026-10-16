@@ -78,7 +78,7 @@ void drawHeader(const ProcData& d) {
     char key[32];
     snprintf(key, sizeof key, "[ %s ]", safetyStateName(d.state));
     if (changed(Z_STATE, key)) {
-        lcd.fillRect(150, 0, 168, 32, COL_PANEL);
+        lcd.fillRect(150, 0, 128, 32, COL_PANEL);
         text(key, 150, 8, 2, stateColour(d.state), COL_PANEL);
     }
 
@@ -132,7 +132,7 @@ void drawValues(const ProcData& d) {
         text("mm/s", 126, 92, 1, COL_LABEL, COL_PANEL);
     }
 
-    // Z_V2: DIST at x=240; "---" when !valid; colour COL_DIST / COL_TEXT
+    // Z_V2: DIST at x=240; "---" when !valid; colour COL_DIST
     if (d.measure.valid) {
         snprintf(val, sizeof val, "%.1f", d.measure.dist);
     } else {
@@ -142,11 +142,11 @@ void drawValues(const ProcData& d) {
     if (changed(Z_V2, val)) {
         lcd.fillRect(240, 34, 120, 74, COL_PANEL);
         text("DIST", 246, 38, 2, COL_LABEL, COL_PANEL);
-        text(val, 246, 60, 3, d.measure.valid ? COL_DIST : COL_TEXT, COL_PANEL);
+        text(val, 246, 60, 3, COL_DIST, COL_PANEL);
         text("mm", 246, 92, 1, COL_LABEL, COL_PANEL);
     }
 
-    // Z_V3: THICK at x=360; "---" when !valid; colour COL_THICK / COL_TEXT
+    // Z_V3: THICK at x=360; "---" when !valid; colour COL_THICK
     if (d.measure.valid) {
         snprintf(val, sizeof val, "%.1f", d.measure.thick);
     } else {
@@ -156,7 +156,7 @@ void drawValues(const ProcData& d) {
     if (changed(Z_V3, val)) {
         lcd.fillRect(360, 34, 120, 74, COL_PANEL);
         text("THICK", 366, 38, 2, COL_LABEL, COL_PANEL);
-        text(val, 366, 60, 3, d.measure.valid ? COL_THICK : COL_TEXT, COL_PANEL);
+        text(val, 366, 60, 3, COL_THICK, COL_PANEL);
         text("mm", 366, 92, 1, COL_LABEL, COL_PANEL);
     }
 }
@@ -167,10 +167,11 @@ void drawBar(const ProcData& d) {
     char key[16];
     snprintf(key, sizeof key, "%d", barX(d.motion.pos));
     if (changed(Z_BAR, key)) {
-        lcd.fillRect(4, 112, 472, 20, COL_FRAME);
+        lcd.fillRect(4, 112, 472, 20, COL_BG);
         int bx0 = barX(0.0f), bx20 = barX(20.0f), bx60 = barX(60.0f);
         lcd.fillRect(bx0, 112, bx20 - bx0, 20, COL_PARK);
         lcd.fillRect(bx20, 112, bx60 - bx20, 20, COL_WARN);
+        lcd.drawRect(4, 112, 472, 20, COL_FRAME);
         lcd.fillRect(barX(d.motion.pos), 112, 4, 20, COL_TEXT);
     }
 }
