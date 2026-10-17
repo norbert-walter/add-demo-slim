@@ -32,7 +32,7 @@ void test_defaults() {
     TEST_ASSERT_EQUAL_FLOAT(65.0f, p.calib.far_raw);
     TEST_ASSERT_EQUAL_STRING("", p.wifi_ssid);
     SafetyFlags f;
-    TEST_ASSERT_FALSE(f.interlock); TEST_ASSERT_FALSE(f.cooling_flow);
+    TEST_ASSERT_TRUE(f.interlock); TEST_ASSERT_TRUE(f.cooling_flow);     // V1.5.23: true after boot
     TEST_ASSERT_EQUAL_FLOAT(18.0f, f.temp_c);
 }
 void test_flags_bool_and_not_persisted() {
@@ -156,8 +156,8 @@ void test_config_json_exact_defaults() {
         "\"config\":{\"measure_pos\":155.0,\"maint_pos\":40.0,\"traverse_start\":80.0,"
         "\"traverse_end\":240.0,\"traverse_speed\":10.0,\"shutter_hold\":3.0,\"edge_threshold\":3.0,\"base_dist\":70.0,"
         "\"calib_near_raw\":40.0,\"calib_near_ref\":40.0,\"calib_far_raw\":65.0,"
-        "\"calib_far_ref\":65.0,\"calib_valid\":true,\"interlock\":false,"
-        "\"cooling_flow\":false,\"temp\":18.0,\"estop_nc\":false,\"wifi_ssid\":\"\",\"wifi_pass_set\":false}", buf);
+        "\"calib_far_ref\":65.0,\"calib_valid\":true,\"interlock\":true,"
+        "\"cooling_flow\":true,\"temp\":18.0,\"estop_nc\":false,\"wifi_ssid\":\"\",\"wifi_pass_set\":false}", buf);
     TEST_ASSERT_EQUAL_INT((int)strlen(buf), n);
 }
 void test_config_json_never_contains_password() {
@@ -183,7 +183,7 @@ void test_config_json_exact_all_fields() {
     OK(setNum("edge_threshold", 4.4)); OK(setNum("base_dist", 88.8));
     OK(setNum("calib_near_ref", 41.1)); OK(setNum("calib_far_ref", 66.6));
     P.calib.near_raw = 42.2f; P.calib.far_raw = 67.7f;           // raw values come from CALIB
-    OK(setBool("cooling_flow", true)); OK(setNum("temp", -12.3)); OK(setBool("estop_nc", true));
+    OK(setBool("interlock", false)); OK(setBool("cooling_flow", true)); OK(setNum("temp", -12.3)); OK(setBool("estop_nc", true));
     OK(setStr("wifi_ssid", "Net ~1"));
     char buf[600];
     int n = paramsToJsonMember(P, F, buf, sizeof(buf));

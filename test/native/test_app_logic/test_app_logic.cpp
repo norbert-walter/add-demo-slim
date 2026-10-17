@@ -165,6 +165,8 @@ void test_local_init_does_not_arm_watchdog() {
 // ---- HV / flags -----------------------------------------------------------------------
 void test_hv_on_needs_flags() {
     homeAndReady();
+    TEST_ASSERT_TRUE(proc().safety.hv_ok);                              // V1.5.23: flags true after boot
+    API(ApiError::OK, setBool("interlock", false)); API(ApiError::OK, setBool("cooling_flow", false));
     API(ApiError::PRECONDITION, send(CmdId::HV_ON));
     API(ApiError::OK, setBool("interlock", true));
     API(ApiError::PRECONDITION, send(CmdId::HV_ON));
@@ -869,6 +871,8 @@ void test_click_only_for_accepted_local_commands() {
     int c0 = snd[(int)Sound::CLICK];
     API(ApiError::OK, send(CmdId::STOP, CmdSource::LOCAL));
     TEST_ASSERT_EQUAL_INT(c0 + 1, snd[(int)Sound::CLICK]);
+    API(ApiError::OK, setBool("interlock", false));                       // V1.5.23: flags are true after boot
+    TEST_ASSERT_EQUAL_INT(c0 + 1, snd[(int)Sound::CLICK]);
     API(ApiError::PRECONDITION, send(CmdId::HV_ON, CmdSource::LOCAL));   // flags missing -> no click
     TEST_ASSERT_EQUAL_INT(c0 + 1, snd[(int)Sound::CLICK]);
     API(ApiError::OK, send(CmdId::STOP));                                 // API -> no click
@@ -1098,6 +1102,8 @@ void test_v159_calib_base_uses_dist_near_uses_raw() {
 void test_v159_rejected_hv_on_does_not_arm_watchdog() {
     homeAndReady();
     run(100);
+    TEST_ASSERT_FALSE(S.comm_armed);
+    API(ApiError::OK, setBool("interlock", false));                   // V1.5.23: flags are true after boot
     TEST_ASSERT_FALSE(S.comm_armed);
     API(ApiError::PRECONDITION, send(CmdId::HV_ON));                 // flags missing
     TEST_ASSERT_FALSE(S.comm_armed);

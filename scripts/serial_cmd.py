@@ -9,6 +9,11 @@ after --timeout seconds. Safe to use from Cline / scripts.
   python scripts/serial_cmd.py "adc 20" --timeout 10
   python scripts/serial_cmd.py --port /dev/ttyUSB0 "in"
 
+Firmware console (V1.5.23): help, ver, status, reboot, wifi <ssid> <password>, wifi off
+  python scripts/serial_cmd.py "status"
+Opening the port resets the board on most USB-serial adapters (DTR/RTS). The script therefore
+waits for "boot: ready" (or for 1 s of silence if the board did not reset) before it sends.
+
 Requires: pip install pyserial
 """
 import argparse
@@ -35,6 +40,7 @@ def main():
     ap.add_argument("--port", default=None)
     ap.add_argument("--baud", type=int, default=115200)
     ap.add_argument("--timeout", type=float, default=5.0, help="seconds without final line")
+    ap.add_argument("--boot-wait", type=float, default=10.0, help="max. seconds to wait for 'boot: ready' after a reset")
     a = ap.parse_args()
 
     port = a.port or guess_port()
@@ -44,7 +50,22 @@ def main():
     s.dtr = False
     s.rts = False
     s.open()
-    time.sleep(0.1)
+    # V1.5.23: wait for the end of a boot caused by opening the port
+    t0 = time.time()
+    last_rx = t0
+    booting = False
+    while time.time() - t0 < a.boot_wait:
+        raw = s.readline()
+        if raw:
+            last_rx = time.time()
+            booting = True
+            txt = raw.decode(errors="replace").rstrip()
+            if "boot: ready" in txt or "SMOKETEST" in txt.upper():
+                time.sleep(0.2)
+                break
+            continue
+        if not booting and time.time() - last_rx > 1.0:
+            break                                   # no reset happened: the board is idle
     s.reset_input_buffer()
     s.write((a.command.strip() + "\n").encode())
     s.flush()

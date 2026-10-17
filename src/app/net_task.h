@@ -1,6 +1,7 @@
 /**
  * @file net_task.h
- * @brief Network task: WLAN, HTTP server, NVS persistence, delayed reboot (V1.5.20, Sprint I1).
+ * @brief Network task: WLAN, HTTP server, NVS persistence, delayed reboot (V1.5.20, Sprint I1),
+ *        serial console (V1.5.23).
  *
  * Implementation: src/app/net_task.cpp. Runs on NET_TASK_CORE (Core 0) every NET_TASK_PERIOD_MS.
  * It is the ONLY task that calls wifiLoop(), httpServerLoop() (and through it
@@ -8,6 +9,8 @@
  *
  * V1.5.20 – exact behaviour (tested natively: test/native/test_net_task):
  *  netTaskStep(now), in this order:
+ *    0. V1.5.23 serial console (see below) – before step 1, so that a SET/REBOOT it sends is
+ *       persisted / scheduled by steps 3 and 4 of the same call
  *    1. wifiLoop(now)
  *    2. httpServerLoop()
  *    3. if snapshotTakePersistRequest(): Params p; SafetyFlags f; snapshotGetConfig(p, f);
@@ -18,6 +21,33 @@
  *    5. if a reboot is pending and (int32_t)(now - due) >= 0 (wrap-around safe): pending = false,
  *       systemRestart(). (A pending flag, not due == 0, marks the state: now + 700 may be 0.)
  *    Step 3 comes before step 5: a SET (persist) and a REBOOT in the same step are saved first.
+ *
+ *  V1.5.23 – serial console (115200 Bd, the USB port of the board; answers are ONE line of JSON each,
+ *  written with Serial.print(text) and Serial.print("\n")):
+ *    Reading: at most CONSOLE_READ_MAX bytes per step (Serial.available() / Serial.read()); '\r' is
+ *    ignored; '\n' ends a line. A line longer than CONSOLE_LINE_MAX characters is dropped up to its
+ *    '\n' and answered {"error":"line too long"}. Leading spaces are skipped; an empty line gets no
+ *    answer. At most ONE command is executed per step (bytes after its '\n' stay for the next step).
+ *    Commands are sent like API commands: Command with id, source = API, want_reply = true, SET as
+ *    key + vtype STRING + str; err = cmdQueueSendAndWait(cmd, API_REPLY_TIMEOUT_MS).
+ *    Error answer of a command: {"error":"<apiErrorMessage(err)>","err":<int>} (+ ,"key":"<key>" for a SET).
+ *    help    -> {"help":"help | ver | status | reboot | wifi <ssid> <password> | wifi \"<ssid>\" <password> | wifi off"}
+ *    ver     -> {"fw":"<FW_VERSION>"}
+ *    status  -> snapshotGet(d), snapshotGetConfig(p, f), wifiStaStatus(), wifiGetApIp(), wifiGetStaIp():
+ *               {"state":"<safetyStateName>","err":<int>,"local":<bool>,"ap":"<ap ip>","sta":"<staStateName>",
+ *                "sta_ip":"<ip or empty>","ssid":"<p.wifi_ssid>","pass_set":<p.wifi_pass[0] != 0>}
+ *    reboot  -> REBOOT; OK -> {"reboot":true}; else the error answer
+ *    wifi <ssid> <password>    ssid = the first word, password = everything after the single space
+ *    wifi "<ssid>" <password>  (ssid with spaces: up to the next '"', then one space, then the password)
+ *            -> SET wifi_ssid, then SET wifi_pass, then REBOOT. A failing SET stops at once (error
+ *               answer with its key, no REBOOT). Both SET ok: {"wifi":"saved","ssid":"<ssid>","reboot":true}
+ *               or, if REBOOT fails, {"wifi":"saved","ssid":"<ssid>","reboot":false,"err":<int>}
+ *               (effective after the next power-up). "wifi" alone or a missing password ->
+ *               {"error":"usage: wifi <ssid> <password> | wifi off"}
+ *    wifi off -> SET wifi_ssid "", SET wifi_pass "", REBOOT; answers as above with "wifi":"off" and no "ssid"
+ *    anything else -> {"error":"unknown command, try help"}
+ *    The password is never written to Serial or the log. Strings in answers are JSON-escaped
+ *    ('"' and '\\' with a backslash, control characters as '?').
  *  netTaskStart(): xTaskCreatePinnedToCore(<task function>, "net", NET_TASK_STACK, nullptr,
  *    NET_TASK_PRIO, nullptr, NET_TASK_CORE); returns true if that returned pdPASS.
  *    The task function loops forever: netTaskStep(millis()); vTaskDelay(pdMS_TO_TICKS(NET_TASK_PERIOD_MS)).

@@ -116,6 +116,8 @@
 #define NET_TASK_PRIO        3
 #define NET_TASK_STACK       8192
 #define NET_TASK_PERIOD_MS   5      // V1.5.20: wifiLoop + handleClient + persist/reboot every 5 ms
+#define CONSOLE_LINE_MAX     120    // V1.5.23: serial console, longest accepted line (without '\n')
+#define CONSOLE_READ_MAX     64     // V1.5.23: serial bytes read per netTaskStep at most
 #define DISPLAY_TASK_CORE    1      // V1.5.20
 #define DISPLAY_TASK_PRIO    1      // V1.5.20: below the control task
 #define DISPLAY_TASK_STACK   6144   // V1.5.20

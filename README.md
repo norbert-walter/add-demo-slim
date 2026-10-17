@@ -22,8 +22,9 @@ agentenbasierte Entwicklung mit code-server + Cline.
 | `src/smoketest/smoketest.cpp` | Sprint 0a |
 | `test/native/*` | eingefrorene Host-Tests (464 Testfälle, 22 Suiten, Contract V1.5.20; `test_command_queue` braucht einen Linux/macOS-Host mit pthreads) |
 | `test/embedded/*` | On-Target-Tests (S5) |
-| `scripts/serial_cmd.py` | nicht-interaktiver Serial-Client (auch für Cline) |
-| `scripts/add_client.py` | REST-Client mit CRC-Rahmenregel (Referenz) |
+| `scripts/serial_cmd.py` | nicht-interaktiver Serial-Client (Smoketest und Firmware-Konsole: `status`, `wifi <ssid> <pw>`; wartet nach dem Öffnen den Boot ab) |
+| `scripts/add_client.py` | REST-Client mit CRC-Rahmenregel (Referenz); `shell` = interaktive Konsole mit Heartbeat |
+| `scripts/fake_device.py` | simuliertes Gerät für die Webseiten (W1) |
 | `scripts/verify_reference.sh` | alle nativen Tests gegen die Referenzimplementierung (`referenz_logic.zip`, separat geliefert) in einem temporären Worktree – Nachweis, dass die eingefrorenen Tests widerspruchsfrei und erfüllbar sind |
 | `scripts/stress_api.py` | Abnahme V1.1: STOP-Latenz, Queue-Flut, parallele Anfragen, Dauerlauf, Bedienvorrang |
 

@@ -1,7 +1,7 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.22 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-17
-**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.6
+**Version:** 1.5.23 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-17
+**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.7
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
 
@@ -169,6 +169,14 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 1 | `test_hardware` crashed in `test_nvs_roundtrip` (Guru Meditation "Cache disabled but cached memory region accessed", PC in `StepperQueue::fill_i2s_buffer`). Cause in FastAccelStepper 96459ed: the I2S TX-done interrupt runs permanently with I2S_MUX and is IRAM-safe, but `fill_i2s_buffer()` and `I2sManager::i2sMuxSetBit()` were in flash; every flash operation (NVS write, SPIFFS read, OTA) crashed the board, also with the motor idle. Fix: both functions `IRAM_ATTR` (fork `norbert-walter/FastAccelStepper`, commit a64ceff on 96459ed; pull request to gin66 pending). Checked with nm/objdump: every function reachable from the interrupt is in IRAM, no literals into flash | `platformio.ini` |
 | 2 | Post-build check `scripts/check_iram.py` (all ESP32 environments): the build fails if one of the I2S interrupt functions is linked into flash (protects against library updates). Verified: fails with 96459ed, passes with a64ceff | `platformio.ini`, `scripts/` |
 | 3 | The nine native H1 tests could not see this (no flash cache on the host); the first five on-device tests were green (inputs, sensor, outputs, E-stop polarity change) | – |
+
+**Changes 1.5.23 (I1 device test part 2, 2026-10-17, decision Norbert Walter):**
+
+| # | Change | Where |
+|---|---|---|
+| 1 | **Safety flags after every boot `interlock = true`, `cooling_flow = true`** (`temp` 18.0 unchanged; was false/false "fail-safe"). Reason: HV, measuring and profile runs were not reachable at the display without a remote client, so the complete function could not be tested locally. Faults are still simulated with `SET` (flags false, temp > 32). The flags stay non-persistent | `params.h` (`SafetyFlags`), §9, `test_params` (3 expectations), `test_app_logic` (3 tests set the flags false first, `test_hv_on_needs_flags` checks `hv_ok` after boot) |
+| 2 | **Serial console** in the network task (step 0 of `netTaskStep`): `help`, `ver`, `status`, `reboot`, `wifi <ssid> <password>`, `wifi "<ssid>" <password>`, `wifi off`; one JSON line per answer; SET/REBOOT through the command queue like the API (one writer for the parameters); password never echoed; at most `CONSOLE_READ_MAX` bytes and one command per step, lines up to `CONSOLE_LINE_MAX` | `net_task.h/.cpp`, `config.h`, shim `Serial` input, `test_net_task` (+7) |
+| 3 | `scripts/serial_cmd.py` waits for `boot: ready` after opening the port (USB-serial adapters reset the board on open); `scripts/add_client.py shell`: interactive REST console with automatic heartbeat | `scripts/` |
 
 **Additions 1.5.22 (preparation of Sprint W1 – web UI, 2026-10-17):**
 
@@ -527,8 +535,8 @@ because of a full normal queue (§6.7).
 ```
 "config":{"measure_pos":155.0,"maint_pos":40.0,"traverse_start":80.0,"traverse_end":240.0,
 "traverse_speed":10.0,"shutter_hold":3.0,"edge_threshold":3.0,"base_dist":70.0,"calib_near_raw":40.0,
-"calib_near_ref":40.0,"calib_far_raw":65.0,"calib_far_ref":65.0,"calib_valid":true,"interlock":false,
-"cooling_flow":false,"temp":18.0,"estop_nc":false,"wifi_ssid":"","wifi_pass_set":false}
+"calib_near_ref":40.0,"calib_far_raw":65.0,"calib_far_ref":65.0,"calib_valid":true,"interlock":true,
+"cooling_flow":true,"temp":18.0,"estop_nc":false,"wifi_ssid":"","wifi_pass_set":false}
 ```
 (one line in reality; exact format in `params.h`, `paramsToJsonMember`)
 
@@ -538,6 +546,7 @@ because of a full normal queue (§6.7).
 `/add.html` and `/llms.txt` (ADD spec §5.3/§5.4), `/doc` (Markdown), `/log`
 (last 20 log lines). All responses carry `Access-Control-Allow-Origin: *`.
 V1.5.22: `/app.js`, `/style.css` and the four font files of the web UI (§5.5).
+V1.5.23: serial console on the USB port (115200 Bd) – commands and answers in `net_task.h`.
 
 ### 5.5 Web UI (V1.5.22, Sprint W1)
 
@@ -800,8 +809,8 @@ switch outside homing) → force stop, reference lost, `MOTOR_FAULT`
 
 | Key | Type | Default | Range | Persisted |
 |---|---|---|---|---|
-| `interlock` | bool (or 0/1) | false | – | **no** |
-| `cooling_flow` | bool (or 0/1) | false | – | **no** |
+| `interlock` | bool (or 0/1) | **true** (V1.5.23) | – | **no** |
+| `cooling_flow` | bool (or 0/1) | **true** (V1.5.23) | – | **no** |
 | `temp` | number | 18.0 | −20.0 … 99.9 °C | **no** |
 | `measure_pos` | number | 155.0 | 61 … 242 mm (measuring zone, V1.5) | yes |
 | `maint_pos` | number | 40.0 | 21 … 60 mm (service zone, customer-defined) | yes |
@@ -817,9 +826,9 @@ switch outside homing) → force stop, reference lost, `MOTOR_FAULT`
 | `wifi_ssid` | string | "" | 0 … 32 chars (empty = no router connection) | yes (effective after REBOOT) |
 | `wifi_pass` | string | "" | 0 or 8 … 63 chars | yes (never reported back) |
 
-Safety flags are **fail-safe**: after every boot `interlock = false`,
-`cooling_flow = false`, `temp = 18.0`. Persisting happens in the network task,
-never in the 1 ms control cycle.
+Safety flags are never persisted. V1.5.23: after every boot `interlock = true`,
+`cooling_flow = true`, `temp = 18.0` (until V1.5.22 false/false). Persisting happens in the
+network task, never in the 1 ms control cycle.
 
 ---
 

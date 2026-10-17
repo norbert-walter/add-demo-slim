@@ -1,13 +1,22 @@
 # Pflichtenheft – Demoanlage ADD (Slim)
 
-**Stand:** 2026-10-13
+**Stand:** 2026-10-17
 **Autor:** Norbert Walter
-**Version:** 1.7.6 (Sprint-Plan V3: Reihenfolge nach Abhängigkeiten)
+**Version:** 1.7.7 (Sicherheitsflags nach Boot frei, serielle Konsole)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.7.6 → V1.7.7 (Contract V1.5.23, 17.10.2026, Entscheidung Norbert Walter)
+- **Simulierte Sicherheitsflags nach jedem Boot `interlock = true`, `cooling_flow = true`**
+  (bisher `false` = fail-safe). HV, Messen und Profilfahrt sind damit direkt nach INIT am Display
+  möglich – die gesamte Funktion lässt sich zuerst lokal ohne WLAN prüfen. Störungen werden wie
+  bisher per `SET` simuliert (`interlock`/`cooling_flow` false, `temp` > 32 °C).
+- **Serielle Konsole** in der Firmware (USB, 115200 Bd): `help`, `ver`, `status`, `reboot`,
+  `wifi <ssid> <passwort>`, `wifi off` – Einbindung ins Heimnetz ohne Rechner im AP-WLAN.
+  `scripts/serial_cmd.py` wartet nach dem Öffnen des Ports das Booten ab.
 
 ### V1.7.5 → V1.7.6 (Sprint-Plan V3, 13.10.2026)
 - Sprints neu geordnet nach den tatsächlichen Abhängigkeiten im Code: erst die gesamte reine
@@ -137,7 +146,7 @@ von R20 4k7, LEDs je 20 mA, Buzzer, Display und Touch).
 | CRC | Regel offen | **eindeutige Rahmenregel** (CONTRACT §4), Referenz in C++, Python, JS |
 | API | 12 Befehle, Fehlercodes offen | +`GET_CONFIG`, `CALIB`, `REBOOT`; Fehlercodes festgelegt |
 | Display | widersprüchlich (Touch ja/nein, 1/2 Seiten) | 1 Seite, **5 Touch-Tasten** (INIT, HV, MEAS, TRAV, STOP) |
-| Sicherheitsflags | in NVS gespeichert | **nie gespeichert** – nach Boot immer gesperrt (fail-safe) |
+| Sicherheitsflags | in NVS gespeichert | **nie gespeichert** – nach jedem Boot `interlock`/`cooling_flow` = true (V1.7.7; bis V1.7.6 gesperrt) |
 | Homing-Timeout | 30 s bei 100 mm/min (zu kurz) | 600 mm/min, Timeout 40 s |
 | Tests | Nachbauten der Logik | Tests gegen echten Code, eingefroren, gegen Referenzimplementierung geprüft |
 | ADD-Dokument | Feldnamen weichen von Spec ab | streng nach ADD Spec v1.0 (7 Blöcke) |
@@ -304,8 +313,8 @@ Die Zuordnung FluidNC-Bit `i2so.N` → FastAccelStepper-Slot hat der Smoketest (
 
 | Flag | Funktion | Startzustand nach **jedem** Boot |
 |---|---|---|
-| `interlock` | HV-Freigabe (Schlüsselschalter) | `false` |
-| `cooling_flow` | Kühlwasserfluss | `false` |
+| `interlock` | HV-Freigabe (Schlüsselschalter) | `true` (V1.7.7) |
+| `cooling_flow` | Kühlwasserfluss | `true` (V1.7.7) |
 | `temp` | Kühlwassertemperatur | `18.0 °C` |
 
 ---

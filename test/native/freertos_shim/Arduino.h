@@ -32,7 +32,12 @@ struct ShimSerial {
         print(b); return n < 0 ? 0 : (size_t)n;
     }
     size_t write(const uint8_t* p, size_t n) { std::string s((const char*)p, n); return print(s.c_str()); }
-    void clear() { std::lock_guard<std::mutex> l(m); out.clear(); writes_in_critical = 0; baud = 0; }
+    void clear() { std::lock_guard<std::mutex> l(m); out.clear(); in.clear(); reads = 0; writes_in_critical = 0; baud = 0; }
+    // V1.5.23: input for the serial console (the test fills "in"); read() counts every call
+    std::string in;
+    int reads = 0;
+    int available() { std::lock_guard<std::mutex> l(m); return (int)in.size(); }
+    int read() { std::lock_guard<std::mutex> l(m); ++reads; if (in.empty()) return -1; int c = (unsigned char)in[0]; in.erase(0, 1); return c; }
 };
 inline ShimSerial Serial;
 

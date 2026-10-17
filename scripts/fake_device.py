@@ -53,7 +53,7 @@ class Sim:
         self.cfg = {"measure_pos": 155.0, "maint_pos": 40.0, "traverse_start": 80.0, "traverse_end": 240.0,
                     "traverse_speed": 10.0, "shutter_hold": 3.0, "edge_threshold": 3.0, "base_dist": 70.0,
                     "calib_near_raw": 40.0, "calib_near_ref": 40.0, "calib_far_raw": 65.0, "calib_far_ref": 65.0,
-                    "calib_valid": True, "interlock": False, "cooling_flow": False, "temp": 18.0, "estop_nc": False,
+                    "calib_valid": True, "interlock": True, "cooling_flow": True, "temp": 18.0, "estop_nc": False,
                     "wifi_ssid": "", "wifi_pass_set": False}
         self.n, self.sum, self.t0 = 0, 0.0, time.time()
 

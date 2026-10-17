@@ -32,8 +32,9 @@
  *   true = normally-closed contact to GND, E-stop active when HIGH, a broken wire
  *   is detected as E-stop. A wrong setting always shows a permanent E-stop (safe).
  *   app_logic accepts SET estop_nc only while the axis is idle and HV is off.
- * Safety flags are NEVER persisted: after every boot interlock=false,
- * cooling_flow=false, temp=18.0 (fail-safe).
+ * Safety flags are NEVER persisted. V1.5.23 (decision Norbert Walter, demo device): after every
+ * boot interlock=true, cooling_flow=true, temp=18.0 – HV is possible at once; faults are simulated
+ * with SET interlock/cooling_flow false or temp > 32 (was false/false = "fail-safe" until V1.5.22).
  */
 #pragma once
 
@@ -56,8 +57,8 @@ struct Params {
 };
 
 struct SafetyFlags {
-    bool  interlock    = false;
-    bool  cooling_flow = false;
+    bool  interlock    = true;    // V1.5.23: true after boot (was false)
+    bool  cooling_flow = true;    // V1.5.23: true after boot (was false)
     float temp_c       = 18.0f;
 };
 
