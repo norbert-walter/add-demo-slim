@@ -23,6 +23,11 @@
  *       while the watchdog is disarmed and no COMM_TIMEOUT is shown.
  *    3. if snapshotTakePersistRequest(): Params p; SafetyFlags f; snapshotGetConfig(p, f);
  *       logLine("nvs: saved") if nvsSaveParams(p) returned true, else logLine("nvs: save FAILED")
+ *       V1.5.25: a taken request stays PENDING and is saved only in a step where the snapshot of
+ *       step 2a shows motion.state IDLE and safety.hv_on false (a flash write stops both cores for
+ *       tens of ms). While pending and not idle: logLine("nvs: save deferred until axis idle and
+ *       HV off") once per request. The values are active in RAM from the SET on. Step 5 saves a
+ *       pending request right before systemRestart().
  *    4. if snapshotTakeRebootRequest() and no reboot is pending: reboot pending, due at
  *       now + REBOOT_DELAY_MS; logLine("reboot: in %u ms", REBOOT_DELAY_MS). Further requests while
  *       pending are taken (cleared) but do not move the due time.

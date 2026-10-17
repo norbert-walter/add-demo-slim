@@ -157,9 +157,7 @@ static bool     s_prev_armed = false;
 static uint32_t s_max_gap = 0;
 static bool     s_timeout_logged = false;
 
-static void commDiagnostics(uint32_t now_ms) {
-    ProcData d;
-    snapshotGet(d);
+static void commDiagnostics(uint32_t now_ms, const ProcData& d) {
     uint32_t rx = snapshotLastApiRx();
     bool armed = d.safety.comm_armed;
     if (!armed) s_prev_armed = false;               // a gap counts only if armed the whole time
@@ -181,6 +179,26 @@ static void commDiagnostics(uint32_t now_ms) {
     }
     s_timeout_logged = timeout;
     if (!armed && !timeout) s_max_gap = 0;
+}
+
+// ---- V1.5.25: deferred persist -------------------------------------------------------------------
+static void slowCheck(const char* part, uint32_t t0, uint32_t t1);
+static bool s_persist_pending = false;
+static bool s_defer_logged = false;
+
+static void persistNow() {
+    Params p;
+    SafetyFlags f;
+    snapshotGetConfig(p, f);
+    const uint32_t t_nvs = millis();
+    if (nvsSaveParams(p)) {
+        logLine("nvs: saved");
+    } else {
+        logLine("nvs: save FAILED");
+    }
+    slowCheck("nvs", t_nvs, millis());
+    s_persist_pending = false;
+    s_defer_logged = false;
 }
 
 // ---- V1.5.25: control cycle diagnostics -------------------------------------------------------
@@ -244,23 +262,25 @@ void netTaskStep(uint32_t now_ms) {
     slowCheck("http", t_wifi, t_http);
 
     // 2a. comm diagnostics (V1.5.24)
-    commDiagnostics(now_ms);
+    ProcData d;                                   // V1.5.25: one snapshot for steps 2a and 3
+    snapshotGet(d);
+    commDiagnostics(now_ms, d);
 
     // 2b. control cycle diagnostics (V1.5.25)
     cycleDiagnostics(now_ms);
 
-    // 3. Persist request: save config copy to NVS
-    if (snapshotTakePersistRequest()) {
-        Params p;
-        SafetyFlags f;
-        snapshotGetConfig(p, f);
-        const uint32_t t_nvs = millis();
-        if (nvsSaveParams(p)) {
-            logLine("nvs: saved");
-        } else {
-            logLine("nvs: save FAILED");
+    // 3. Persist request: save config copy to NVS.
+    //    V1.5.25: only while the axis is idle and HV is off. A flash write stops BOTH cores for
+    //    tens of ms (also the control loop); in operation the new values are active in RAM at
+    //    once and are written when the plant is at rest (or right before a reboot, step 5).
+    if (snapshotTakePersistRequest()) s_persist_pending = true;
+    if (s_persist_pending) {
+        if (d.motion.state == MotionState::IDLE && !d.safety.hv_on) {
+            persistNow();
+        } else if (!s_defer_logged) {
+            logLine("nvs: save deferred until axis idle and HV off");
+            s_defer_logged = true;
         }
-        slowCheck("nvs", t_nvs, millis());
     }
 
     // 4. Reboot request scheduling (only if not already pending)
@@ -273,6 +293,7 @@ void netTaskStep(uint32_t now_ms) {
     // 5. Reboot execution (wrap-around safe signed comparison)
     if (reboot_pending && (int32_t)(now_ms - reboot_at) >= 0) {
         reboot_pending = false;
+        if (s_persist_pending) persistNow();      // V1.5.25: a deferred save is not lost
         systemRestart();
     }
 

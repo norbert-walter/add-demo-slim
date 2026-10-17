@@ -22,6 +22,18 @@
 - **Fehler im Kommunikations-Watchdog behoben:** Ein Paket, das die Netz-Task während eines
   Regelzyklus eintrug, galt als 49 Tage alt (vorzeichenlose Differenz) – COMM_TIMEOUT, obwohl
   Pakete ankamen. Das Alter wird jetzt vorzeichenbehaftet gerechnet.
+- **Zeitverhalten neu festgelegt (Entscheidung Norbert Walter):** ein Grenzwert von **3 ms**, der unter
+  allen geprüften Bedingungen gilt – Zykluszeit `cycle_max_us`, Abstand zweier Zyklusstarts
+  `period_max_us` und Prioritätsbefehl-Latenz `prio_lat_max_us` jeweils ≤ 3000 µs. Überläufe
+  (Zyklen > 1 ms) werden nur angezeigt; eine Häufigkeit von Ausreißern ist durch Messen nicht
+  abzusichern. Die bisherigen Werte (500 µs / 1,5 ms / 2 ms, V1.5) galten ohne laufende Motortask
+  und ohne WLAN-Last und wurden auf der Anlage nicht erreicht.
+- **Speichern nur im Stillstand:** Ein Schreibvorgang in den Flash hält beide Kerne für einige
+  10 ms an, auch die Regelschleife und die Not-Aus-Auswertung. Geänderte Einstellwerte gelten
+  sofort (RAM); gespeichert wird erst, wenn die Achse steht und HV aus ist (spätestens vor einem
+  Neustart). Geht die Versorgung vorher verloren, gilt nach dem Neustart der alte Wert.
+- **Not-Aus der Demoanlage in Software** (siehe §6): unterliegt derselben Zykluszeit (≤ 3 ms).
+  In der späteren echten Anlage wirkt der Not-Aus über ein Relais direkt und ohne Software.
 - Unverändert: TEMP_HIGH bleibt ein quittierpflichtiger Fehler (`ACK` per API), `/add.html` 404 bis Sprint A1.
 
 ### V1.7.7 → V1.7.8 (Contract V1.5.24, 17.10.2026, Gerätetest I1 Teil 2c, Entscheidung Norbert Walter)
@@ -139,7 +151,7 @@ von R20 4k7, LEDs je 20 mA, Buzzer, Display und Touch).
 | Bedienvorrang | nicht geregelt (Display und API gleichrangig) | **Display hat Vorrang (LOCAL)**: nach jedem Display-Befehl lehnt die Anlage Start-Befehle von der API mit `LOCAL_CONTROL (−10)` ab; STOP/HV_OFF/SHUTTER_CLOSE/SET bleiben erlaubt. Ende 30 s nach dem letzten Display-Befehl, sobald Achse steht und HV aus ist. **V1.7.8:** Haltezeit `LOCAL_HOLD_MS`, Standard 0 = kein Vorrang |
 | STOP-Latenz | STOP wartete u. U. auf einen Zyklus ohne Fahrauftrag, volle Queue → BUSY | **Prioritäts-Queue** für STOP/HV_OFF/SHUTTER_CLOSE, Ausführung auch bei laufendem Fahrauftrag; ≤ 2 ms bis zum Treiber |
 | API-Antwort | vor dem Setzen der Ausgänge | **nach** dem Setzen der Ausgänge: `OK` = angenommen und Ausgänge gesetzt; Bewegungsende nur über `/proc` |
-| Zykluszeit | nicht überwacht | im Gerät gemessen und in `GET_STATE` gemeldet: Rechenzeit `cycle_max_us` < 500 µs, Überläufe 0, Jitter `period_max_us` < 1500 µs, Prioritätsbefehl-Latenz `prio_lat_max_us` ≤ 2000 µs |
+| Zykluszeit | nicht überwacht | im Gerät gemessen und in `GET_STATE` gemeldet: Rechenzeit `cycle_max_us`, Jitter `period_max_us`, Prioritätsbefehl-Latenz `prio_lat_max_us` (V1.5: < 500 µs / < 1500 µs / ≤ 2000 µs, Überläufe 0; **ab V1.7.9 jeweils ≤ 3000 µs, Überläufe nur Information**) |
 | Gleichzeitige API-Aufrufe | eine Antwort-Queue, Annahme „ein Aufrufer“ nur als Kommentar | Warten auf Antwort per Mutex **serialisiert**; STOP/HV_OFF/SHUTTER_CLOSE werden auch bei belegtem Mutex eingereiht; Integrationstest mit 8 Threads gegen den echten Queue-Code |
 | Überlauf Prioritäts-Queue | Befehl hätte verloren gehen können | **Überlauf-Latch**: ein Bit je Befehl und Herkunft (API/LOCAL getrennt), kann nicht überlaufen, gleiche Anforderungen werden zusammengefasst, keine geht verloren |
 | Abarbeitung Prioritätsbefehle | einer pro Zyklus (STOP konnte hinter anderen warten) | **alle** wartenden Prioritätsbefehle im selben Zyklus (max. 7); 2-ms-Grenze unabhängig von der Anzahl |
@@ -640,6 +652,14 @@ Vollständig: **CONTRACT §6** und `src/logic/safety_logic.h` (Regeln R1–R7, I
 > Es gibt keine echte Strahlenquelle; HV und Shutter sind LEDs. Interlock, Kühlung
 > und Temperatur sind simuliert.
 
+> **Zeitverhalten und Not-Aus (V1.7.9).** Der Not-Aus der Demoanlage wird in der Regelschleife
+> per Software gelesen (Schritt 2 jedes 1-ms-Zyklus) und unterliegt deshalb derselben
+> Zeitgrenze: Not-Aus, Endschalter, STOP und HV-/Shutter-Abschaltung wirken spätestens nach
+> **3 ms**. Diese Grenze gilt im Betrieb (Achse fährt oder HV an), weil Einstellwerte nur im
+> Stillstand in den Flash geschrieben werden – ein Flash-Schreibvorgang hält beide Kerne für
+> einige 10 ms an. In der späteren echten Anlage schaltet der Not-Aus über ein **Relais direkt
+> und ohne Software-Verzögerung**; die Software meldet ihn dort nur noch.
+
 ### Zustände
 
 ```
@@ -701,11 +721,11 @@ Ist die Prioritäts-Queue voll, wird die Anforderung als Bit gespeichert (Latch)
 nach Herkunft API/Display: Es kann nicht überlaufen, zehn STOPs werden zu einem STOP
 zusammengefasst, keine Anforderung geht verloren. In jedem Zyklus werden **alle**
 wartenden Prioritätsbefehle ausgeführt (höchstens 7) – ein STOP wartet also nie hinter
-anderen. Auslegungsziel: ≤ 2 ms von der Queue bis zum Treiber, unabhängig von der Anzahl
-wartender Befehle (gilt unter den gemessenen Zeitbedingungen Jitter < 1,5 ms, Rechenzeit
-< 0,5 ms; der Not-Aus wirkt unabhängig von jeder Queue). Das Gerät misst diese Zeit
-selbst (`prio_lat_max_us` in `GET_STATE`); erst die Messung bei der Abnahme ist der
-Nachweis. Der schnellste Stopp bleibt der physische Not-Aus.
+anderen. Grenze (V1.7.9): ≤ 3 ms von der Queue bis zum Treiber, unabhängig von der Anzahl
+wartender Befehle (gemessen ≤ 1,73 ms bei fahrender Achse; der Not-Aus wirkt unabhängig von
+jeder Queue, wird in der Demoanlage aber ebenfalls im 1-ms-Zyklus gelesen). Das Gerät misst
+diese Zeit selbst (`prio_lat_max_us` in `GET_STATE`); erst die Messung bei der Abnahme ist der
+Nachweis. In der echten Anlage ist der schnellste Stopp das Not-Aus-Relais.
 
 ### Not-Aus-Verdrahtung (Parameter `estop_nc`)
 
@@ -870,9 +890,12 @@ Die Zeiten der 🤖-Sprints sind Rechenzeit von Qwen lokal (ca. 18 Token/s), nic
 - [ ] Fahrt auf 242 mm löst den vorderen Endschalter nicht aus
 - [ ] Not-Aus und `cooling_flow = false` gleichzeitig → `FAULT ESTOP`
 - [ ] STOP per API während Profilfahrt: Antwort < 150 ms, Achse steht < 1 s (`stress_api.py latency`)
-- [ ] Zeitverhalten nach 10 min (`stress_api.py soak`): `cycle_max_us` < 500, `overruns` = 0,
-      `period_max_us` < 1500 (Jitter), nach STOP-Tests `prio_lat_max_us` ≤ 2000
-- [ ] Zeitverhalten mit und ohne Buzzer-Signal vergleichen (z. B. Not-Aus-Ton 4 s während `soak`): `cycle_max_us` bleibt < 500
+- [ ] Zeitverhalten nach 10 min mit dauernd geladener Weboberfläche (`stress_api.py soak --web`):
+      kein COMM_TIMEOUT; `cycle_max_us`, `period_max_us` und (nach STOP-Tests) `prio_lat_max_us`
+      jeweils ≤ 3000 µs; `overruns` nur Information. Werden die 3 ms mit `--web` überschritten,
+      werden die Webdateien in die Firmware eingebettet (Lesen über den Programm-Cache statt SPIFFS)
+- [ ] Zeitverhalten mit und ohne Buzzer-Signal vergleichen (z. B. Not-Aus-Ton 4 s während `soak`): Grenzen wie oben
+- [ ] `SET key=maint_pos` bei fahrender Achse: `nvs: save deferred …` im Log, gespeichert erst im Stillstand mit HV aus
 - [ ] Queue-Flut (200 SET): nur OK/BUSY, alle CRC gültig (`stress_api.py flood`)
 - [ ] Parallele Anfragen (8 Threads, 400 gemischte Befehle mit bekanntem Ergebnis):
       keine vertauschte Antwort, nur erwartetes Ergebnis oder BUSY (`stress_api.py parallel`)

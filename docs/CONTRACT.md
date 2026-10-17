@@ -184,6 +184,10 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 9 | `stress_api.py latency`: traverse with `traverse_start` / `traverse_end` from GET_CONFIG (the old fixed start 60 mm is outside the measuring zone → BAD_PARAM), waits for the axis to be idle (GET_STATE as heartbeat) before every START_TRAVERSE; `--prepare` skips INIT when homed and always ends with STOP + HV_OFF (before: HV stayed on after an abort → COMM_TIMEOUT). `fake_device.py` checks the parameter ranges of START_TRAVERSE / START_MEASURE | `scripts/` |
 | 10 | **Bug fix communication watchdog:** `safetyCommTimeout` uses the **signed** age `(int32_t)(now_ms - last_rx_ms)`. The network task (core 0) stores `millis()` of a packet while the control task (core 1) uses the `millis()` of its cycle start; a packet stored during the cycle was "newer" than `now_ms`, the unsigned difference about 4.29e9 > 5000 → **false COMM_TIMEOUT while packets arrived** (device log: `last /api packet 4294967285 ms ago, longest gap while armed 96 ms`). The more often a client sends, the more often it hit; it explains the COMM_TIMEOUTs "despite heartbeat" of device tests 2c Nr. 5, 6, 9 and 14. §6.8 unchanged otherwise (wrap-around safe for ages < 24 days) | `safety_logic.h/.cpp`, `test_safety_logic` (+1), `net_task.cpp` (log shows the signed age) |
 | 11 | Cycle diagnostics: the work time of every logged cycle was 36 … 246 µs; the late starts (period 1.5 … 1.7 ms, about 16 per s, about 200 per s while the axis moves) come from the FastAccelStepper `StepperTask` (priority `configMAX_PRIORITIES - 1`, core 1, every 4 ms), not from the control task. `CYCLE_DIAG_PERIOD_US` raised to 2000 so that /log is not flooded | `config.h` |
+| 12 | **Timing acceptance (decision Norbert Walter):** ONE limit of **3 ms** under all tested conditions – `cycle_max_us`, `period_max_us` and `prio_lat_max_us` each ≤ 3000 (maxima since `boot: ready`). Overruns are reported only (a rate of outliers cannot be guaranteed by measuring). Measured with the axis moving: cycle ≤ 1554, period ≤ 2565, prio latency ≤ 1725 µs | §10, `scripts/stress_api.py` |
+| 13 | **Persist only at rest:** the network task saves a persist request only while the snapshot shows `motion.state == IDLE` and `!safety.hv_on` (a flash write stops both cores for tens of ms, the control loop and the software E-stop included). The values are active in RAM from the SET on; pending saves are written right before a reboot; `/log`: `nvs: save deferred until axis idle and HV off` once per request | `net_task.h/.cpp`, `test_net_task` (+1) |
+| 14 | `stress_api.py soak --web`: a second thread loads `/`, `/settings`, `/app.js`, `/style.css` and the fonts without pause (SPIFFS reads stop the other core briefly). If the 3 ms limit fails with `--web`, the web files are embedded into the firmware | `scripts/` |
+| 15 | Note: the E-stop of the demo plant is read in software in step 2 of the 1 ms cycle and is subject to the same 3 ms limit; in the real plant it acts through a relay directly, without software | §6 |
 | 7 | Unchanged by decision: TEMP_HIGH stays latching (`ACK` via the API, after `temp` ≤ 32); `/add.html` answers 404 with `{"error":"not found"}` until `add.json` exists (Sprint A1) | – |
 
 **Changes 1.5.24 (I1 device test part 2c, 2026-10-17, decision Norbert Walter):**
@@ -876,10 +880,10 @@ Order inside one control cycle:
 
 | Field | Measures | Acceptance (10 min) |
 |---|---|---|
-| `cycle_max_us` | work time of steps 1–6 | < 800 (V1.5.25, 1 ms cycle) |
-| `overruns` | cycles with work time > 1000 µs | 0 new during the test |
-| `period_max_us` | distance between two cycle starts (scheduling jitter) | < 1500 |
-| `prio_lat_max_us` | priority command: `cmdQueueSend` → outputs applied | ≤ 2000 |
+| `cycle_max_us` | work time of steps 1–6 (wall clock, preemption included) | ≤ 3000 (V1.5.25) |
+| `overruns` | cycles with work time > 1000 µs | information only (V1.5.25) |
+| `period_max_us` | distance between two cycle starts (scheduling jitter) | ≤ 3000 (V1.5.25) |
+| `prio_lat_max_us` | priority command: `cmdQueueSend` → outputs applied | ≤ 3000 (V1.5.25) |
 
 The publication of the statistics itself (< 2 µs) is not part of `cycle_max_us`.
 `prio_lat_max_us` stays 0 until the first priority command was executed.

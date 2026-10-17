@@ -334,6 +334,30 @@ void test_v1525_slow_parts_and_gaps_logged() {
     TEST_ASSERT_EQUAL_INT(1, logs("net: "));
     TEST_ASSERT_TRUE(indexOf("wifiLoop 9300") > 0);                 // the gap line comes first
 }
+void test_v1525_persist_deferred_until_idle_and_hv_off() {
+    paramsDefaults(g_config); strcpy(g_config.wifi_ssid, "Spaet");
+    g_proc = ProcData(); g_proc.motion.state = MotionState::MOVING;
+    g_persist = true; step(30000);
+    TEST_ASSERT_EQUAL_INT(0, count("nvsSaveParams Spaet"));
+    TEST_ASSERT_EQUAL_INT(1, count("log nvs: save deferred until axis idle and HV off"));
+    g_calls.clear();
+    g_proc.motion.state = MotionState::IDLE; g_proc.safety.hv_on = true; step(30005);    // HV still on
+    TEST_ASSERT_EQUAL_INT(0, count("nvsSaveParams Spaet"));
+    TEST_ASSERT_EQUAL_INT(0, logs("nvs: save deferred"));                             // logged once only
+    g_proc.safety.hv_on = false; step(30010);                                          // at rest: saved
+    TEST_ASSERT_EQUAL_INT(1, count("nvsSaveParams Spaet"));
+    TEST_ASSERT_EQUAL_INT(1, count("log nvs: saved"));
+    g_calls.clear(); step(30015);
+    TEST_ASSERT_EQUAL_INT(0, count("nvsSaveParams Spaet"));                           // only once
+    // a pending save is written right before a reboot, even in motion
+    g_proc.motion.state = MotionState::MOVING;
+    g_persist = true; g_reboot = true; step(31000);
+    TEST_ASSERT_EQUAL_INT(0, count("nvsSaveParams Spaet"));
+    step(31000 + REBOOT_DELAY_MS);
+    TEST_ASSERT_EQUAL_INT(1, count("nvsSaveParams Spaet"));
+    TEST_ASSERT_TRUE(indexOf("nvsSaveParams Spaet") < indexOf("systemRestart"));
+    g_proc = ProcData();
+}
 void test_v1525_cycle_diag_logged_rate_limited() {
     g_diag = CycleDiag(); step(20000); g_calls.clear();
     g_diag.seq = 3; g_diag.total_us = 1215; g_diag.period_us = 2357; g_diag.adc_us = 900;
@@ -401,5 +425,6 @@ int main(int, char**) {
     RUN_TEST(test_v1524_comm_gap_and_timeout_logged);
     RUN_TEST(test_v1525_slow_parts_and_gaps_logged);
     RUN_TEST(test_v1525_cycle_diag_logged_rate_limited);
+    RUN_TEST(test_v1525_persist_deferred_until_idle_and_hv_off);
     return UNITY_END();
 }

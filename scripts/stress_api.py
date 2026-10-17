@@ -5,7 +5,7 @@ stress_api.py - acceptance and stress tests for the REST API (Contract V1.1).
   python scripts/stress_api.py --host 192.168.4.1 latency  [--n 10] [--prepare]
   python scripts/stress_api.py --host 192.168.4.1 flood    [--n 200]
   python scripts/stress_api.py --host 192.168.4.1 parallel [--n 400] [--threads 4]
-  python scripts/stress_api.py --host 192.168.4.1 soak     [--minutes 10]
+  python scripts/stress_api.py --host 192.168.4.1 soak     [--minutes 10] [--web]
   python scripts/stress_api.py --host 192.168.4.1 local
 
 SAFETY: "latency" MOVES THE AXIS (START_TRAVERSE / STOP; with --prepare also
@@ -17,8 +17,12 @@ V1.5.25 (device test I1 part 2c): the device runs the Arduino WebServer, which
 serves ONE connection at a time with a listen backlog of 4. "parallel" therefore
 uses 4 threads and a 10 s timeout per request (a refused connection is retried
 by the OS after 1 s and 3 s). The control cycle is 1 ms (CONTROL_PERIOD_MS);
-the cycle statistics count from "boot: ready" on, and every test judges the
-overruns that happened DURING the test (before/after), not since boot.
+the cycle statistics count from "boot: ready" on.
+
+Timing acceptance (decision Norbert Walter, 2026-10-17): ONE limit of 3 ms that
+must hold under all tested conditions - cycle_max_us, period_max_us and
+prio_lat_max_us each <= 3000 (maxima since boot ready). Overruns (cycles over
+1 ms) are only reported: a rate of outliers cannot be guaranteed by measuring.
 
 Acceptance criteria (Pflichtenheft V1.5 §7):
   latency : STOP reply < 150 ms (HTTP round trip incl. WLAN), axis idle in /proc < 1 s
@@ -27,12 +31,13 @@ Acceptance criteria (Pflichtenheft V1.5 §7):
   parallel: 8 threads send mixed commands with a KNOWN expected result at the
             same time; every reply must be CRC-valid, carry the right "cmd" and
             either the expected err or BUSY (-7) -> no reply is ever mixed up
-  timing  : (GET_STATE after every test) cycle_max_us < 800 (1 ms cycle),
-            no new overruns during the test, period_max_us < 1500 (jitter),
-            prio_lat_max_us <= 2000
-            (priority command: enqueue -> outputs applied, measured in the device)
-  soak    : 10 min GET_STATE every 1 s: no new overruns, no COMM_TIMEOUT,
-            all frames valid, then timing as above
+  timing  : (GET_STATE after every test) cycle_max_us, period_max_us (jitter)
+            and prio_lat_max_us (priority command: enqueue -> outputs applied,
+            measured in the device) each <= 3000; overruns reported only
+  soak    : 10 min GET_STATE every 1 s: no COMM_TIMEOUT, all frames valid,
+            then timing as above. --web: a second thread loads the web pages
+            and assets (/, /settings, /app.js, /style.css, fonts) without pause
+            during the whole soak (SPIFFS reads stop the other core briefly)
   local   : only with LOCAL_HOLD_MS > 0 in config.h (default 0 = no LOCAL
             priority): press any display button, then API HV_ON -> err -10
             LOCAL_CONTROL, API STOP -> OK; after the hold time API INIT -> no -10
@@ -81,7 +86,7 @@ def fail_on_fault(p):
         raise SystemExit(f"ABORT: device in {p['state']}, err={p['err']}")
 
 
-LIMITS = {"cycle_max_us": 800, "period_max_us": 1500, "prio_lat_max_us": 2001}
+LIMITS = {"cycle_max_us": 3000, "period_max_us": 3000, "prio_lat_max_us": 3000}   # <= limit
 
 
 def overruns(host):
@@ -95,11 +100,11 @@ def cycle_ok(host, base):
     SHUTTER_CLOSE) was executed."""
     r, _ = api(host, "GET_STATE")
     new = r.get("overruns", 0) - base
-    ok = new == 0
-    parts = [f"overruns +{new} (since boot ready {r.get('overruns')})"]
+    ok = True
+    parts = [f"overruns +{new} (info; since boot ready {r.get('overruns')})"]
     for k, lim in LIMITS.items():
         v = r.get(k)
-        good = v is not None and v < lim
+        good = v is not None and v <= lim
         ok = ok and good
         parts.append(f"{k}={v}{'' if good else ' (!)'}")
     print("  " + " ".join(parts) + f" -> {'OK' if ok else 'FAIL'}")
@@ -247,23 +252,56 @@ def t_parallel(host, n, threads):
     return cycle_ok(host, base) and not bad
 
 
-def t_soak(host, minutes):
+WEB_PATHS = ["/", "/settings", "/app.js", "/style.css",
+             "/font-u400.woff2", "/font-u700.woff2", "/font-m400.woff2", "/font-m700.woff2"]
+
+
+def web_load(host, stop, stats):
+    """--web: load the web UI files without pause (each file read from SPIFFS stops core 1 briefly)."""
+    import urllib.request
+    while not stop.is_set():
+        for path in WEB_PATHS:
+            if stop.is_set():
+                break
+            try:
+                with urllib.request.urlopen(f"http://{host}{path}", timeout=5.0) as r:
+                    stats["bytes"] += len(r.read())
+                stats["ok"] += 1
+            except Exception:  # noqa: BLE001 - 404 (no uploadfs) or timeout: counted
+                stats["err"] += 1
+
+
+def t_soak(host, minutes, web=False):
+    import threading
     base = overruns(host)
     end = time.time() + minutes * 60
-    worst = 0
+    stop, stats = threading.Event(), {"ok": 0, "err": 0, "bytes": 0}
+    th = None
+    if web:
+        th = threading.Thread(target=web_load, args=(host, stop, stats), daemon=True)
+        th.start()
     k = 0
-    while time.time() < end:
-        r, _ = api(host, "GET_STATE")
-        k += 1
-        worst = max(worst, r.get("cycle_max_us", 0))
-        if r.get("sys_err") == 3:
-            raise SystemExit("FAIL: COMM_TIMEOUT during soak")
-        if r.get("overruns", 0) != base:
-            raise SystemExit(f"FAIL: overruns +{r['overruns'] - base} after {k} s")
-        if r.get("period_max_us", 0) >= LIMITS["period_max_us"]:
-            print(f"  WARNING: period_max_us={r['period_max_us']} after {k} s")
-        time.sleep(1.0)
-    print(f"  {k} heartbeats, cycle_max_us={worst}")
+    shown = {}
+    try:
+        while time.time() < end:
+            r, _ = api(host, "GET_STATE")
+            k += 1
+            if r.get("sys_err") == 3:
+                raise SystemExit(f"FAIL: COMM_TIMEOUT during soak after {k} s")
+            for key, lim in LIMITS.items():                 # report each limit violation once
+                v = r.get(key, 0)
+                if v > lim and shown.get(key) != v:
+                    print(f"  over the limit: {key}={v} after {k} s")
+                    shown[key] = v
+            if k % 60 == 0:
+                print(f"  {k // 60} min: overruns +{r.get('overruns', 0) - base}, cycle_max_us={r.get('cycle_max_us')}, "
+                      f"period_max_us={r.get('period_max_us')}" + (f", web files {stats['ok']} ok / {stats['err']} failed" if web else ""))
+            time.sleep(1.0)
+    finally:
+        stop.set()
+    print(f"  {k} heartbeats" + (f", web load: {stats['ok']} files ({stats['bytes'] // 1024} kB) ok, {stats['err']} failed" if web else ""))
+    if web and stats["ok"] == 0:
+        print("  WARNING: no web file could be loaded (data uploaded with uploadfs?) - the web load did not happen")
     return cycle_ok(host, base)
 
 
@@ -308,6 +346,7 @@ def main():
     ap.add_argument("--prepare", action="store_true", help="latency: INIT, wait for READY, HV_ON first; HV_OFF at the end")
     ap.add_argument("--n", type=int, default=0)
     ap.add_argument("--minutes", type=float, default=10)
+    ap.add_argument("--web", action="store_true", help="soak: load the web UI files without pause meanwhile")
     a = ap.parse_args()
     try:
         if a.test == "latency":
@@ -317,7 +356,7 @@ def main():
         elif a.test == "parallel":
             ok = t_parallel(a.host, a.n or 400, a.threads)
         elif a.test == "soak":
-            ok = t_soak(a.host, a.minutes)
+            ok = t_soak(a.host, a.minutes, a.web)
         else:
             ok = t_local(a.host)
     finally:
