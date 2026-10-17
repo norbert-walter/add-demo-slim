@@ -41,6 +41,10 @@ void wifiInit(const char* ssid, const char* pass) {
     // WiFi.mode(WIFI_AP_STA)
     WiFi.mode(WIFI_AP_STA);
 
+    // V1.5.24: modem sleep off – with sleep the ESP answers in 75 ... 140 ms and single requests
+    // took over 3 s (lost beacons, TCP retransmissions), which tripped the 5 s comm watchdog
+    WiFi.setSleep(false);
+
     // WiFi.setAutoReconnect(false) (the state machine reconnects, not the core)
     WiFi.setAutoReconnect(false);
 

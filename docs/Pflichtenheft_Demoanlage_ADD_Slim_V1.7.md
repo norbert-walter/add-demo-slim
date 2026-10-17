@@ -2,12 +2,23 @@
 
 **Stand:** 2026-10-17
 **Autor:** Norbert Walter
-**Version:** 1.7.7 (Sicherheitsflags nach Boot frei, serielle Konsole)
+**Version:** 1.7.8 (Bedienvorrang einstellbar, WLAN ohne Stromsparmodus)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.7.7 → V1.7.8 (Contract V1.5.24, 17.10.2026, Gerätetest I1 Teil 2c, Entscheidung Norbert Walter)
+- **Bedienvorrang einstellbar:** `LOCAL_HOLD_MS` in `config.h`, **Standard 0 = kein Vorrang**
+  (Display und API gleichrangig; Display-Befehle entschärfen weiterhin den Kommunikations-Watchdog),
+  1 … 60 000 ms = Haltezeit nach dem letzten Display-Befehl wie bisher (vorher fest 30 s).
+- **WLAN-Stromsparmodus aus** (`WiFi.setSleep(false)`): Antwortzeiten vorher 75–140 ms, einzelne
+  Anfragen über 3 s – der Watchdog löste trotz Heartbeat aus.
+- Watchdog-Logik unverändert (HV_ON bleibt überwacht: HV ist ein andauernder Zustand). Neu nur
+  Diagnose im Log: `/api`-Lücken > 2 s bei scharfem Watchdog und beim Timeout das Alter des letzten
+  Pakets. `add_client.py shell` hält den Watchdog nach jedem überwachten Befehl mit `GET_STATE`
+  jede Sekunde am Leben, bis `/proc` `comm_armed = false` meldet.
 
 ### V1.7.6 → V1.7.7 (Contract V1.5.23, 17.10.2026, Entscheidung Norbert Walter)
 - **Simulierte Sicherheitsflags nach jedem Boot `interlock = true`, `cooling_flow = true`**
@@ -110,7 +121,7 @@ von R20 4k7, LEDs je 20 mA, Buzzer, Display und Touch).
 
 | Bereich | V1.4 | V1.5 |
 |---|---|---|
-| Bedienvorrang | nicht geregelt (Display und API gleichrangig) | **Display hat Vorrang (LOCAL)**: nach jedem Display-Befehl lehnt die Anlage Start-Befehle von der API mit `LOCAL_CONTROL (−10)` ab; STOP/HV_OFF/SHUTTER_CLOSE/SET bleiben erlaubt. Ende 30 s nach dem letzten Display-Befehl, sobald Achse steht und HV aus ist |
+| Bedienvorrang | nicht geregelt (Display und API gleichrangig) | **Display hat Vorrang (LOCAL)**: nach jedem Display-Befehl lehnt die Anlage Start-Befehle von der API mit `LOCAL_CONTROL (−10)` ab; STOP/HV_OFF/SHUTTER_CLOSE/SET bleiben erlaubt. Ende 30 s nach dem letzten Display-Befehl, sobald Achse steht und HV aus ist. **V1.7.8:** Haltezeit `LOCAL_HOLD_MS`, Standard 0 = kein Vorrang |
 | STOP-Latenz | STOP wartete u. U. auf einen Zyklus ohne Fahrauftrag, volle Queue → BUSY | **Prioritäts-Queue** für STOP/HV_OFF/SHUTTER_CLOSE, Ausführung auch bei laufendem Fahrauftrag; ≤ 2 ms bis zum Treiber |
 | API-Antwort | vor dem Setzen der Ausgänge | **nach** dem Setzen der Ausgänge: `OK` = angenommen und Ausgänge gesetzt; Bewegungsende nur über `/proc` |
 | Zykluszeit | nicht überwacht | im Gerät gemessen und in `GET_STATE` gemeldet: Rechenzeit `cycle_max_us` < 500 µs, Überläufe 0, Jitter `period_max_us` < 1500 µs, Prioritätsbefehl-Latenz `prio_lat_max_us` ≤ 2000 µs |
@@ -663,7 +674,9 @@ Vorrang. Jeder Display-Befehl setzt `local = true`. Solange `local` aktiv ist, w
 von der API abgelehnt (`LOCAL_CONTROL`): INIT, MOVE, PARK, SERVICE, START_MEASURE,
 START_TRAVERSE, HV_ON, SHUTTER_OPEN, CALIB, ACK, REBOOT. Erlaubt bleiben STOP, HV_OFF, SHUTTER_CLOSE
 (sichere Richtung), SET (Fehlersimulation) und Abfragen. `local` endet, wenn die Achse
-steht, HV aus ist und seit dem letzten Display-Befehl 30 s vergangen sind.
+steht, HV aus ist und seit dem letzten Display-Befehl `LOCAL_HOLD_MS` vergangen sind.
+**V1.7.8:** `LOCAL_HOLD_MS` (`config.h`) ist standardmäßig **0 = kein Vorrang**: Display-Befehle
+setzen `local` nicht, Display und API sind gleichrangig. STOP und Not-Aus wirken immer.
 
 ### STOP-Priorität
 STOP, HV_OFF und SHUTTER_CLOSE laufen über eine eigene Prioritäts-Queue und werden auch

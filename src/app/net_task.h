@@ -13,6 +13,14 @@
  *       persisted / scheduled by steps 3 and 4 of the same call
  *    1. wifiLoop(now)
  *    2. httpServerLoop()
+ *    2a. V1.5.24 comm diagnostics (log only, no effect on the device): ProcData d; snapshotGet(d);
+ *       rx = snapshotLastApiRx(). When rx differs from the value of the previous step (a new valid
+ *       /api packet) and the watchdog was armed at the previous packet and in every step since
+ *       (d.safety.comm_armed): gap = rx - previous rx; the longest such gap is kept;
+ *       gap > COMM_GAP_LOG_MS -> logLine("comm: /api gap %u ms", gap). The first step only stores rx.
+ *       d.err == COMM_TIMEOUT for the first step (edge) -> logLine("comm: timeout, last /api packet
+ *       %u ms ago, longest gap while armed %u ms", now - rx, longest gap). The longest gap is reset
+ *       while the watchdog is disarmed and no COMM_TIMEOUT is shown.
  *    3. if snapshotTakePersistRequest(): Params p; SafetyFlags f; snapshotGetConfig(p, f);
  *       logLine("nvs: saved") if nvsSaveParams(p) returned true, else logLine("nvs: save FAILED")
  *    4. if snapshotTakeRebootRequest() and no reboot is pending: reboot pending, due at

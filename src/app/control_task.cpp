@@ -35,6 +35,8 @@ static AppConfig makeConfig() {
     AppConfig c;
     c.motion.steps_per_mm = STEPS_PER_MM;
     c.comm_timeout_ms = COMM_TIMEOUT_MS;
+    c.local_hold_ms = LOCAL_HOLD_MS;                // V1.5.24
+    static_assert(LOCAL_HOLD_MS <= 60000, "LOCAL_HOLD_MS: 0 ... 60000 ms");
     return c;   // all other values: defaults from logic/*.h (CONTRACT)
 }
 

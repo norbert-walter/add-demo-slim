@@ -149,6 +149,38 @@ static void consoleStep() {
     }
 }
 
+// ---- V1.5.24: comm diagnostics -------------------------------------------------------------------
+static bool     s_rx_seen = false;
+static uint32_t s_prev_rx = 0;
+static bool     s_prev_armed = false;
+static uint32_t s_max_gap = 0;
+static bool     s_timeout_logged = false;
+
+static void commDiagnostics(uint32_t now_ms) {
+    ProcData d;
+    snapshotGet(d);
+    uint32_t rx = snapshotLastApiRx();
+    bool armed = d.safety.comm_armed;
+    if (!armed) s_prev_armed = false;               // a gap counts only if armed the whole time
+    if (!s_rx_seen || rx != s_prev_rx) {
+        if (s_rx_seen && s_prev_armed && armed) {
+            uint32_t gap = rx - s_prev_rx;
+            if (gap > s_max_gap) s_max_gap = gap;
+            if (gap > COMM_GAP_LOG_MS) logLine("comm: /api gap %u ms", (unsigned)gap);
+        }
+        s_prev_rx = rx;
+        s_prev_armed = armed;
+        s_rx_seen = true;
+    }
+    bool timeout = d.err == ErrorCode::COMM_TIMEOUT;
+    if (timeout && !s_timeout_logged) {
+        logLine("comm: timeout, last /api packet %u ms ago, longest gap while armed %u ms",
+                (unsigned)(now_ms - rx), (unsigned)s_max_gap);
+    }
+    s_timeout_logged = timeout;
+    if (!armed && !timeout) s_max_gap = 0;
+}
+
 static void netTask(void* parameter) {
     for (;;) {
         netTaskStep(millis());
@@ -170,6 +202,9 @@ void netTaskStep(uint32_t now_ms) {
 
     // 2. httpServerLoop()
     httpServerLoop();
+
+    // 2a. comm diagnostics (V1.5.24)
+    commDiagnostics(now_ms);
 
     // 3. Persist request: save config copy to NVS
     if (snapshotTakePersistRequest()) {

@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5.17) – Sprint P2 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.24; P2 version V1.5.17) – do not modify.
 // Host test of the REAL src/comm/wifi_manager.cpp with WiFi/ESPmDNS shims
 // (test/native/freertos_shim). The tests form ONE scenario and must run in this order
 // (wifi_manager keeps its state in file-static variables, like on the device).
@@ -35,6 +35,8 @@ void test_init_starts_ap_and_mdns() {
     ShimWiFi& w = shimWiFi();
     TEST_ASSERT_EQUAL_INT(WIFI_AP_STA, w.mode);
     TEST_ASSERT_FALSE(w.auto_reconnect);
+    TEST_ASSERT_FALSE(w.sleep);                                       // V1.5.24: modem sleep off
+    TEST_ASSERT_TRUE(w.calls.size() >= 2 && w.calls[0] == "mode" && w.calls[1] == "setSleep 0");   // after mode()
     TEST_ASSERT_EQUAL_STRING(WIFI_AP_SSID, w.ap_ssid.c_str());
     TEST_ASSERT_EQUAL_STRING(WIFI_AP_PASS, w.ap_pass.c_str());
     TEST_ASSERT_EQUAL_STRING("add-demo", shimMdns().host.c_str());

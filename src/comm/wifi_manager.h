@@ -21,7 +21,8 @@
  *
  * V1.5.16 – exact behaviour (tested natively with WiFi/MDNS shims: test/native/test_wifi_manager):
  *  wifiInit: copies ssid and pass into file-static buffers (sizes as Params::wifi_ssid /
- *    wifi_pass, truncated), WiFi.mode(WIFI_AP_STA), WiFi.setAutoReconnect(false) (the state
+ *    wifi_pass, truncated), WiFi.mode(WIFI_AP_STA), V1.5.24: WiFi.setSleep(false) (modem sleep
+ *    off: low latency for the comm watchdog), WiFi.setAutoReconnect(false) (the state
  *    machine reconnects, not the core), WiFi.softAP(WIFI_AP_SSID, WIFI_AP_PASS),
  *    MDNS.begin("add-demo"), MDNS.addService("http", "tcp", HTTP_PORT),
  *    logLine("ap: %s %s", WIFI_AP_SSID, <AP IP>). StaConfig = defaults (3 x 10 s, 120 s).

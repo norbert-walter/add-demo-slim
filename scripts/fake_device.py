@@ -56,6 +56,7 @@ class Sim:
                     "calib_valid": True, "interlock": True, "cooling_flow": True, "temp": 18.0, "estop_nc": False,
                     "wifi_ssid": "", "wifi_pass_set": False}
         self.n, self.sum, self.t0 = 0, 0.0, time.time()
+        self.last_api = time.time()
 
     def step(self):
         now = time.time()
@@ -66,6 +67,12 @@ class Sim:
             if abs(d) <= abs(sp): self.pos, self.mstate, self.vel = self.target, 'idle', 0.0
             else: self.pos += sp
         if self.state == 'FAULT': self.state = 'WAIT_ACK'
+        # communication watchdog (CONTRACT §6.5): disarmed when idle and HV off, fault after 5 s silence
+        if self.comm_armed and self.mstate == 'idle' and not self.hv_on: self.comm_armed = False
+        if self.comm_armed and now - self.last_api > 5.0:
+            self.comm_armed, self.hv_on, self.shutter = False, False, 'closed'
+            self.mstate, self.vel, self.mode = 'idle', 0.0, 'none'
+            self.state, self.err = 'FAULT', 3
 
     def proc(self):
         dist = 70.0 - (12.0 if 105 <= self.pos <= 225 else 0.0)
@@ -84,11 +91,12 @@ class Sim:
 
     def command(self, cmd, params):
         self.log.append({'cmd': cmd, 'params': params})
+        self.last_api = time.time()
         st = self.state
         if cmd == 'GET_STATE': return 0, {"state": st, "sys_err": self.err, "local": self.local}
         if cmd == 'GET_CONFIG': return 0, {"config": dict(self.cfg)}
         if cmd == 'STOP':
-            self.mstate, self.vel, self.mode = 'idle', 0.0, 'none'; self.shutter = 'closed'; self.comm_armed = False
+            self.mstate, self.vel, self.mode = 'idle', 0.0, 'none'; self.shutter = 'closed'
             return 0, None
         if cmd == 'HV_OFF':
             self.hv_on = False; self.shutter = 'closed'
@@ -98,12 +106,12 @@ class Sim:
         if cmd == 'INIT':
             if st not in ('SAFE_START', 'READY'): return -5, None
             if self.mstate != 'idle': return -7, None
-            self.mstate, self.t_end, self.vel = 'homing', time.time() + 2.0, 5.0; return 0, None
+            self.mstate, self.t_end, self.vel = 'homing', time.time() + 2.0, 5.0; self.comm_armed = True; return 0, None
         if cmd == 'HV_ON':
             if st not in ('READY', 'RUNNING'): return -5, None
             p = self.proc()['safety']
             if not p['hv_ok']: return -6, None
-            self.hv_on, self.state = True, 'RUNNING'; return 0, None
+            self.hv_on, self.state = True, 'RUNNING'; self.comm_armed = True; return 0, None
         if cmd in ('START_MEASURE', 'START_TRAVERSE'):
             if st != 'RUNNING': return -5, None
             if not self.homed: return -6, None

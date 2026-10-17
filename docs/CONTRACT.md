@@ -1,7 +1,7 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.23 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-17
-**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.7
+**Version:** 1.5.24 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-17
+**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.8
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
 
@@ -169,6 +169,15 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 1 | `test_hardware` crashed in `test_nvs_roundtrip` (Guru Meditation "Cache disabled but cached memory region accessed", PC in `StepperQueue::fill_i2s_buffer`). Cause in FastAccelStepper 96459ed: the I2S TX-done interrupt runs permanently with I2S_MUX and is IRAM-safe, but `fill_i2s_buffer()` and `I2sManager::i2sMuxSetBit()` were in flash; every flash operation (NVS write, SPIFFS read, OTA) crashed the board, also with the motor idle. Fix: both functions `IRAM_ATTR` (fork `norbert-walter/FastAccelStepper`, commit a64ceff on 96459ed; pull request to gin66 pending). Checked with nm/objdump: every function reachable from the interrupt is in IRAM, no literals into flash | `platformio.ini` |
 | 2 | Post-build check `scripts/check_iram.py` (all ESP32 environments): the build fails if one of the I2S interrupt functions is linked into flash (protects against library updates). Verified: fails with 96459ed, passes with a64ceff | `platformio.ini`, `scripts/` |
 | 3 | The nine native H1 tests could not see this (no flash cache on the host); the first five on-device tests were green (inputs, sensor, outputs, E-stop polarity change) | – |
+
+**Changes 1.5.24 (I1 device test part 2c, 2026-10-17, decision Norbert Walter):**
+
+| # | Change | Where |
+|---|---|---|
+| 1 | **`LOCAL_HOLD_MS` in `config.h`, default 0 = LOCAL priority off**; 1 … 60000 ms = hold time (static_assert). `AppConfig::local_hold_ms` = 0: a display command still disarms the watchdog but never sets `local`. Found on the device: after ACK and INIT at the display the API was blocked for minutes (correct per V1.1, but not wanted for the demo) | `config.h`, `control_task.cpp`, `app_logic.h/.cpp`, `test_app_logic` (+1) |
+| 2 | **WiFi modem sleep off** (`WiFi.setSleep(false)` right after `WiFi.mode`). Measured before: 75 … 140 ms per request, single requests over 3 s; the 5 s watchdog fired twice although the client sent GET_STATE every 2 s | `wifi_manager.h/.cpp`, WiFi shim, `test_wifi_manager` |
+| 3 | Watchdog logic **unchanged** (HV_ON stays a monitored command – HV is a lasting state). New: diagnostics in the network task (step 2a): `/api` gaps > `COMM_GAP_LOG_MS` (2 s) while armed are logged, and the COMM_TIMEOUT edge with the age of the last packet and the longest gap | `net_task.h/.cpp`, `test_net_task` (+1) |
+| 4 | `scripts/add_client.py shell`: after an accepted INIT, MOVE, PARK, SERVICE, START_*, HV_ON it sends GET_STATE every second until `/proc` reports `comm_armed = false`; immediate retry, warning after 2.5 s without an answer; `fake_device.py` simulates the watchdog | `scripts/` |
 
 **Changes 1.5.23 (I1 device test part 2, 2026-10-17, decision Norbert Walter):**
 
@@ -665,7 +674,9 @@ priority.
   before the state gate. Always allowed from the API: `STOP, HV_OFF,
   SHUTTER_CLOSE` (safe direction), `SET` (fault simulation), `GET_STATE`,
   `GET_CONFIG`.
-- **Leave:** axis idle **and** HV off **and** ≥ 30 s (`local_hold_ms`) since the
+- **V1.5.24:** `local_hold_ms` = `LOCAL_HOLD_MS` (`config.h`), **default 0 = priority off**: a
+  display command disarms the watchdog but does not set `local`; display and API are equal.
+- **Leave:** axis idle **and** HV off **and** ≥ `local_hold_ms` (V1.1: 30 s) since the
   last display command. So a locally started operation keeps priority until it
   has ended; a remote `HV_OFF` ends it after the hold time.
 - Shown as `"local":true` in `/proc` and GET_STATE, as a badge on the display

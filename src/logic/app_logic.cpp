@@ -351,7 +351,8 @@ ApiError appCommand(AppState& s, const Command& cmd, const HwInputs& hw, const A
     if (cmd.id == CmdId::GET_STATE || cmd.id == CmdId::GET_CONFIG) return ApiError::OK;
     uint32_t now_ms = hw.now_ms;
     if (cmd.source == CmdSource::LOCAL) {
-        s.local = true; s.local_last_ms = now_ms; s.comm_armed = false;
+        s.comm_armed = false;
+        if (cfg.local_hold_ms > 0) { s.local = true; s.local_last_ms = now_ms; }   // V1.5.24: 0 = priority off
     } else if (s.local && appLocalBlocksApi(cmd.id)) {
         return ApiError::LOCAL_CONTROL;
     }

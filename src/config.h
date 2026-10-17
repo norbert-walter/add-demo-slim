@@ -116,6 +116,10 @@
 #define NET_TASK_PRIO        3
 #define NET_TASK_STACK       8192
 #define NET_TASK_PERIOD_MS   5      // V1.5.20: wifiLoop + handleClient + persist/reboot every 5 ms
+#define LOCAL_HOLD_MS        0      // V1.5.24: LOCAL priority hold after the last display command;
+                                    //   0 = LOCAL priority off (display commands never set "local"),
+                                    //   1 ... 60000 ms = hold time (CONTRACT §6.6)
+#define COMM_GAP_LOG_MS      2000   // V1.5.24: log an /api gap longer than this while the watchdog is armed
 #define CONSOLE_LINE_MAX     120    // V1.5.23: serial console, longest accepted line (without '\n')
 #define CONSOLE_READ_MAX     64     // V1.5.23: serial bytes read per netTaskStep at most
 #define DISPLAY_TASK_CORE    1      // V1.5.20

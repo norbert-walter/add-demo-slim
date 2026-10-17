@@ -56,6 +56,8 @@ ApiError cmdQueueSendAndWait(Command& c, uint32_t timeout_ms) {
     return r;
 }
 void snapshotGet(ProcData& d) { rec("snapshotGet"); d = g_proc; }
+static uint32_t g_last_rx = 0;                                    // V1.5.24
+uint32_t snapshotLastApiRx() { return g_last_rx; }
 StaStatus wifiStaStatus() { return g_sta; }
 void wifiGetApIp(char* b, size_t cap) { snprintf(b, cap, "192.168.4.1"); }
 void wifiGetStaIp(char* b, size_t cap) { snprintf(b, cap, "%s", g_sta.state == StaState::CONNECTED ? "192.168.1.57" : ""); }
@@ -107,14 +109,14 @@ void test_loop_only_sleeps() {
 }
 void test_step_order_without_requests() {
     step(1000);
-    const std::vector<std::string> exp = {"wifiLoop 1000", "httpServerLoop", "takePersist", "takeReboot"};
+    const std::vector<std::string> exp = {"wifiLoop 1000", "httpServerLoop", "snapshotGet", "takePersist", "takeReboot"};
     TEST_ASSERT_EQUAL_UINT32(exp.size(), g_calls.size());
     for (size_t i = 0; i < exp.size(); ++i) TEST_ASSERT_EQUAL_STRING(exp[i].c_str(), g_calls[i].c_str());
 }
 void test_persist_saves_the_snapshot_config() {
     paramsDefaults(g_config); strcpy(g_config.wifi_ssid, "Neu");
     g_persist = true; step(1005);
-    const std::vector<std::string> exp = {"wifiLoop 1005", "httpServerLoop", "takePersist", "snapshotGetConfig",
+    const std::vector<std::string> exp = {"wifiLoop 1005", "httpServerLoop", "snapshotGet", "takePersist", "snapshotGetConfig",
                                           "nvsSaveParams Neu", "log nvs: saved", "takeReboot"};
     TEST_ASSERT_EQUAL_UINT32(exp.size(), g_calls.size());
     for (size_t i = 0; i < exp.size(); ++i) TEST_ASSERT_EQUAL_STRING(exp[i].c_str(), g_calls[i].c_str());
@@ -304,6 +306,34 @@ void test_v1523_console_partial_lines_limits_and_one_command_per_step() {
     Serial.clear();
 }
 
+// ---- V1.5.24: comm diagnostics -------------------------------------------------------------------
+static int logs(const char* prefix) { int n = 0; for (auto& c : g_calls) if (c.rfind(std::string("log ") + prefix, 0) == 0) ++n; return n; }
+void test_v1524_comm_gap_and_timeout_logged() {
+    g_proc = ProcData(); g_proc.safety.comm_armed = false; g_last_rx = 500;
+    g_calls.clear(); step(500);
+    g_last_rx = 9000; step(9000);                                         // long gap, but not armed
+    TEST_ASSERT_EQUAL_INT(0, logs("comm:"));
+    g_proc.safety.comm_armed = true; g_last_rx = 10000; step(10000);      // armed now, but not at the previous packet
+    TEST_ASSERT_EQUAL_INT(0, logs("comm:"));
+    g_last_rx = 11500; step(11500);                                       // 1500 ms: no log
+    g_last_rx = 13500; step(13500);                                       // exactly 2000: no log
+    TEST_ASSERT_EQUAL_INT(0, logs("comm:"));
+    g_last_rx = 16000; step(16000);                                       // 2500 ms
+    TEST_ASSERT_EQUAL_INT(1, count("log comm: /api gap 2500 ms"));
+    step(17000); step(18000);                                             // no new packet: nothing
+    TEST_ASSERT_EQUAL_INT(1, logs("comm:"));
+    g_proc.err = ErrorCode::COMM_TIMEOUT; g_proc.safety.comm_armed = false; step(21100);
+    TEST_ASSERT_EQUAL_INT(1, count("log comm: timeout, last /api packet 5100 ms ago, longest gap while armed 2500 ms"));
+    step(21200); step(21300);                                             // only once (edge)
+    TEST_ASSERT_EQUAL_INT(2, logs("comm:"));
+    g_proc.err = ErrorCode::NONE; step(30000);                            // acknowledged, disarmed: reset
+    g_proc.safety.comm_armed = true; g_last_rx = 31000; step(31000);
+    g_last_rx = 32000; step(32000);
+    g_proc.err = ErrorCode::COMM_TIMEOUT; step(37500);
+    TEST_ASSERT_EQUAL_INT(1, count("log comm: timeout, last /api packet 5500 ms ago, longest gap while armed 1000 ms"));
+    g_proc = ProcData();
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_setup_order);
@@ -323,5 +353,6 @@ int main(int, char**) {
     RUN_TEST(test_v1523_console_wifi_errors_stop_the_sequence);
     RUN_TEST(test_v1523_console_wifi_off_and_reboot);
     RUN_TEST(test_v1523_console_partial_lines_limits_and_one_command_per_step);
+    RUN_TEST(test_v1524_comm_gap_and_timeout_logged);
     return UNITY_END();
 }

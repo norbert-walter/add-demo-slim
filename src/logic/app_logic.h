@@ -39,7 +39,8 @@ struct AppConfig {
     MotionConfig motion;
     SensorCurve  sensor;
     uint32_t     comm_timeout_ms = 5000;
-    uint32_t     local_hold_ms   = 30000;  ///< V1.1: LOCAL priority hold time after the last touch
+    uint32_t     local_hold_ms   = 30000;  ///< V1.1: LOCAL priority hold time after the last touch;
+                                           ///< V1.5.24: 0 = LOCAL priority off (the firmware uses LOCAL_HOLD_MS)
 };
 
 /// Everything the application remembers between cycles. Owned by the control task.
@@ -181,7 +182,8 @@ HwOutputs appTick(AppState& s, const HwInputs& hw, const AppConfig& cfg);
  * Executes one command (CONTRACT §6.3, §9). Never blocks.
  *  - GET_STATE, GET_CONFIG: OK, no action (answered by the HTTP task from the snapshot).
  *  - V1.1 LOCAL priority (checked BEFORE the state gate):
- *      source LOCAL: local = true, local_last_ms = now, comm_armed = false
+ *      source LOCAL: comm_armed = false; and if cfg.local_hold_ms > 0 (V1.5.24):
+ *        local = true, local_last_ms = now  (local_hold_ms == 0: LOCAL priority off, local stays false)
  *                    (also if the command is then rejected by the gate);
  *      source API && local && appLocalBlocksApi(id) -> LOCAL_CONTROL, no action.
  *  - gate: safetyCmdAllowed(state, id) != OK -> return it.

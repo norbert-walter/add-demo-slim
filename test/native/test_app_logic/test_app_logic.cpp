@@ -711,6 +711,20 @@ void test_api_stop_allowed_during_local_operation() {
     TEST_ASSERT_TRUE(proc().motion.mode == OpMode::NONE);
     TEST_ASSERT_FALSE(last_out.shutter_open);
 }
+void test_v1524_local_hold_zero_turns_local_priority_off() {
+    homeAndReady();
+    uint32_t keep = C.local_hold_ms; C.local_hold_ms = 0;
+    API(ApiError::OK, send(CmdId::HV_ON));                                // remote HV on arms the watchdog
+    TEST_ASSERT_TRUE(S.comm_armed);
+    API(ApiError::OK, send(CmdId::STOP, CmdSource::LOCAL));              // display command
+    TEST_ASSERT_FALSE(S.local);                                           // no LOCAL priority
+    TEST_ASSERT_FALSE(proc().local);
+    TEST_ASSERT_FALSE(S.comm_armed);                                      // but the operator is present
+    API(ApiError::OK, send(CmdId::HV_OFF));
+    run(100);
+    API(ApiError::OK, send(CmdId::INIT));                                 // API not blocked
+    C.local_hold_ms = keep;
+}
 void test_local_ack_in_fault() {
     running();
     API(ApiError::OK, send(CmdId::HV_OFF, CmdSource::LOCAL));
@@ -1241,6 +1255,7 @@ int main(int, char**) {
     RUN_TEST(test_local_held_until_local_motion_ends);
     RUN_TEST(test_local_takes_over_remote_operation);
     RUN_TEST(test_api_stop_allowed_during_local_operation);
+    RUN_TEST(test_v1524_local_hold_zero_turns_local_priority_off);
     RUN_TEST(test_local_ack_in_fault);
     RUN_TEST(test_stop_executes_in_first_cycle_during_traverse);
     RUN_TEST(test_stop_executed_in_cycle_with_driver_request);
