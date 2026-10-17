@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.20 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-15
+**Version:** 1.5.21 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-16
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.6
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -169,6 +169,14 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 1 | `test_hardware` crashed in `test_nvs_roundtrip` (Guru Meditation "Cache disabled but cached memory region accessed", PC in `StepperQueue::fill_i2s_buffer`). Cause in FastAccelStepper 96459ed: the I2S TX-done interrupt runs permanently with I2S_MUX and is IRAM-safe, but `fill_i2s_buffer()` and `I2sManager::i2sMuxSetBit()` were in flash; every flash operation (NVS write, SPIFFS read, OTA) crashed the board, also with the motor idle. Fix: both functions `IRAM_ATTR` (fork `norbert-walter/FastAccelStepper`, commit a64ceff on 96459ed; pull request to gin66 pending). Checked with nm/objdump: every function reachable from the interrupt is in IRAM, no literals into flash | `platformio.ini` |
 | 2 | Post-build check `scripts/check_iram.py` (all ESP32 environments): the build fails if one of the I2S interrupt functions is linked into flash (protects against library updates). Verified: fails with 96459ed, passes with a64ceff | `platformio.ini`, `scripts/` |
 | 3 | The nine native H1 tests could not see this (no flash cache on the host); the first five on-device tests were green (inputs, sensor, outputs, E-stop polarity change) | – |
+
+**Correction 1.5.21 (first flash of the complete firmware, 2026-10-16):**
+
+| # | Correction | Where |
+|---|---|---|
+| 1 | **Backlight is active LOW** on the MKS TS35R at the DLC32 (GPIO 5 LOW = light on). `Light_PWM` `invert = true`. Found on the device: with `setBrightness(255)` the light went off right after the first picture; the smoketest (0a, section 6) never called `setBrightness` and ran at LovyanGFX's default 50 % duty, which is 50 % light in either polarity. Not visible in host tests (the shim has no backlight model). Verified on the device by Norbert: display on right after boot | `src/display/lgfx_config.h` |
+| 2 | **Position bar mirrored**, as seen from the front of the gauge: axis 0 (home switch) on the RIGHT, service position right of centre-right, park at the right edge. `bx(mm) = 472 - (int)(clamp(mm, 0, 242) / 242 * 468)`; zones drawn from `bx(upper) + 4` to `bx(lower) + 4`. The web pages (Sprint W1) use the same direction | `display.h`, `display.cpp` (`barX`, `drawBar`), `test_display` |
+| 3 | **Header:** state text `[ <name> ]` at x = **112** (was 150). `[ SAFE_START ]` (14 characters, 168 px) reached x = 318 and overwrote "LOCAL" (x = 288); now it ends at 280. `test_display` checks for every normal-screen state that the state text and "LOCAL" are both visible and do not overlap | `display.h`, `display.cpp` (`drawHeader`), `test_display` |
 
 **Clarifications 1.5.20 (preparation of Sprint I1, 2026-10-16, two additions):**
 

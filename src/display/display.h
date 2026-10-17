@@ -67,7 +67,7 @@
  *    5. previous touch = touch.
  *  Screen (480 x 320; "text(x, y, size)" = top-left datum unless "centred" = middle_center):
  *    Header y 0..31, background COL_PANEL, in all modes:
- *      "ADD DEMO" (8, 8, 2) COL_TEXT; "[ <safetyStateName> ]" (150, 8, 2), colour COL_OK for READY /
+ *      "ADD DEMO" (8, 8, 2) COL_TEXT; "[ <safetyStateName> ]" (112, 8, 2) (V1.5.21, was 150: "[ SAFE_START ]" reached under "LOCAL"), colour COL_OK for READY /
  *      RUNNING, COL_FAULT for FAULT / WAIT_ACK, else COL_WARN; "LOCAL" (288, 8, 2) COL_WARN only
  *      while d.local; "HV" (360, 8, 2) and "SHUTTER" (396, 8, 2): COL_WARN if on / open, else COL_LABEL.
  *    NORMAL:
@@ -75,9 +75,11 @@
  *        "POS" "SPEED" "DIST" "THICK"; value (x+6, 60, 3) "%.1f" of motion.pos, motion.vel,
  *        measure.dist, measure.thick ("---" for DIST and THICK while !measure.valid), colours
  *        COL_TEXT, COL_TEXT, COL_DIST, COL_THICK; unit (x+6, 92, 1) COL_LABEL "mm" "mm/s" "mm" "mm".
- *      position bar y 112..131, x 4..475: bx(mm) = 4 + (int)(clamp(mm, 0, 242) / 242 * 468);
- *        park zone bx(0)..bx(20) COL_PARK, maintenance zone bx(20)..bx(60) COL_WARN, frame
- *        COL_FRAME, marker fillRect(bx(pos), 112, 4, 20, COL_TEXT).
+ *      position bar y 112..131, x 4..475, V1.5.21 MIRRORED (as seen from the front of the gauge:
+ *        axis 0 = home switch on the RIGHT): bx(mm) = 472 - (int)(clamp(mm, 0, 242) / 242 * 468);
+ *        park zone fillRect(bx(20) + 4, 112, bx(0) - bx(20), 20, COL_PARK), maintenance zone
+ *        fillRect(bx(60) + 4, 112, bx(20) - bx(60), 20, COL_WARN), frame COL_FRAME,
+ *        marker fillRect(bx(pos), 112, 4, 20, COL_TEXT).
  *      (6, 144, 2) "ESTOP" if estop_nc else "ESTOP(NO)"; colour COL_FAULT while safety.estop, else
  *        COL_OK if estop_nc, else COL_WARN (simple switch, no wire-break detection).
  *      (180, 144, 2) "TEMP(SIM) %.1fC" COL_OK if temp_ok else COL_WARN.

@@ -55,7 +55,7 @@ Teil der Definition of Done in `.clinerules`.
 | P1 | `comm/log_buffer.cpp`, `system/nvs_config.cpp`, `system/system.cpp` | ✅ fertig (Qwen) | `test_log_buffer` 12/12 · `test_nvs_config` 14/14 · `test_system` 4/4 · firmware-partial ✅ | ✅ 15.10.2026, Tag `sprint-p1` |
 | P2 | `comm/wifi_manager.cpp`, `comm/http_server.cpp` | ✅ fertig (Qwen) | `test_wifi_manager` 10/10 · `test_http_server` 19/19 · firmware-partial ✅ | ✅ 15.10.2026, Tag `sprint-p2` |
 | H1 | `hal/hal_io.cpp`, `hal/motion_drv.cpp` | ✅ fertig (Qwen) | `test_hal_io` 16/16 · `test_motion_drv` 10/10 · firmware-partial ✅ · `test_hardware` am Gerät 8/8 | ✅ 16.10.2026, Tag `sprint-h1` |
-| I1 | `app/net_task.cpp`, `main.cpp`, `display/display.cpp`, Gesamt-Build | ⬜ offen | `test_net_task` 10 · `test_display` 15 · `pio run -e firmware` · Prüfliste am Gerät | – |
+| I1 | `app/net_task.cpp`, `main.cpp`, `display/display.cpp`, Gesamt-Build | ✅ fertig (Qwen; Display-Gerüst und Korrekturen Claude) | `test_net_task` 10/10 · `test_display` 15/15 · `pio run -e firmware` ✅ · Prüfliste am Gerät 8/8 | ✅ 17.10.2026, Tag `sprint-i1` |
 | W1 | `data/www/index.html`, `settings.html` | ⬜ offen | Sichtprüfung | – |
 | A1 | Abnahme | ⬜ offen | Pflichtenheft Kapitel 10 | – |
 | D1 | `data/add.json`, `data/doc.md`, Demo-Skripte | ⬜ offen | KI-Validierung | – |
