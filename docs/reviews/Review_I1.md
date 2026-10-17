@@ -132,3 +132,5 @@ Grund ist das Display: viele Koordinaten, Farben und Zustände, die Qwen nicht i
 3. **Bildschirmmodell mit Grenzen:** Das Modell kennt Flächen und Textrahmen, aber keine Glyphen.
    K6 fand erst die Durchsicht. Der Differenztest prüft deshalb zusätzlich die Kopfzeile
    pixelgenau, und der Gerätetest bleibt Pflicht.
+
+> **Teil 2 (lokal, Heimnetz, REST):** siehe [Review_I1_Teil2.md](Review_I1_Teil2.md) – bestanden, Korrekturen K1–K4, Zeitgrenze 3 ms.

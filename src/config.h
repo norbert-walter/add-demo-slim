@@ -136,8 +136,9 @@
 #define HTTP_IDLE_DROP_MS    500    // V1.5.25: close a connection that sent no request for this long
 #define HTTP_IDLE_LOG_MS     10000  // V1.5.25: at most one "http: idle connection closed" line per 10 s
 #define NET_SLOW_LOG_MS      200    // V1.5.25: /log line when a net task part or the gap between steps takes longer
-#define CYCLE_DIAG_PERIOD_US 2000   // V1.5.25: a cycle start later than this after the previous one is logged
-                                    //   (1500 flooded /log: StepperTask on core 1 delays starts by ~0.7 ms)
+#define CYCLE_DIAG_CYCLE_US  2000   // V1.5.25: a cycle with a longer work time is logged ("ctrl:")
+#define CYCLE_DIAG_PERIOD_US 2500   // V1.5.25: a cycle start later than this after the previous one is logged
+                                    //   (both near the 3 ms limit; cycles just over 1 ms flooded the 20-line /log)
 #define CYCLE_DIAG_LOG_MS    5000   // V1.5.25: at most one "ctrl:" diagnostic line per 5 s
 #define API_BODY_MAX         512
 #define API_REPLY_TIMEOUT_MS 100    // HTTP waits this long for the control task

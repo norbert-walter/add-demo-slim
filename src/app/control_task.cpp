@@ -171,8 +171,8 @@ static void controlLoop(void*) {
         if (dt_us > cs.cycle_max_us) cs.cycle_max_us = dt_us;
         if (dt_us > CONTROL_PERIOD_MS * 1000u) cs.overruns++;
         snapshotSetCycleStats(cs);
-        // V1.5.25: keep the breakdown of an overrun or a late start for the /log (net task)
-        if (dt_us > CONTROL_PERIOD_MS * 1000u || period_us > CYCLE_DIAG_PERIOD_US) {
+        // V1.5.25: keep the breakdown of a cycle near the 3 ms limit for the /log (net task)
+        if (dt_us > CYCLE_DIAG_CYCLE_US || period_us > CYCLE_DIAG_PERIOD_US) {
             taskENTER_CRITICAL(&s_diag_mux);
             s_diag.seq++;
             s_diag.total_us  = dt_us;

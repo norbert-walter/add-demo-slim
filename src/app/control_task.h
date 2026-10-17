@@ -20,8 +20,8 @@ bool controlTaskStart(const Params& params);
 /// start, flash access) do not count.
 void controlResetCycleStats();
 
-/// V1.5.25 diagnostics: breakdown of the LAST cycle that overran (work time > CONTROL_PERIOD_MS)
-/// or started late (period > CYCLE_DIAG_PERIOD_US). seq counts such cycles; the net task logs a
+/// V1.5.25 diagnostics: breakdown of the LAST cycle with a work time > CYCLE_DIAG_CYCLE_US (2 ms)
+/// or a start later than CYCLE_DIAG_PERIOD_US (2.5 ms) after the previous one (near the 3 ms limit). seq counts such cycles; the net task logs a
 /// line when seq changed (rate-limited). Parts in us: adc = ADC sample + measurement, tick =
 /// readInputs + appTick, cmd = commands, out = outputs, pub = replies + publish + statistics.
 struct CycleDiag {
