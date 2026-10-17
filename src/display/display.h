@@ -67,7 +67,7 @@
  *    5. previous touch = touch.
  *  Screen (480 x 320; "text(x, y, size)" = top-left datum unless "centred" = middle_center):
  *    Header y 0..31, background COL_PANEL, in all modes:
- *      "ADD DEMO" (8, 8, 2) COL_TEXT; "[ <safetyStateName> ]" (150, 8, 2), colour COL_OK for READY /
+ *      "ADD DEMO" (8, 8, 2) COL_TEXT; "[ <safetyStateName> ]" (112, 8, 2) (V1.5.21, was 150: "[ SAFE_START ]" reached under "LOCAL"), colour COL_OK for READY /
  *      RUNNING, COL_FAULT for FAULT / WAIT_ACK, else COL_WARN; "LOCAL" (288, 8, 2) COL_WARN only
  *      while d.local; "HV" (360, 8, 2) and "SHUTTER" (396, 8, 2): COL_WARN if on / open, else COL_LABEL.
  *    NORMAL:

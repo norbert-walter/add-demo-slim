@@ -1,14 +1,14 @@
 # Review Sprint I1 – net_task, main, display, Gesamt-Build
 
 **Implementierung:** Qwen (Cline v4.1.24, lokal); Display-Gerüst und Korrekturen Claude · **Review:** Claude · **Gerätetest und Freigabe:** Norbert Walter
-**Stand:** 16.10.2026 · Contract V1.5.20 · Branch `work-i1` → `master`, Tag `sprint-i1` (nach dem Gerätetest)
+**Stand:** 17.10.2026 · Contract V1.5.21 · Branch `work-i1` → `master`, Tag `sprint-i1`
 
 ## Ergebnis
 
 | Prüfung | Ergebnis |
 |---|---|
 | `test_net_task` | 10/10 |
-| `test_display` (mit den **unveränderten** Tests) | 15/15 |
+| `test_display` (mit den **unveränderten** Tests; ab V1.5.21 mit Balken- und Kopfzeilen-Prüfung) | 15/15 |
 | alle 22 Suiten mit dem gesamten Qwen-Code L1–I1 | 464/464 |
 | alle Suiten unter AddressSanitizer / UndefinedBehaviorSanitizer | ohne Befund |
 | alle Suiten unter ThreadSanitizer | ohne Befund |
@@ -19,7 +19,7 @@
 | `pio run -e firmware` (Claude) | erfolgreich: RAM 20,7 %, Flash 1,23 MB, `check_iram` 5/5 |
 | `pio run -e firmware` (Bericht Norbert) | `exit 0` |
 | 1. Flash am Gerät | Display nach dem ersten Bild dunkel → Ursache: Hintergrundbeleuchtung **Low-aktiv** (H-1, Contract V1.5.21) |
-| **Prüfliste am Gerät** (Dell, MKS DLC32) | **offen** |
+| **Prüfliste am Gerät** (Dell, MKS DLC32, 17.10.2026) | **8/8** – Boot, Normalbild, WLAN/`/proc`/`/log`, INIT mit LOCAL, SERV/PARK/STOP, Not-Aus mit ACK-Ablauf, kurzes Tippen quittiert nicht, Dauerlauf ohne Flackern. Einziger Befund: Kopfzeile überlappt (O1, behoben in V1.5.21 Nr. 3) |
 
 ## Verlauf
 
@@ -76,12 +76,19 @@ ASan/TSan, Differenztest 100 Folgen identisch. Die Webseiten (W1) übernehmen di
 
 ## Offene Punkte
 
-- **O1 (Contract):** Lange Zustandsnamen reichen in den Platz von „LOCAL“: `[ SAFE_START ]` endet
-  bei x = 318, `[ WAIT_ACK ]` bei 294, „LOCAL“ beginnt bei 288. Betrifft auch die Referenz – ein
-  Fehler im Layout von V1.5.20. Vorschlag für V1.5.21: Zustand ab x = 112. Beim Gerätetest auf
-  Punkt 4 (INIT aus SAFE_START mit LOCAL) achten.
-- **O3:** Motorzucken etwa 1 s nach dem Start (Treiber sollte bis zum ersten Fahrbefehl gesperrt bleiben).
-- **O2:** Prüfliste am Gerät (8 Punkte), danach Merge und Tag `sprint-i1`.
+- **O1 – erledigt (V1.5.21 Nr. 3):** Lange Zustandsnamen reichten in den Platz von „LOCAL“
+  (`[ SAFE_START ]` bis x = 318, „LOCAL“ ab 288), am Gerät bestätigt. Zustand jetzt ab x = 112
+  (endet spätestens bei 280); `test_display` prüft für alle Zustände des Normalbilds, dass Zustand
+  und „LOCAL“ sichtbar sind und sich nicht überlappen. Der Stand vor der Korrektur fällt durch.
+- **O2 – erledigt:** Prüfliste am Gerät 8/8.
+- **O3 – analysiert, offen für später:** kurzes Motorzucken beim Start. Ursache im Ablauf von
+  `motionDrvInit`: Die I2S-Ausgabe startet in `initI2sMux` mit dem Zustand 0 aller 32 Bits. Das
+  Freigabe-Bit (Low-aktiv) gibt den Treiber damit frei, bis der folgende `i2sMuxSetBit(EN, true)`
+  in den DMA-Puffern angekommen ist (einige ms). Der TMC2209 bestromt die Spulen, der Läufer rastet
+  auf den nächsten Mikroschritt – keine Schritte, keine Fahrt. Dazu kommt das bekannte Zucken
+  beim Reset (74HC595 bis zur Initialisierung undefiniert, Smoketest 1.3). Abhilfe: Startzustand
+  der Bits vor dem Start der I2S-Ausgabe setzen – erfordert eine kleine Erweiterung im
+  FastAccelStepper-Fork (zweiter Pull-Request). Kein Sicherheitsrisiko, deshalb nicht im Sprint.
 
 ## Prozessbefunde
 

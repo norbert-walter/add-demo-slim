@@ -74,12 +74,12 @@ uint32_t stateColour(SafetyState s) {
 /// TODO(I1.2a) header zones Z_STATE, Z_LOCAL, Z_HV, Z_SHUTTER (each: build key, if changed():
 /// fillRect of the zone in COL_PANEL where needed, then text()).
 void drawHeader(const ProcData& d) {
-    // Z_STATE: "[ <safetyStateName> ]" at (150, 8, 2)
+    // Z_STATE: "[ <safetyStateName> ]" at (112, 8, 2) (V1.5.21)
     char key[32];
     snprintf(key, sizeof key, "[ %s ]", safetyStateName(d.state));
     if (changed(Z_STATE, key)) {
-        lcd.fillRect(150, 0, 128, 32, COL_PANEL);
-        text(key, 150, 8, 2, stateColour(d.state), COL_PANEL);
+        lcd.fillRect(112, 0, 170, 32, COL_PANEL);   // 112..281, longest "[ SAFE_START ]" ends at 280
+        text(key, 112, 8, 2, stateColour(d.state), COL_PANEL);
     }
 
     // Z_LOCAL: "LOCAL" at (288, 8, 2) only while d.local; colour COL_WARN
