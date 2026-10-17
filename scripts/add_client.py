@@ -10,12 +10,21 @@ and verifies every response and /proc frame.
   python scripts/add_client.py --host 192.168.4.1 cmd HV_ON
   python scripts/add_client.py --host 192.168.4.1 cmd SET key=temp value=35.0
   python scripts/add_client.py selftest            # offline check of the frame rule
+  python scripts/add_client.py --host 192.168.4.1 shell    # interactive console (V1.5.22)
+
+shell: type API commands with key=value parameters, e.g.
+  SET key=interlock value=true      INIT      HV_ON      START_TRAVERSE start=100 end=200 speed=5
+plus: proc [full] | watch [seconds] | hb on|off | log | get <path> | help | quit
+While safety.comm_armed is true the shell sends GET_STATE every 2 s by itself (heartbeat, "hb on"),
+so a remote traverse does not end with COMM_TIMEOUT while you type.
 
 Only the Python standard library is used.
 """
 import argparse
 import json
 import sys
+import threading
+import time
 import urllib.request
 import zlib
 
@@ -66,6 +75,114 @@ def parse_value(v: str):
         return v
 
 
+ERR = {0: "OK", -1: "BAD_CRC", -2: "BAD_JSON", -3: "UNKNOWN_CMD", -4: "BAD_PARAM", -5: "STATE",
+       -6: "PRECONDITION", -7: "BUSY", -8: "NOT_STABLE", -9: "CALIB_INVALID", -10: "LOCAL_CONTROL"}
+SYS_ERR = ["NONE", "ESTOP", "TEMP_HIGH", "COMM_TIMEOUT", "MOTOR_FAULT", "HOMING_FAILED"]
+
+
+def summary(p: dict) -> str:
+    """One line of a /proc object."""
+    m, q, s = p["motion"], p["measure"], p["safety"]
+    err = SYS_ERR[p["err"]] if 0 <= p["err"] < len(SYS_ERR) else p["err"]
+    return (f'{p["state"]:<10} err={err} local={int(p["local"])} | pos={m["pos"]:6.1f} vel={m["vel"]:4.1f} '
+            f'{m["state"]}/{m["mode"]} homed={int(m["homed"])} | dist={q["dist"]:5.1f} thick={q["thick"]:5.1f} '
+            f'valid={int(q["valid"])} avg={q["avg"]:5.1f} n={q["n"]} | hv={int(s["hv_on"])} hv_ok={int(s["hv_ok"])} '
+            f'shutter={s["shutter"]} estop={int(s["estop"])} il={int(s["interlock"])} cf={int(s["cooling_flow"])} '
+            f'temp={s["temp"]:.1f} armed={int(s["comm_armed"])}')
+
+
+class Shell:
+    HELP = """API commands (CONTRACT §5.2), parameters as key=value:
+  INIT  HV_ON  HV_OFF  STOP  ACK  PARK  SERVICE  SHUTTER_OPEN  SHUTTER_CLOSE  REBOOT
+  START_MEASURE [pos=155]   START_TRAVERSE [start=80 end=240 speed=10]   MOVE pos=100 [speed=10]
+  SET key=<name> value=<v>  (interlock, cooling_flow, temp, measure_pos, maint_pos, traverse_*,
+      shutter_hold, edge_threshold, base_dist, calib_near_ref, calib_far_ref, estop_nc, wifi_ssid, wifi_pass)
+  CALIB action=near|far|base|save|reset     GET_STATE     GET_CONFIG
+shell: proc [full] | watch [seconds, default 30, Ctrl+C stops] | hb on|off | log | get <path> | help | quit"""
+
+    def __init__(self, host):
+        self.host, self.hb, self.last_tx, self.lock, self.run = host, True, 0.0, threading.Lock(), True
+
+    def api(self, cmd, params):
+        with self.lock:
+            self.last_tx = time.time()
+        return http(self.host, "/api", build(cmd, params))
+
+    def heartbeat(self):
+        while self.run:
+            time.sleep(0.5)
+            if not self.hb or time.time() - self.last_tx < 2.0:
+                continue
+            try:
+                t = http(self.host, "/proc")
+                if verify(t) and json.loads(t)["safety"]["comm_armed"]:
+                    self.api("GET_STATE", {})
+            except Exception as e:  # noqa: BLE001 - keep the console alive
+                print(f"\n[heartbeat] {e}")
+
+    def line(self, ln):
+        w = ln.split()
+        if not w:
+            return
+        op = w[0]
+        if op in ("quit", "exit"):
+            raise EOFError
+        if op == "help":
+            print(self.HELP)
+        elif op == "proc":
+            t = http(self.host, "/proc")
+            ok = verify(t)
+            print(t.strip() if len(w) > 1 else summary(json.loads(t)), "" if ok else "  <-- CRC INVALID")
+        elif op == "watch":
+            end = time.time() + (float(w[1]) if len(w) > 1 else 30.0)
+            try:
+                while time.time() < end:
+                    t = http(self.host, "/proc")
+                    print(time.strftime("%H:%M:%S"), summary(json.loads(t)), "" if verify(t) else "CRC!")
+                    time.sleep(0.5)
+            except KeyboardInterrupt:
+                print()
+        elif op == "hb":
+            self.hb = len(w) < 2 or w[1] != "off"
+            print("heartbeat", "on" if self.hb else "off")
+        elif op == "log":
+            print(http(self.host, "/log"))
+        elif op == "get":
+            print(http(self.host, w[1] if len(w) > 1 else "/"))
+        else:
+            params = {}
+            for kv in w[1:]:
+                k, _, v = kv.partition("=")
+                params[k] = parse_value(v)
+            t = time.time()
+            r = self.api(op.upper(), params)
+            ms = (time.time() - t) * 1000
+            ok = verify(r)
+            e = json.loads(r).get("err") if ok else None
+            print(r.strip(), f"  [{ERR.get(e, e)}, {ms:.0f} ms]" if ok else "  <-- CRC INVALID")
+
+    def loop(self):
+        try:
+            import readline  # noqa: F401 - history and line editing where available
+        except ImportError:
+            pass
+        threading.Thread(target=self.heartbeat, daemon=True).start()
+        print(f"ADD console for http://{self.host}  (help, quit)")
+        while True:
+            try:
+                ln = input("add> ")
+            except (EOFError, KeyboardInterrupt):
+                print()
+                break
+            try:
+                self.line(ln)
+            except EOFError:
+                break
+            except Exception as e:  # noqa: BLE001 - show and continue
+                print("error:", e)
+        self.run = False
+
+
 def selftest():
     assert f"{zlib.crc32(b'123456789'):08X}" == "CBF43926"
     f = frame('{"cmd":"HV_ON","params":{}}')
@@ -83,6 +200,7 @@ def main():
     sub = ap.add_subparsers(dest="op", required=True)
     sub.add_parser("proc")
     sub.add_parser("selftest")
+    sub.add_parser("shell")
     c = sub.add_parser("cmd")
     c.add_argument("name")
     c.add_argument("params", nargs="*", help="key=value pairs")
@@ -90,6 +208,9 @@ def main():
 
     if a.op == "selftest":
         selftest()
+        return
+    if a.op == "shell":
+        Shell(a.host).loop()
         return
     if a.op == "proc":
         txt = http(a.host, "/proc")
