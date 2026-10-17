@@ -93,7 +93,8 @@ class Sim:
         self.log.append({'cmd': cmd, 'params': params})
         self.last_api = time.time()
         st = self.state
-        if cmd == 'GET_STATE': return 0, {"state": st, "sys_err": self.err, "local": self.local}
+        if cmd == 'GET_STATE': return 0, {"state": st, "sys_err": self.err, "local": self.local,   # V1.5.25: + CycleStats
+                                          "cycle_max_us": 180, "period_max_us": 1040, "overruns": 0, "prio_lat_max_us": 0}
         if cmd == 'GET_CONFIG': return 0, {"config": dict(self.cfg)}
         if cmd == 'STOP':
             self.mstate, self.vel, self.mode = 'idle', 0.0, 'none'; self.shutter = 'closed'

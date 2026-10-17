@@ -6,6 +6,8 @@
 #include <stdarg.h>
 #include <string>
 #include <vector>
+#include <thread>
+#include <chrono>
 #include "logic/params.h"
 #include "logic/types.h"
 #include "logic/wifi_logic.h"
@@ -28,10 +30,12 @@ void nvsErase() { rec("nvsErase"); }
 void cmdQueueInit() { rec("cmdQueueInit"); }
 bool controlTaskStart(const Params& p) { rec(std::string("controlTaskStart ") + p.wifi_ssid); return g_ctrl_ok; }
 bool displayStart() { rec("displayStart"); return g_disp_ok; }
+void controlResetCycleStats() { rec("controlResetCycleStats"); }   // V1.5.25
 void wifiInit(const char* ssid, const char* pass) { rec(std::string("wifiInit ") + ssid + " " + pass); }
 void wifiLoop(uint32_t now) { rec("wifiLoop " + std::to_string(now)); }
 void httpServerInit() { rec("httpServerInit"); }
-void httpServerLoop() { rec("httpServerLoop"); }
+static int g_http_sleep_ms = 0;                                   // V1.5.25: slow handleClient
+void httpServerLoop() { rec("httpServerLoop"); if (g_http_sleep_ms) std::this_thread::sleep_for(std::chrono::milliseconds(g_http_sleep_ms)); }
 bool snapshotTakePersistRequest() { bool r = g_persist; g_persist = false; rec("takePersist"); return r; }
 bool snapshotTakeRebootRequest() { bool r = g_reboot; g_reboot = false; rec("takeReboot"); return r; }
 void snapshotGetConfig(Params& p, SafetyFlags& f) { rec("snapshotGetConfig"); p = g_config; f = SafetyFlags(); }
@@ -76,7 +80,7 @@ void test_setup_order() {
     SPIFFS.mount_ok = true; shimTasks() = ShimTasks();
     setup();
     const std::vector<std::string> exp = {"systemInit", "nvsLoadParams", "cmdQueueInit", "controlTaskStart Werkstatt",
-        "displayStart", "wifiInit Werkstatt geheim123", "httpServerInit", "log boot: ready, FW " FW_VERSION};
+        "displayStart", "wifiInit Werkstatt geheim123", "httpServerInit", "log boot: ready, FW " FW_VERSION, "controlResetCycleStats"};
     TEST_ASSERT_EQUAL_UINT32(exp.size(), g_calls.size());
     for (size_t i = 0; i < exp.size(); ++i) TEST_ASSERT_EQUAL_STRING(exp[i].c_str(), g_calls[i].c_str());
     TEST_ASSERT_EQUAL_INT(1, SPIFFS.begins);
@@ -98,7 +102,8 @@ void test_setup_continues_after_failures() {
     TEST_ASSERT_EQUAL_INT(indexOf("displayStart") + 1, indexOf("log display: start failed"));
     TEST_ASSERT_EQUAL_INT(1, count("httpServerInit"));                 // everything else still starts
     TEST_ASSERT_TRUE(indexOf("log FATAL: net task start failed") > indexOf("httpServerInit"));
-    TEST_ASSERT_EQUAL_STRING(("log boot: ready, FW " FW_VERSION), g_calls.back().c_str());
+    TEST_ASSERT_EQUAL_STRING(("log boot: ready, FW " FW_VERSION), g_calls[g_calls.size() - 2].c_str());
+    TEST_ASSERT_EQUAL_STRING("controlResetCycleStats", g_calls.back().c_str());   // V1.5.25
     SPIFFS.mount_ok = true; g_ctrl_ok = true; g_disp_ok = true; shimTasks() = ShimTasks();
 }
 void test_loop_only_sleeps() {
@@ -308,6 +313,24 @@ void test_v1523_console_partial_lines_limits_and_one_command_per_step() {
 
 // ---- V1.5.24: comm diagnostics -------------------------------------------------------------------
 static int logs(const char* prefix) { int n = 0; for (auto& c : g_calls) if (c.rfind(std::string("log ") + prefix, 0) == 0) ++n; return n; }
+void test_v1525_slow_parts_and_gaps_logged() {
+    step(9000);                                                     // reference end of step
+    g_calls.clear();
+    step(9005);
+    TEST_ASSERT_EQUAL_INT(0, logs("net: "));                        // fast step: nothing
+    g_http_sleep_ms = NET_SLOW_LOG_MS + 60;
+    g_calls.clear();
+    step(9010);
+    g_http_sleep_ms = 0;
+    TEST_ASSERT_EQUAL_INT(1, logs("net: http "));
+    TEST_ASSERT_EQUAL_INT(1, logs("net: "));
+    std::this_thread::sleep_for(std::chrono::milliseconds(NET_SLOW_LOG_MS + 60));
+    g_calls.clear();
+    step(9300);
+    TEST_ASSERT_EQUAL_INT(1, logs("net: gap "));
+    TEST_ASSERT_EQUAL_INT(1, logs("net: "));
+    TEST_ASSERT_TRUE(indexOf("wifiLoop 9300") > 0);                 // the gap line comes first
+}
 void test_v1524_comm_gap_and_timeout_logged() {
     g_proc = ProcData(); g_proc.safety.comm_armed = false; g_last_rx = 500;
     g_calls.clear(); step(500);
@@ -354,5 +377,6 @@ int main(int, char**) {
     RUN_TEST(test_v1523_console_wifi_off_and_reboot);
     RUN_TEST(test_v1523_console_partial_lines_limits_and_one_command_per_step);
     RUN_TEST(test_v1524_comm_gap_and_timeout_logged);
+    RUN_TEST(test_v1525_slow_parts_and_gaps_logged);
     return UNITY_END();
 }

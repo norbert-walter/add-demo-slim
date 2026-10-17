@@ -193,15 +193,35 @@ bool netTaskStart() {
                                    NET_TASK_PRIO, nullptr, NET_TASK_CORE) == pdPASS;
 }
 
+// ---- V1.5.25: slow-step diagnostics (where the time goes when the device does not answer) ----------
+static bool     s_step_seen = false;
+static uint32_t s_step_end = 0;
+
+/// "net: <part> <ms> ms" in /log if a part of the step took longer than NET_SLOW_LOG_MS.
+static void slowCheck(const char* part, uint32_t t0, uint32_t t1) {
+    const uint32_t d = t1 - t0;
+    if (d > NET_SLOW_LOG_MS) logLine("net: %s %u ms", part, (unsigned)d);
+}
+
 void netTaskStep(uint32_t now_ms) {
+    // V1.5.25: gap since the end of the previous step (net task starved by higher priorities on core 0)
+    const uint32_t t_start = millis();
+    if (s_step_seen) slowCheck("gap", s_step_end, t_start);
+
     // 0. serial console (V1.5.23)
     consoleStep();
+    const uint32_t t_con = millis();
+    slowCheck("console", t_start, t_con);
 
     // 1. wifiLoop(now)
     wifiLoop(now_ms);
+    const uint32_t t_wifi = millis();
+    slowCheck("wifi", t_con, t_wifi);
 
     // 2. httpServerLoop()
     httpServerLoop();
+    const uint32_t t_http = millis();
+    slowCheck("http", t_wifi, t_http);
 
     // 2a. comm diagnostics (V1.5.24)
     commDiagnostics(now_ms);
@@ -211,11 +231,13 @@ void netTaskStep(uint32_t now_ms) {
         Params p;
         SafetyFlags f;
         snapshotGetConfig(p, f);
+        const uint32_t t_nvs = millis();
         if (nvsSaveParams(p)) {
             logLine("nvs: saved");
         } else {
             logLine("nvs: save FAILED");
         }
+        slowCheck("nvs", t_nvs, millis());
     }
 
     // 4. Reboot request scheduling (only if not already pending)
@@ -230,4 +252,7 @@ void netTaskStep(uint32_t now_ms) {
         reboot_pending = false;
         systemRestart();
     }
+
+    s_step_end = millis();
+    s_step_seen = true;
 }

@@ -70,6 +70,11 @@
  *    response responseToJson(cmd.id, err, nullptr, nullptr, ...), HTTP 200.
  *    Response buffer: static char[1024]; Content-Type application/json.
  *  - 404 answer: HTTP 404, application/json, body {"error":"not found"}.
+ *
+ * V1.5.25: the server is an AddWebServer (subclass of WebServer). httpServerLoop() first closes a
+ *  connection that has sent no request for HTTP_IDLE_DROP_MS (browser spare connections blocked
+ *  every other client for up to 5 s), then calls handleClient(). /log: "http: idle connection
+ *  closed after 500 ms (<n> so far)", at most one line per HTTP_IDLE_LOG_MS.
  */
 #pragma once
 

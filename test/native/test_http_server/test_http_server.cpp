@@ -339,6 +339,37 @@ void test_v1517_bad_param_is_an_error_also_for_get_state_and_get_config() {
         TEST_ASSERT_TRUE(snapshotLastApiRx() != 0 || millis() == 0);       // still a heartbeat
     }
 }
+// V1.5.25 (added by the reviewer; the file stays frozen for the implementer)
+void test_v1525_idle_connection_is_closed_and_waiting_request_served() {
+    std::string b = framed("{\"cmd\":\"GET_STATE\",\"params\":{}}");
+    // 1. idle for less than HTTP_IDLE_DROP_MS: the request waits, nothing is closed
+    int stops = shimClientStops();
+    size_t before = srv().responses.size();
+    srv().shimIdleClient(millis());
+    srv().shimQueue(HTTP_POST, "/api", &b);
+    httpServerLoop();
+    TEST_ASSERT_EQUAL_UINT32(before, srv().responses.size());
+    TEST_ASSERT_TRUE(srv().shimClientWaiting());
+    TEST_ASSERT_EQUAL_INT(stops, shimClientStops());
+    // 2. idle for HTTP_IDLE_DROP_MS: closed, the waiting request is answered in the same step, logged once
+    srv().shimIdleClient(millis() - HTTP_IDLE_DROP_MS);
+    httpServerLoop();
+    TEST_ASSERT_EQUAL_UINT32(before + 1, srv().responses.size());
+    TEST_ASSERT_EQUAL_INT(200, srv().responses.back().code);
+    TEST_ASSERT_EQUAL_INT(stops + 1, shimClientStops());
+    char log[LOG_LINES * LOG_LINE_LEN + 1]; logDump(log, sizeof log);
+    TEST_ASSERT_NOT_NULL(strstr(log, "http: idle connection closed after 500 ms (1 so far)"));
+    // 3. a client that has sent data is never closed
+    srv().shimIdleClient(millis() - 3000, true);
+    httpServerLoop();
+    TEST_ASSERT_EQUAL_INT(stops + 1, shimClientStops());
+    // 4. a second drop within HTTP_IDLE_LOG_MS: counted, not logged again
+    srv().shimIdleClient(millis() - HTTP_IDLE_DROP_MS - 1);
+    httpServerLoop();
+    TEST_ASSERT_EQUAL_INT(stops + 2, shimClientStops());
+    logDump(log, sizeof log);
+    TEST_ASSERT_NULL(strstr(log, "(2 so far)"));
+}
 void test_zz_shutdown() { g_run = false; g_ctrl.join(); TEST_PASS(); }
 
 int main(int, char**) {
@@ -362,6 +393,7 @@ int main(int, char**) {
     RUN_TEST(test_proc_while_control_task_publishes);
     RUN_TEST(test_v1517_add_html_sends_blocks_not_bytes);
     RUN_TEST(test_v1517_bad_param_is_an_error_also_for_get_state_and_get_config);
+    RUN_TEST(test_v1525_idle_connection_is_closed_and_waiting_request_served);
     RUN_TEST(test_zz_shutdown);
     return UNITY_END();
 }

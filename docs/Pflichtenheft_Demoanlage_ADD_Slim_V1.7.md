@@ -2,12 +2,24 @@
 
 **Stand:** 2026-10-17
 **Autor:** Norbert Walter
-**Version:** 1.7.8 (Bedienvorrang einstellbar, WLAN ohne Stromsparmodus)
+**Version:** 1.7.9 (Webserver trennt wartende Verbindungen, ADC verteilt gelesen)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.7.8 → V1.7.9 (Contract V1.5.25, 17.10.2026, Gerätetest I1 Teil 2c Nr. 7–14, Entscheidung Norbert Walter)
+- **Aussetzer der REST-Verbindung behoben:** Der Webserver bedient eine Verbindung nach der
+  anderen und wartete bis zu 5 s auf Verbindungen, über die nichts kommt (offener Browser-Tab).
+  Solche Verbindungen werden jetzt nach 500 ms getrennt. Neue Logzeilen zeigen, wenn ein Teil der
+  Netz-Task länger als 200 ms braucht.
+- **Regelzyklus entlastet:** Der Abstandssensor wird mit einem ADC-Wert je 1-ms-Zyklus gelesen
+  statt 16 Werten am Stück; die Zykluszählung (`overruns`, `cycle_max_us`) beginnt bei
+  `boot: ready`. Der WLAN-Treiber schreibt die Zugangsdaten nicht mehr bei jedem Verbinden in den Flash.
+- `stress_api.py` an den Webserver (eine Verbindung, Warteschlange 4) und den 1-ms-Zyklus angepasst;
+  `latency --prepare` bereitet die Anlage selbst vor.
+- Unverändert: TEMP_HIGH bleibt ein quittierpflichtiger Fehler (`ACK` per API), `/add.html` 404 bis Sprint A1.
 
 ### V1.7.7 → V1.7.8 (Contract V1.5.24, 17.10.2026, Gerätetest I1 Teil 2c, Entscheidung Norbert Walter)
 - **Bedienvorrang einstellbar:** `LOCAL_HOLD_MS` in `config.h`, **Standard 0 = kein Vorrang**

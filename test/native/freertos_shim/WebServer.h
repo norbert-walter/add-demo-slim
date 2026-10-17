@@ -9,6 +9,15 @@
 #include <vector>
 typedef enum { HTTP_ANY = 0, HTTP_GET, HTTP_HEAD, HTTP_POST, HTTP_PUT, HTTP_PATCH, HTTP_DELETE, HTTP_OPTIONS } HTTPMethod;
 #define CONTENT_LENGTH_UNKNOWN ((size_t)-1)
+// V1.5.25: the members of the real WebServer used by AddWebServer::dropIdleClient (protected there).
+enum HTTPClientStatus { HC_NONE, HC_WAIT_READ, HC_WAIT_CLOSE };
+inline int& shimClientStops() { static int n = 0; return n; }
+class NetworkClient {
+public:
+    bool shim_avail = false;
+    int available() { return shim_avail ? 1 : 0; }
+    void stop() { ++shimClientStops(); }
+};
 struct ShimRequest { HTTPMethod method; std::string uri; std::string body; bool has_body; };
 struct ShimResponse {
     int code = 0; std::string type; std::string body;
@@ -27,8 +36,18 @@ private:
     std::vector<Route> routes_; THandlerFunction notFound_; int port_; bool begun_ = false;
     std::vector<ShimRequest> pending_; ShimRequest cur_{}; std::vector<std::pair<std::string,std::string>> hdr_;
     size_t content_len_ = 0;
+protected:
+    // V1.5.25: like the real server: one client at a time; a connected client that has sent nothing
+    // blocks every other request until it sends, is dropped, or HTTP_MAX_DATA_WAIT (5 s) has passed.
+    HTTPClientStatus _currentStatus = HC_NONE;
+    unsigned long _statusChange = 0;
+    NetworkClient _currentClient;
 public:
     std::vector<ShimResponse> responses;
+    void shimIdleClient(unsigned long since, bool has_data = false) {
+        _currentStatus = HC_WAIT_READ; _statusChange = since; _currentClient = NetworkClient(); _currentClient.shim_avail = has_data;
+    }
+    bool shimClientWaiting() const { return _currentStatus == HC_WAIT_READ; }
     int handle_calls = 0;
     explicit WebServer(int port = 80) : port_(port) { shimServer() = this; }
     int port() const { return port_; }
@@ -66,6 +85,11 @@ public:
     }
     void handleClient() {
         ++handle_calls;
+        if (_currentStatus == HC_WAIT_READ) {
+            if (_currentClient.available()) _currentStatus = HC_NONE;          // its request: not modelled
+            else if (millis() - _statusChange > 5000) _currentStatus = HC_NONE; // HTTP_MAX_DATA_WAIT
+            else return;                                                       // everybody else waits
+        }
         std::vector<ShimRequest> p; p.swap(pending_);
         for (auto& q : p) {
             cur_ = q; hdr_.clear(); content_len_ = 0;

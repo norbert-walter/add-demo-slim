@@ -45,6 +45,11 @@ void wifiInit(const char* ssid, const char* pass) {
     // took over 3 s (lost beacons, TCP retransmissions), which tripped the 5 s comm watchdog
     WiFi.setSleep(false);
 
+    // V1.5.25: do not let the WiFi driver write the station config to flash on every WiFi.begin()
+    // (the credentials live in our own NVS keys). A flash write stops the other core for
+    // milliseconds -> control task overruns on every connection attempt.
+    WiFi.persistent(false);
+
     // WiFi.setAutoReconnect(false) (the state machine reconnects, not the core)
     WiFi.setAutoReconnect(false);
 

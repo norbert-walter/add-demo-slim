@@ -29,6 +29,10 @@
  *    5. if a reboot is pending and (int32_t)(now - due) >= 0 (wrap-around safe): pending = false,
  *       systemRestart(). (A pending flag, not due == 0, marks the state: now + 700 may be 0.)
  *    Step 3 comes before step 5: a SET (persist) and a REBOOT in the same step are saved first.
+ *    V1.5.25 slow-step diagnostics (log only): millis() is read around step 0, 1, 2 and the NVS
+ *    write in step 3; a part longer than NET_SLOW_LOG_MS -> logLine("net: <part> %u ms") with part
+ *    console / wifi / http / nvs. At the start of every step but the first: time since the end of
+ *    the previous step > NET_SLOW_LOG_MS -> logLine("net: gap %u ms") (logged before step 0).
  *
  *  V1.5.23 – serial console (115200 Bd, the USB port of the board; answers are ONE line of JSON each,
  *  written with Serial.print(text) and Serial.print("\n")):

@@ -55,6 +55,7 @@ void setup() {
 
     // 10. Boot ready
     logLine("boot: ready, FW %s", FW_VERSION);
+    controlResetCycleStats();             // V1.5.25: cycle statistics count from here on
 }
 
 void loop() {

@@ -17,7 +17,29 @@
 #include "comm/log_buffer.h"
 #include "comm/http_server.h"
 
-static WebServer server(HTTP_PORT);
+/// V1.5.25: the Arduino WebServer serves one connection at a time and waits up to 5 s
+/// (HTTP_MAX_DATA_WAIT, fixed in the core) for a connected client to send its request. Browsers
+/// open spare connections in advance and send nothing on them, so every other client - the
+/// heartbeat too - was blocked for up to 5 s each and the comm watchdog fired. A connection that
+/// has sent nothing after HTTP_IDLE_DROP_MS is closed here; the browser simply opens a new one.
+class AddWebServer : public WebServer {
+public:
+    explicit AddWebServer(int port) : WebServer(port) {}
+    /// true if the current client was closed because it sent nothing for idle_ms.
+    bool dropIdleClient(uint32_t now_ms, uint32_t idle_ms) {
+        if (_currentStatus != HC_WAIT_READ || _currentClient.available()) return false;
+        if ((uint32_t)(now_ms - (uint32_t)_statusChange) < idle_ms) return false;
+        _currentClient.stop();
+        _currentClient = NetworkClient();
+        _currentStatus = HC_NONE;
+        return true;
+    }
+};
+
+static AddWebServer server(HTTP_PORT);
+static uint32_t s_idle_drops = 0;        // V1.5.25: closed idle connections since boot
+static uint32_t s_idle_logged = 0;       // value of s_idle_drops in the last log line
+static uint32_t s_idle_log_ms = 0;
 static char response[1024];  // used in task 3
 
 // ---------------------------------------------------------------------------
@@ -292,5 +314,14 @@ void httpServerInit() {
 }
 
 void httpServerLoop() {
+    // V1.5.25: close an idle connection first, so that a waiting request is served in this step
+    const uint32_t now = millis();
+    if (server.dropIdleClient(now, HTTP_IDLE_DROP_MS)) ++s_idle_drops;
+    if (s_idle_drops != s_idle_logged && (s_idle_logged == 0 || (uint32_t)(now - s_idle_log_ms) >= HTTP_IDLE_LOG_MS)) {
+        logLine("http: idle connection closed after %u ms (%lu so far)", (unsigned)HTTP_IDLE_DROP_MS,
+                (unsigned long)s_idle_drops);
+        s_idle_logged = s_idle_drops;
+        s_idle_log_ms = now;
+    }
     server.handleClient();
 }

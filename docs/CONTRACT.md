@@ -1,7 +1,7 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.24 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-17
-**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.8
+**Version:** 1.5.25 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-17
+**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.9
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
 
@@ -169,6 +169,18 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 1 | `test_hardware` crashed in `test_nvs_roundtrip` (Guru Meditation "Cache disabled but cached memory region accessed", PC in `StepperQueue::fill_i2s_buffer`). Cause in FastAccelStepper 96459ed: the I2S TX-done interrupt runs permanently with I2S_MUX and is IRAM-safe, but `fill_i2s_buffer()` and `I2sManager::i2sMuxSetBit()` were in flash; every flash operation (NVS write, SPIFFS read, OTA) crashed the board, also with the motor idle. Fix: both functions `IRAM_ATTR` (fork `norbert-walter/FastAccelStepper`, commit a64ceff on 96459ed; pull request to gin66 pending). Checked with nm/objdump: every function reachable from the interrupt is in IRAM, no literals into flash | `platformio.ini` |
 | 2 | Post-build check `scripts/check_iram.py` (all ESP32 environments): the build fails if one of the I2S interrupt functions is linked into flash (protects against library updates). Verified: fails with 96459ed, passes with a64ceff | `platformio.ini`, `scripts/` |
 | 3 | The nine native H1 tests could not see this (no flash cache on the host); the first five on-device tests were green (inputs, sensor, outputs, E-stop polarity change) | – |
+
+**Changes 1.5.25 (I1 device test part 2c, results 7–14, 2026-10-17, decision Norbert Walter):**
+
+| # | Change | Where |
+|---|---|---|
+| 1 | **Idle HTTP connections are closed after `HTTP_IDLE_DROP_MS` (500 ms).** The Arduino `WebServer` serves one connection at a time and waits up to 5 s (`HTTP_MAX_DATA_WAIT`, fixed in the core) for a connected client to send its request; a browser tab on the device opens spare connections and sends nothing on them, so the heartbeat of the REST client was blocked for 5 s and more and COMM_TIMEOUT fired (tests 9 and 11). `AddWebServer` (subclass, uses the protected members `_currentStatus`, `_statusChange`, `_currentClient`) drops such a connection in `httpServerLoop()` before `handleClient()`; `/log`: `http: idle connection closed after 500 ms (<n> so far)`, at most one line per `HTTP_IDLE_LOG_MS` (10 s) | `http_server.cpp`, `config.h`, WebServer shim, `test_http_server` (+1) |
+| 2 | **Net task diagnostics:** `/log` line `net: <part> <ms> ms` when the console, `wifiLoop`, `httpServerLoop` or the NVS write takes longer than `NET_SLOW_LOG_MS` (200 ms), and `net: gap <ms> ms` when the time between two steps is longer (net task starved on core 0) | `net_task.cpp`, `test_net_task` (+1) |
+| 3 | **ADC: one sample per control cycle** instead of 16 in one cycle every 20 ms (about 0.7 ms, over 1 ms with WLAN load → `overruns`; measured: `cycle_max_us` up to 3039, +600 overruns per 200 requests). The measurement is still evaluated every 20 ms with `medianMean` over the samples collected since the last evaluation (normally 16, at least 9) | `control_task.cpp` (§10 step 1) |
+| 4 | **CycleStats count from `boot: ready` on** (`controlResetCycleStats()` in `setup()`); before, start-up effects (display init, WLAN start, flash) already gave 141 overruns | `control_task.h/.cpp`, `main.cpp`, `test_net_task` |
+| 5 | `WiFi.persistent(false)`: the WiFi driver no longer writes the station config to flash on every `WiFi.begin()` (the credentials are in our own NVS keys); a flash write stops the other core for milliseconds | `wifi_manager.cpp`, WiFi shim, `test_wifi_manager` |
+| 6 | `scripts/stress_api.py`: `parallel` 4 threads (listen backlog of the server is 4) and 10 s timeout; every test judges the overruns **during** the test; `cycle_max_us` < 800; `latency --prepare` (INIT, wait for READY, HV_ON, at the end HV_OFF). `add_client.py shell`: `hb` alone shows sent / answered / failed / longest time without an answer. `fake_device.py` answers GET_STATE with CycleStats | `scripts/` |
+| 7 | Unchanged by decision: TEMP_HIGH stays latching (`ACK` via the API, after `temp` ≤ 32); `/add.html` answers 404 with `{"error":"not found"}` until `add.json` exists (Sprint A1) | – |
 
 **Changes 1.5.24 (I1 device test part 2c, 2026-10-17, decision Norbert Walter):**
 
@@ -847,7 +859,7 @@ network task, never in the 1 ms control cycle.
 
 Order inside one control cycle:
 
-1. every 20 ms `appMeasure()`
+1. one ADC sample per cycle (V1.5.25); every 20 ms `appMeasure(medianMean(samples since the last evaluation))`
 2. `appTick()` – motion tick, events, safety TICK, emergency stop, mode stop,
    statistics, shutter automation, watchdog disarm, LOCAL release
 3. a) `cmdQueueReceivePriority()` → `appCommand()` for **every** pending priority
@@ -856,12 +868,12 @@ Order inside one control cycle:
 4. outputs: **shutter → motor → HV LED**
 5. replies (`cmdQueueReply`) – **after** the outputs; `prio_lat_max_us` updated
 6. `appFillProc()` → `snapshotPublish()`
-7. timing (`CycleStats`, maxima since boot, `esp_timer_get_time()`, uint32 µs, wrap-safe):
+7. timing (`CycleStats`, maxima since `boot: ready` (V1.5.25), `esp_timer_get_time()`, uint32 µs, wrap-safe):
 
 | Field | Measures | Acceptance (10 min) |
 |---|---|---|
-| `cycle_max_us` | work time of steps 1–6 | < 500 |
-| `overruns` | cycles with work time > 1000 µs | 0 |
+| `cycle_max_us` | work time of steps 1–6 | < 800 (V1.5.25, 1 ms cycle) |
+| `overruns` | cycles with work time > 1000 µs | 0 new during the test |
 | `period_max_us` | distance between two cycle starts (scheduling jitter) | < 1500 |
 | `prio_lat_max_us` | priority command: `cmdQueueSend` → outputs applied | ≤ 2000 |
 

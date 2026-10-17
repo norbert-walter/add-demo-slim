@@ -30,6 +30,9 @@
 
 static AppState  s_app;
 static AppConfig s_cfg;
+static volatile bool s_reset_stats = false;   // V1.5.25: set by setup() at "boot: ready"
+
+void controlResetCycleStats() { s_reset_stats = true; }
 
 static AppConfig makeConfig() {
     AppConfig c;
@@ -73,12 +76,18 @@ static void controlLoop(void*) {
     TickType_t last = xTaskGetTickCount();
     uint32_t next_measure = 0;
     uint16_t samples[ADC_SAMPLES];
+    uint8_t n_samples = 0;                    // V1.5.25: samples collected for the next measurement
     CycleStats cs;
     uint32_t prev_start_us = 0;
     bool have_prev = false;
     for (;;) {
         vTaskDelayUntil(&last, pdMS_TO_TICKS(CONTROL_PERIOD_MS));
         const uint32_t t_start = (uint32_t)esp_timer_get_time();   // wrap-safe differences
+        if (s_reset_stats) {                  // V1.5.25: statistics count from "boot: ready" on
+            s_reset_stats = false;
+            cs = CycleStats();
+            have_prev = false;
+        }
         if (have_prev) {
             const uint32_t period = t_start - prev_start_us;
             if (period > cs.period_max_us) cs.period_max_us = period;
@@ -87,11 +96,15 @@ static void controlLoop(void*) {
         have_prev = true;
         const uint32_t now = millis();
 
-        // 1. measurement at 50 Hz
+        // 1. measurement at 50 Hz. V1.5.25: ONE ADC sample per cycle (about 40 us) instead of
+        //    16 in one cycle every 20 ms (about 0.7 ms, with WLAN load over 1 ms -> overruns).
+        //    The samples spread over 16 ms, about one update period of the Sharp sensor.
+        if (n_samples < ADC_SAMPLES) halReadSensorSamples(&samples[n_samples++], 1);
         if ((int32_t)(now - next_measure) >= 0) {
             next_measure = now + MEASURE_PERIOD_MS;
-            halReadSensorSamples(samples, ADC_SAMPLES);
-            appMeasure(s_app, s_cfg, medianMean(samples, ADC_SAMPLES, ADC_DISCARD), now);
+            if (n_samples > 2 * ADC_DISCARD)  // after a stall fewer samples are fine, none is not
+                appMeasure(s_app, s_cfg, medianMean(samples, n_samples, ADC_DISCARD), now);
+            n_samples = 0;
         }
 
         // 2. cyclic logic

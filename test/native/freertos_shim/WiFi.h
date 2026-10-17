@@ -14,7 +14,8 @@ struct ShimWiFi {
     std::string ap_ssid, ap_pass, sta_ssid, sta_pass;
     int begins = 0, disconnects = 0, disconnect_wifioff = 0, soft_aps = 0;
     bool auto_reconnect = true;
-    bool sleep = true;                    // V1.5.24: modem sleep (Arduino default on)
+    bool sleep = true;
+    bool persistent = true;               // V1.5.25: Arduino default true                    // V1.5.24: modem sleep (Arduino default on)
     std::vector<std::string> calls;       // V1.5.24: order of mode/setSleep/setAutoReconnect/softAP
     std::atomic<int> in_critical{0};      // V1.5.17: WiFi calls made inside taskENTER/EXIT_CRITICAL
     wl_status_t status = WL_DISCONNECTED;
@@ -25,6 +26,7 @@ class WiFiClass {
 public:
     bool mode(wifi_mode_t m) { shimWiFi().mode = m; shimWiFi().calls.push_back("mode"); return true; }
     bool setSleep(bool enable) { shimWiFi().sleep = enable; shimWiFi().calls.push_back(enable ? "setSleep 1" : "setSleep 0"); return true; }
+    void persistent(bool p) { shimWiFi().persistent = p; shimWiFi().calls.push_back(p ? "persistent 1" : "persistent 0"); }
     wifi_mode_t getMode() { return shimWiFi().mode; }
     bool softAP(const char* ssid, const char* pass = nullptr, int channel = 1, int hidden = 0, int max_conn = 4) {
         ShimWiFi& w = shimWiFi(); w.ap_ssid = ssid ? ssid : ""; w.ap_pass = pass ? pass : ""; ++w.soft_aps; w.calls.push_back("softAP"); return true;

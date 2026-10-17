@@ -2,15 +2,23 @@
 """
 stress_api.py - acceptance and stress tests for the REST API (Contract V1.1).
 
-  python scripts/stress_api.py --host 192.168.4.1 latency  [--n 10]
+  python scripts/stress_api.py --host 192.168.4.1 latency  [--n 10] [--prepare]
   python scripts/stress_api.py --host 192.168.4.1 flood    [--n 200]
-  python scripts/stress_api.py --host 192.168.4.1 parallel [--n 400] [--threads 8]
+  python scripts/stress_api.py --host 192.168.4.1 parallel [--n 400] [--threads 4]
   python scripts/stress_api.py --host 192.168.4.1 soak     [--minutes 10]
   python scripts/stress_api.py --host 192.168.4.1 local
 
-SAFETY: "latency" MOVES THE AXIS (START_TRAVERSE / STOP). Run it only with the
-user's explicit approval, E-stop in reach, axis free. The other tests do not
-start motion. Every test aborts if the device reports a fault.
+SAFETY: "latency" MOVES THE AXIS (START_TRAVERSE / STOP; with --prepare also
+INIT = homing and HV_ON). Run it only with the user's explicit approval, E-stop
+in reach, axis free. The other tests do not start motion. Every test aborts if
+the device reports a fault.
+
+V1.5.25 (device test I1 part 2c): the device runs the Arduino WebServer, which
+serves ONE connection at a time with a listen backlog of 4. "parallel" therefore
+uses 4 threads and a 10 s timeout per request (a refused connection is retried
+by the OS after 1 s and 3 s). The control cycle is 1 ms (CONTROL_PERIOD_MS);
+the cycle statistics count from "boot: ready" on, and every test judges the
+overruns that happened DURING the test (before/after), not since boot.
 
 Acceptance criteria (Pflichtenheft V1.5 §7):
   latency : STOP reply < 150 ms (HTTP round trip incl. WLAN), axis idle in /proc < 1 s
@@ -19,13 +27,15 @@ Acceptance criteria (Pflichtenheft V1.5 §7):
   parallel: 8 threads send mixed commands with a KNOWN expected result at the
             same time; every reply must be CRC-valid, carry the right "cmd" and
             either the expected err or BUSY (-7) -> no reply is ever mixed up
-  timing  : (GET_STATE after every test) cycle_max_us < 500, overruns == 0,
-            period_max_us < 1500 (jitter), prio_lat_max_us <= 2000
+  timing  : (GET_STATE after every test) cycle_max_us < 800 (1 ms cycle),
+            no new overruns during the test, period_max_us < 1500 (jitter),
+            prio_lat_max_us <= 2000
             (priority command: enqueue -> outputs applied, measured in the device)
-  soak    : 10 min GET_STATE every 1 s: cycle_max_us < 500, overruns == 0,
-            no COMM_TIMEOUT, all frames valid
-  local   : (manual) press any display button, then API HV_ON -> err -10
-            LOCAL_CONTROL, API STOP -> OK; after 30 s idle API INIT -> no -10
+  soak    : 10 min GET_STATE every 1 s: no new overruns, no COMM_TIMEOUT,
+            all frames valid, then timing as above
+  local   : only with LOCAL_HOLD_MS > 0 in config.h (default 0 = no LOCAL
+            priority): press any display button, then API HV_ON -> err -10
+            LOCAL_CONTROL, API STOP -> OK; after the hold time API INIT -> no -10
 
 Only the Python standard library is used (plus scripts/add_client.py).
 """
@@ -45,9 +55,9 @@ LOCAL_CONTROL = -10
 BUSY = -7
 
 
-def api(host, cmd, params=None):
+def api(host, cmd, params=None, timeout=3.0):
     t0 = time.perf_counter()
-    txt = http(host, "/api", build(cmd, params or {}))
+    txt = http(host, "/api", build(cmd, params or {}), timeout=timeout)
     dt = (time.perf_counter() - t0) * 1000.0
     if not verify(txt):
         raise SystemExit(f"FAIL: invalid CRC frame in reply to {cmd}: {txt}")
@@ -66,15 +76,22 @@ def fail_on_fault(p):
         raise SystemExit(f"ABORT: device in {p['state']}, err={p['err']}")
 
 
-LIMITS = {"cycle_max_us": 500, "period_max_us": 1500, "prio_lat_max_us": 2001}
+LIMITS = {"cycle_max_us": 800, "period_max_us": 1500, "prio_lat_max_us": 2001}
 
 
-def cycle_ok(host):
-    """Device-side timing (CycleStats, CONTRACT §10). prio_lat_max_us stays 0 until
-    the first priority command (STOP, HV_OFF, SHUTTER_CLOSE) was executed."""
+def overruns(host):
     r, _ = api(host, "GET_STATE")
-    ok = r.get("overruns") == 0
-    parts = [f"overruns={r.get('overruns')}"]
+    return r.get("overruns", 0)
+
+
+def cycle_ok(host, base):
+    """Device-side timing (CycleStats, CONTRACT §10). base = overruns before the test.
+    prio_lat_max_us stays 0 until the first priority command (STOP, HV_OFF,
+    SHUTTER_CLOSE) was executed."""
+    r, _ = api(host, "GET_STATE")
+    new = r.get("overruns", 0) - base
+    ok = new == 0
+    parts = [f"overruns +{new} (since boot ready {r.get('overruns')})"]
     for k, lim in LIMITS.items():
         v = r.get(k)
         good = v is not None and v < lim
@@ -84,11 +101,36 @@ def cycle_ok(host):
     return ok
 
 
-def t_latency(host, n):
+def prepare(host):
+    """--prepare: INIT (homing), wait for READY with GET_STATE as heartbeat, then HV_ON."""
+    print("  prepare: INIT (homing) ...")
+    r, _ = api(host, "INIT")
+    if r["err"] != 0:
+        raise SystemExit(f"INIT failed: {r}")
+    t0 = time.time()
+    while True:
+        r, _ = api(host, "GET_STATE")
+        if r.get("state") == "READY":
+            break
+        if r.get("state") in ("FAULT", "WAIT_ACK"):
+            raise SystemExit(f"ABORT: {r.get('state')} during INIT, sys_err={r.get('sys_err')}")
+        if time.time() - t0 > 60:
+            raise SystemExit("FAIL: not READY 60 s after INIT")
+        time.sleep(0.5)
+    r, _ = api(host, "HV_ON")
+    if r["err"] != 0:
+        raise SystemExit(f"HV_ON failed: {r} (interlock, cooling_flow, temp?)")
+    print("  prepare: READY, HV on")
+
+
+def t_latency(host, n, do_prepare):
+    if do_prepare:
+        prepare(host)
     p = proc(host)
     fail_on_fault(p)
     if p["state"] != "RUNNING":
-        raise SystemExit("precondition: state RUNNING (INIT, set flags, HV_ON) - not done automatically")
+        raise SystemExit("precondition: state RUNNING (INIT, HV_ON) - or start with --prepare")
+    base = overruns(host)
     replies, idles = [], []
     for i in range(n):
         r, _ = api(host, "START_TRAVERSE", {"start": 60, "end": 240, "speed": 20})   # mm/s (V1.3)
@@ -115,11 +157,16 @@ def t_latency(host, n):
     print(f"reply  min/median/max: {min(replies):.1f} / {statistics.median(replies):.1f} / {max(replies):.1f} ms")
     print(f"idle   min/median/max: {min(idles):.1f} / {statistics.median(idles):.1f} / {max(idles):.1f} ms")
     print("  (HTTP round trip incl. WLAN; the device-internal STOP latency is prio_lat_max_us below)")
-    return ok and cycle_ok(host)
+    ok = cycle_ok(host, base) and ok
+    if do_prepare:
+        api(host, "HV_OFF")                   # leave the device safe: watchdog disarms (axis idle, HV off)
+        print("  HV_OFF sent")
+    return ok
 
 
 def t_flood(host, n):
     fail_on_fault(proc(host))
+    base = overruns(host)
     counts = {}
     worst = 0.0
     for i in range(n):
@@ -128,7 +175,7 @@ def t_flood(host, n):
         worst = max(worst, dt)
     print(f"  results by err: {counts}, worst round trip {worst:.1f} ms")
     ok = set(counts) <= {0, BUSY}
-    return ok and cycle_ok(host)
+    return cycle_ok(host, base) and ok
 
 
 def t_parallel(host, n, threads):
@@ -136,6 +183,7 @@ def t_parallel(host, n, threads):
     fail_on_fault(p)
     if p["state"] not in ("SAFE_START", "READY") or p.get("local"):
         raise SystemExit("precondition: state SAFE_START or READY, HV off, local false")
+    base = overruns(host)
     # (cmd, params, expected err) - all without motion, deterministic in SAFE_START/READY
     cases = [
         ("SET", {"key": "temp", "value": 18.0}, 0),
@@ -150,7 +198,7 @@ def t_parallel(host, n, threads):
 
     def one(job):
         cmd, params, exp = job
-        r, dt = api(host, cmd, params)
+        r, dt = api(host, cmd, params, timeout=10.0)
         return cmd, exp, r, dt
 
     bad, busy, worst = [], 0, 0.0
@@ -164,10 +212,11 @@ def t_parallel(host, n, threads):
     print(f"  {n} requests, {threads} threads: {len(bad)} mismatches, {busy} BUSY, worst {worst:.1f} ms")
     for b in bad[:10]:
         print("   mismatch:", b)
-    return not bad and cycle_ok(host)
+    return cycle_ok(host, base) and not bad
 
 
 def t_soak(host, minutes):
+    base = overruns(host)
     end = time.time() + minutes * 60
     worst = 0
     k = 0
@@ -177,13 +226,13 @@ def t_soak(host, minutes):
         worst = max(worst, r.get("cycle_max_us", 0))
         if r.get("sys_err") == 3:
             raise SystemExit("FAIL: COMM_TIMEOUT during soak")
-        if r.get("overruns", 0) != 0:
-            raise SystemExit(f"FAIL: overruns={r['overruns']} after {k} s")
+        if r.get("overruns", 0) != base:
+            raise SystemExit(f"FAIL: overruns +{r['overruns'] - base} after {k} s")
         if r.get("period_max_us", 0) >= LIMITS["period_max_us"]:
             print(f"  WARNING: period_max_us={r['period_max_us']} after {k} s")
         time.sleep(1.0)
     print(f"  {k} heartbeats, cycle_max_us={worst}")
-    return cycle_ok(host)
+    return cycle_ok(host, base)
 
 
 def t_local(host):
@@ -209,12 +258,13 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--host", default="192.168.4.1")
     ap.add_argument("test", choices=["latency", "flood", "parallel", "soak", "local"])
-    ap.add_argument("--threads", type=int, default=8)
+    ap.add_argument("--threads", type=int, default=4)
+    ap.add_argument("--prepare", action="store_true", help="latency: INIT, wait for READY, HV_ON first; HV_OFF at the end")
     ap.add_argument("--n", type=int, default=0)
     ap.add_argument("--minutes", type=float, default=10)
     a = ap.parse_args()
     if a.test == "latency":
-        ok = t_latency(a.host, a.n or 10)
+        ok = t_latency(a.host, a.n or 10, a.prepare)
     elif a.test == "flood":
         ok = t_flood(a.host, a.n or 200)
     elif a.test == "parallel":

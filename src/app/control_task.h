@@ -13,3 +13,8 @@
 /// Starts the task. `params` = values loaded from NVS (nvsLoadParams).
 /// Returns false if hardware init failed (motionDrvInit).
 bool controlTaskStart(const Params& params);
+
+/// V1.5.25: reset CycleStats (cycle_max_us, period_max_us, overruns, prio_lat_max_us) in the next
+/// cycle. Called once by setup() after "boot: ready", so start-up effects (display init, WLAN
+/// start, flash access) do not count.
+void controlResetCycleStats();

@@ -37,6 +37,8 @@ void test_init_starts_ap_and_mdns() {
     TEST_ASSERT_FALSE(w.auto_reconnect);
     TEST_ASSERT_FALSE(w.sleep);                                       // V1.5.24: modem sleep off
     TEST_ASSERT_TRUE(w.calls.size() >= 2 && w.calls[0] == "mode" && w.calls[1] == "setSleep 0");   // after mode()
+    TEST_ASSERT_FALSE(w.persistent);                                  // V1.5.25: no driver flash writes
+    TEST_ASSERT_TRUE(w.calls.size() >= 3 && w.calls[2] == "persistent 0");
     TEST_ASSERT_EQUAL_STRING(WIFI_AP_SSID, w.ap_ssid.c_str());
     TEST_ASSERT_EQUAL_STRING(WIFI_AP_PASS, w.ap_pass.c_str());
     TEST_ASSERT_EQUAL_STRING("add-demo", shimMdns().host.c_str());

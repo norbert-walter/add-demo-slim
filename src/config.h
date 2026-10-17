@@ -133,6 +133,9 @@
 // Communication / storage
 // =========================================================================
 #define HTTP_PORT            80
+#define HTTP_IDLE_DROP_MS    500    // V1.5.25: close a connection that sent no request for this long
+#define HTTP_IDLE_LOG_MS     10000  // V1.5.25: at most one "http: idle connection closed" line per 10 s
+#define NET_SLOW_LOG_MS      200    // V1.5.25: /log line when a net task part or the gap between steps takes longer
 #define API_BODY_MAX         512
 #define API_REPLY_TIMEOUT_MS 100    // HTTP waits this long for the control task
 #define NVS_NAMESPACE        "add_demo"

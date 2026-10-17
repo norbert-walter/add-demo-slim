@@ -99,10 +99,11 @@ class Shell:
   SET key=<name> value=<v>  (interlock, cooling_flow, temp, measure_pos, maint_pos, traverse_*,
       shutter_hold, edge_threshold, base_dist, calib_near_ref, calib_far_ref, estop_nc, wifi_ssid, wifi_pass)
   CALIB action=near|far|base|save|reset     GET_STATE     GET_CONFIG
-shell: proc [full] | watch [seconds, default 30, Ctrl+C stops] | hb on|off | log | get <path> | help | quit
+shell: proc [full] | watch [seconds, default 30, Ctrl+C stops] | hb [on|off] | log | get <path> | help | quit
 Heartbeat: from the start the shell sends GET_STATE every second, in the background. Commands can be
 typed at any time. A message appears when no GET_STATE answer came for 10 s and when answers resume.
-"hb off" stops the heartbeat (to provoke COMM_TIMEOUT on purpose), "hb on" starts it again."""
+"hb off" stops the heartbeat (to provoke COMM_TIMEOUT on purpose), "hb on" starts it again,
+"hb" alone shows the statistics: sent, answered, failed, longest time without an answer."""
     PERIOD = 1.0      # s between two heartbeats
     LOST = 10.0       # s without a GET_STATE answer -> message
 
@@ -112,6 +113,8 @@ typed at any time. A message appears when no GET_STATE answer came for 10 s and 
         self.last_tx = 0.0           # last /api request sent (any command counts for the device)
         self.last_ok = time.time()   # last valid GET_STATE answer of the heartbeat
         self.lost = False            # "no answer" message shown
+        self.sent = self.answered = 0
+        self.max_gap = 0.0           # longest time between two heartbeat answers (s)
         self.io = threading.Lock()   # one /api request at a time
         self.run = True
 
@@ -131,9 +134,13 @@ typed at any time. A message appears when no GET_STATE answer came for 10 s and 
                 continue
             if time.time() - self.last_tx >= self.PERIOD:
                 try:
+                    self.sent += 1
                     r = self.api("GET_STATE", {}, timeout=2.0)
                     if verify(r):
-                        self.last_ok = time.time()
+                        now = time.time()
+                        self.answered += 1
+                        self.max_gap = max(self.max_gap, now - self.last_ok)
+                        self.last_ok = now
                         if self.lost:
                             self.lost = False
                             self.say("[heartbeat: answers again]")
@@ -166,8 +173,11 @@ typed at any time. A message appears when no GET_STATE answer came for 10 s and 
                     time.sleep(0.5)
             except KeyboardInterrupt:
                 print()
+        elif op == "hb" and len(w) < 2:
+            print(f"heartbeat {'on' if self.enabled else 'OFF'}: sent {self.sent}, answered {self.answered}, "
+                  f"failed {self.sent - self.answered}, longest without answer {self.max_gap:.1f} s")
         elif op == "hb":
-            self.enabled = len(w) < 2 or w[1] != "off"
+            self.enabled = w[1] != "off"
             print("heartbeat", "on (GET_STATE every 1 s)" if self.enabled else "OFF (the watchdog fires 5 s after the last /api packet while armed)")
         elif op == "log":
             print(http(self.host, "/log"))
