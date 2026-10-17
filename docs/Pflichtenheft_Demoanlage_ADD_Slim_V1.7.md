@@ -19,6 +19,9 @@
   `boot: ready`. Der WLAN-Treiber schreibt die Zugangsdaten nicht mehr bei jedem Verbinden in den Flash.
 - `stress_api.py` an den Webserver (eine Verbindung, Warteschlange 4) und den 1-ms-Zyklus angepasst;
   `latency --prepare` bereitet die Anlage selbst vor.
+- **Fehler im Kommunikations-Watchdog behoben:** Ein Paket, das die Netz-Task während eines
+  Regelzyklus eintrug, galt als 49 Tage alt (vorzeichenlose Differenz) – COMM_TIMEOUT, obwohl
+  Pakete ankamen. Das Alter wird jetzt vorzeichenbehaftet gerechnet.
 - Unverändert: TEMP_HIGH bleibt ein quittierpflichtiger Fehler (`ACK` per API), `/add.html` 404 bis Sprint A1.
 
 ### V1.7.7 → V1.7.8 (Contract V1.5.24, 17.10.2026, Gerätetest I1 Teil 2c, Entscheidung Norbert Walter)

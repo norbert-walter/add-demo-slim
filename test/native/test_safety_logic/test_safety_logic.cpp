@@ -469,6 +469,13 @@ void test_comm_timeout_wraparound() {
     TEST_ASSERT_FALSE(safetyCommTimeout(true, 3000u, 0xFFFFFFFFu - 999u, 5000));
     TEST_ASSERT_TRUE(safetyCommTimeout(true, 4002u, 0xFFFFFFFFu - 999u, 5000));
 }
+// V1.5.25 (added by the reviewer): packet stored by the net task after the control cycle took now_ms
+void test_v1525_comm_timeout_packet_newer_than_now_is_fresh() {
+    TEST_ASSERT_FALSE(safetyCommTimeout(true, 1000u, 1011u, 5000));            // device: "4294967285 ms ago"
+    TEST_ASSERT_FALSE(safetyCommTimeout(true, 5u, 0xFFFFFFFFu, 5000));          // wrap, 6 ms old
+    TEST_ASSERT_FALSE(safetyCommTimeout(true, 0xFFFFFFF0u, 3u, 5000));          // wrap, packet 19 ms newer
+    TEST_ASSERT_TRUE(safetyCommTimeout(true, 5000u + 1u + 7u, 7u, 5000));       // still fires after 5001 ms
+}
 
 // ---- property test: invariants hold for random event/input sequences ------------------------
 static uint32_t rng = 12345;
@@ -726,6 +733,7 @@ int main(int, char**) {
     RUN_TEST(test_auto_close_only_after_hold_time);
     RUN_TEST(test_comm_timeout);
     RUN_TEST(test_comm_timeout_wraparound);
+    RUN_TEST(test_v1525_comm_timeout_packet_newer_than_now_is_fresh);
     RUN_TEST(test_invariants_random_sequences);
     RUN_TEST(test_estop_and_cooling_loss_simultaneous);
     RUN_TEST(test_r2_fault_motor_stop_on_every_event);

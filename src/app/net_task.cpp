@@ -175,8 +175,9 @@ static void commDiagnostics(uint32_t now_ms) {
     }
     bool timeout = d.err == ErrorCode::COMM_TIMEOUT;
     if (timeout && !s_timeout_logged) {
-        logLine("comm: timeout, last /api packet %u ms ago, longest gap while armed %u ms",
-                (unsigned)(now_ms - rx), (unsigned)s_max_gap);
+        const int32_t age = (int32_t)(now_ms - rx);       // V1.5.25: signed (rx may be newer)
+        logLine("comm: timeout, last /api packet %ld ms ago, longest gap while armed %u ms",
+                (long)age, (unsigned)s_max_gap);
     }
     s_timeout_logged = timeout;
     if (!armed && !timeout) s_max_gap = 0;

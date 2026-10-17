@@ -579,6 +579,11 @@ SafetyEvent safetyShutterAutomation(bool acquiring, bool program_active, uint32_
 // ---------------------------------------------------------------------------
 bool safetyCommTimeout(bool armed, uint32_t now_ms, uint32_t last_rx_ms, uint32_t timeout_ms) {
     if (!armed) return false;
-    return (now_ms - last_rx_ms) > timeout_ms;
+    // V1.5.25: signed age. The network task (core 0) stores millis() of a packet while the control
+    // task (core 1) works with the millis() of its cycle start, so last_rx can be a few ms NEWER
+    // than now. Unsigned, now - last_rx then was about 4.29e9 > timeout: false COMM_TIMEOUT while
+    // packets arrived ("last /api packet 4294967285 ms ago", I1 device test 2c Nr. 14).
+    const int32_t age = (int32_t)(now_ms - last_rx_ms);
+    return age > (int32_t)timeout_ms;
 }
 

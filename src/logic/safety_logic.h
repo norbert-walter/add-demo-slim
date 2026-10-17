@@ -185,6 +185,8 @@ SafetyEvent safetyShutterAutomation(bool acquiring, bool program_active,
 
 /**
  * Communication watchdog. Wrap-around safe for uint32 milliseconds.
- * @return armed && (now_ms - last_rx_ms) > timeout_ms
+ * @return armed && (int32_t)(now_ms - last_rx_ms) > timeout_ms
+ * V1.5.25: the age is signed - a packet a few ms "newer" than now_ms (stored by the network task
+ * during the control cycle) is fresh, not 49 days old.
  */
 bool safetyCommTimeout(bool armed, uint32_t now_ms, uint32_t last_rx_ms, uint32_t timeout_ms);
