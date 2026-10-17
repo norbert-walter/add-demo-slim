@@ -292,7 +292,31 @@
    *          configDiff, not here); else {ok:false, error:'<min> ... <max> characters'}
    *  unknown key -> {ok:false, error:'unknown key'} */
   function checkParam(key, raw) {
-    throw new Error('TODO(W1.3) checkParam');
+    var param = PARAMS.find(function (p) { return p.key === key; });
+    if (!param) { return { ok: false, error: 'unknown key' }; }
+
+    if (param.type === 'num') {
+      var s = String(raw).trim();
+      if (s === '') { return { ok: false, error: String(param.min) + ' ... ' + String(param.max) }; }
+      var x = Number(s);
+      if (!isFinite(x) || x < param.min || x > param.max) { return { ok: false, error: String(param.min) + ' ... ' + String(param.max) }; }
+      return { ok: true, value: x };
+    }
+
+    if (param.type === 'bool') {
+      if (raw === true || raw === 'true' || raw === '1') { return { ok: true, value: true }; }
+      if (raw === false || raw === 'false' || raw === '0') { return { ok: true, value: false }; }
+      return { ok: false, error: 'true or false' };
+    }
+
+    if (param.type === 'str') {
+      var str = String(raw);
+      if ('min' in param && str.length < param.min) { return { ok: false, error: String(param.min) + ' ... ' + String(param.max) + ' characters' }; }
+      if ('max' in param && str.length > param.max) { return { ok: false, error: String(param.min) + ' ... ' + String(param.max) + ' characters' }; }
+      return { ok: true, value: str };
+    }
+
+    return { ok: false, error: 'unknown key' };
   }
   /** SET commands for the changes of a settings form.
    *  cfg: the "config" object of GET_CONFIG; form: {key: raw value} for some or all PARAMS keys.
@@ -302,7 +326,42 @@
    *    -> sets.push({key, value}). Numbers count as different if |a - b| > 0.0001.
    *  Returns {sets, errors}. */
   function configDiff(cfg, form) {
-    throw new Error('TODO(W1.3) configDiff');
+    var sets = [];
+    var errors = [];
+
+    for (var i = 0; i < PARAMS.length; i++) {
+      var key = PARAMS[i].key;
+      if (!(key in form)) { continue; }
+
+      var raw = form[key];
+
+      // wifi_pass: skip if empty string (keep stored password)
+      if (key === 'wifi_pass' && raw === '') { continue; }
+
+      var result = checkParam(key, raw);
+
+      if (!result.ok) {
+        errors.push({ key: key, error: result.error });
+      } else {
+        // wifi_pass is always sent when typed (no comparison with cfg)
+        if (key === 'wifi_pass') {
+          sets.push({ key: key, value: result.value });
+        } else {
+          var oldVal = cfg[key];
+          var different;
+          if (typeof result.value === 'number' && typeof oldVal === 'number') {
+            different = Math.abs(result.value - oldVal) > 0.0001;
+          } else {
+            different = result.value !== oldVal;
+          }
+          if (different) {
+            sets.push({ key: key, value: result.value });
+          }
+        }
+      }
+    }
+
+    return { sets: sets, errors: errors };
   }
 
   return { ERR_NAMES, SYS_ERR_NAMES, TEMP_FAULT_C, HEARTBEAT_MS, SERIES_MAX, PARAMS,
