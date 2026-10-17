@@ -86,9 +86,10 @@ Sicherheitsflags nach Boot `true` (V1.5.23), serielle Konsole (V1.5.23), Diagnos
 
 ## Offene Punkte
 
-1. **Einzelne Messwerte `dist = 34.0`, `thick = 0.0`** (2c Nr. 5 und 6, auch nach dem verteilten
-   ADC-Lesen): Ausreißer filtern (Plausibilität / Sprungbegrenzung) – eigener kleiner Sprint in der
-   Messlogik.
+1. **Einzelne Messwerte `dist = 34.0`, `thick = 0.0`** (2c Nr. 5 und 6, Firmware vor V1.5.25:
+   16 ADC-Werte am Stück). Mit dem verteilten ADC-Lesen (K4) in 30 s Live-Werten auf der
+   Messposition kein Ausreißer mehr (dist 46,6 … 48,1 mm); Abblockkondensator am Sensor vorhanden.
+   Beobachten; ein Filter (Bereichswechsel erst nach 3 Messungen) nur, falls sie wieder auftreten.
 2. **Grüne LED flackert sehr kurz** (2a Nr. 3), auch ohne WLAN-Befehle – vermutlich elektrisch.
 3. **Ruck des Motors beim Start von I2S** (O3) – braucht eine Erweiterung im FastAccelStepper-Fork.
 4. **Pull Request** des IRAM-Fixes an FastAccelStepper (gin66) steht aus.
