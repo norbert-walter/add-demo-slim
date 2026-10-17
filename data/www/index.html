@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ADD Demo – Process View</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<!-- index.html – Process View (Contract V1.5.22 §5.5, Sprint W1). SKELETON by the reviewer: the markup
+     and the given helpers stay as they are; only the functions marked TODO(W1.4) are filled in. -->
+<body class="theme-dark">
+<div class="wrap">
+
+  <div class="topbar">
+    <h1>ADD DEMO · PROCESS VIEW</h1>
+    <div class="status-pill offline" id="pill"><span class="dot off" id="pillDot"></span><span id="pillText">Connecting…</span></div>
+    <span class="local-badge hidden" id="localBadge">LOCAL</span>
+    <span class="spacer"></span>
+    <a href="/settings">Settings ›</a>
+    <select class="text-input" id="theme">
+      <option value="theme-dark">Dark</option><option value="theme-light">Light</option>
+      <option value="theme-night">Night</option><option value="theme-bw">B&amp;W</option>
+    </select>
+  </div>
+
+  <div class="sec">State</div>
+  <div class="grid">
+    <div class="panel span2">
+      <div class="lbl">Safety state</div>
+      <div class="state warn" id="state">---</div>
+      <div class="sub" id="err"></div>
+    </div>
+    <div class="panel"><div class="lbl">HV</div><div class="v-med" id="hv">---</div></div>
+    <div class="panel"><div class="lbl">Shutter</div><div class="v-med" id="shutter">---</div></div>
+    <div class="panel"><div class="lbl">Mode</div><div class="v-med" id="mode">---</div></div>
+  </div>
+
+  <div class="sec">Measurement</div>
+  <div class="grid">
+    <div class="panel"><div class="lbl">Position</div><div class="v-big"><span id="pos">---</span><span class="u"> mm</span></div></div>
+    <div class="panel"><div class="lbl">Speed</div><div class="v-med"><span id="vel">---</span><span class="u"> mm/s</span></div></div>
+    <div class="panel"><div class="lbl">Distance</div><div class="v-med"><span id="dist">---</span><span class="u"> mm</span></div></div>
+    <div class="panel"><div class="lbl">Thickness</div><div class="v-big"><span id="thick">---</span><span class="u"> mm</span></div></div>
+    <div class="panel"><div class="lbl">Average</div><div class="v-med"><span id="avg">---</span><span class="u"> mm</span></div>
+      <div class="sub">n = <span id="n">0</span></div></div>
+  </div>
+
+  <div class="grid two">
+    <div class="panel">
+      <div class="lbl">Distance / thickness (last 100 valid samples)</div>
+      <canvas class="chart" id="chart" width="640" height="160"></canvas>
+      <div class="legend"><span class="dist">— DIST</span> &nbsp; <span class="thick">— THICK</span></div>
+    </div>
+    <div class="panel">
+      <div class="lbl">Safety flags (SIM = simulated)</div>
+      <div id="flags"></div>
+    </div>
+  </div>
+
+  <div class="sec">Operation</div>
+  <div class="panel">
+    <div class="btns">
+      <button class="btn btn-secondary" id="btnInit" disabled>INIT</button>
+      <button class="btn btn-primary" id="btnHv" disabled>HV ON</button>
+      <button class="btn btn-primary" id="btnMeasure" disabled>MEASURE</button>
+      <button class="btn btn-primary" id="btnTraverse" disabled>TRAVERSE</button>
+      <button class="btn btn-secondary" id="btnAck" disabled>ACK</button>
+      <button class="btn btn-danger btn-stop" id="btnStop">STOP</button>
+    </div>
+    <div class="hint mt" id="hint"></div>
+  </div>
+
+  <div class="val-strip" id="valStrip"><span class="val-lbl">ADD v1.0:</span></div>
+</div>
+
+<div class="dialog-overlay hidden" id="confirmOverlay">
+  <div class="dialog">
+    <div class="dialog-title" id="confirmTitle">Confirm</div>
+    <div class="dialog-body" id="confirmBody"></div>
+    <div class="dialog-btns">
+      <button class="btn btn-secondary" id="confirmCancel">Cancel</button>
+      <button class="btn btn-danger" id="confirmOk">Execute</button>
+    </div>
+  </div>
+</div>
+<div class="toast hidden" id="toast"></div>
+
+<script src="/app.js"></script>
+<script>
+'use strict';
+// ---- given helpers (do not change) -----------------------------------------------------------
+const A = window.ADDAPP;
+const POLL_MS = 500;
+const $ = (id) => document.getElementById(id);
+let last = null;             // last valid /proc object, null while offline
+let conn = 'offline';        // 'ok' | 'crc' | 'offline'
+let lastHeartbeat = 0;       // Date.now() of the last GET_STATE
+const series = [];           // chart samples {dist, thick}
+
+function setTheme(name) {
+  document.body.className = name;
+  $('theme').value = name;
+  try { localStorage.setItem('add-dashboard-theme', name); } catch (e) {}
+}
+let toastTimer = null;
+function toast(text, isError) {
+  const t = $('toast');
+  t.textContent = text; t.className = 'toast' + (isError ? ' err' : '');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = 'toast hidden'; }, 4000);
+}
+function showConfirm(title, body, action) {
+  $('confirmTitle').textContent = title; $('confirmBody').textContent = body;
+  $('confirmOk').onclick = () => { closeConfirm(); action(); };
+  $('confirmOverlay').classList.remove('hidden');
+}
+function closeConfirm() { $('confirmOverlay').classList.add('hidden'); }
+/** Two lines, each scaled to its own min..max (Style Guide 6.7 sparkline). */
+function drawChart() {
+  const c = $('chart'), ctx = c.getContext('2d'), W = c.width, H = c.height;
+  ctx.clearRect(0, 0, W, H);
+  if (series.length < 2) return;
+  const css = getComputedStyle(document.body);
+  [['dist', '--accent'], ['thick', '--accent2']].forEach(([k, col]) => {
+    const v = series.map((s) => s[k]);
+    const min = Math.min.apply(null, v), max = Math.max.apply(null, v), range = max - min || 1;
+    ctx.beginPath();
+    v.forEach((y, i) => {
+      const px = (i / (v.length - 1)) * W, py = H - ((y - min) / range) * (H - 6) - 3;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    });
+    ctx.strokeStyle = css.getPropertyValue(col).trim(); ctx.lineWidth = 1.5; ctx.stroke();
+  });
+}
+
+// ---- TODO(W1.4) --------------------------------------------------------------------------------
+/** POST /api with A.apiBody(cmd, params). Returns the reply object (A.parseFramed(text).data) or
+ *  null (network error, HTTP error without a framed body, CRC/JSON error).
+ *  Unless quiet: toast(A.replyText(reply), !reply || reply.err !== 0). Never retries (also not on BUSY). */
+async function api(cmd, params, quiet) {
+  throw new Error('TODO(W1.4) api');
+}
+/** A user command: with A.confirmText(cmd) -> showConfirm(title, body, () => api(cmd)); else api(cmd). */
+function command(cmd) {
+  throw new Error('TODO(W1.4) command');
+}
+/** Show p (or "no data" for null) on the page:
+ *  pill (A.pill(conn): #pillText text, #pill class 'status-pill' + ' offline', #pillDot 'dot' + ' off'),
+ *  with p: #state text and class 'state ' + v.stateCls, #err, #hv, #shutter, #mode, #pos, #vel, #dist,
+ *  #thick, #avg, #n from A.view(p); #localBadge visible only while v.local; #flags = one
+ *  <span class="chip <cls>"> per A.flags(p) entry (textContent = text);
+ *  always: every button disabled = !A.buttons(p).<KEY>.enabled, #btnHv text = HV.label, #hint = hint. */
+function render(p) {
+  throw new Error('TODO(W1.4) render');
+}
+/** One poll: GET '/proc?t=' + Date.now(). Framed and valid -> conn 'ok', last = data,
+ *  A.seriesPush(series, last), drawChart(); CRC/JSON error -> conn 'crc', last = null;
+ *  network error -> conn 'offline', last = null. Then render(last); then, if
+ *  A.heartbeatDue(last, Date.now(), lastHeartbeat): lastHeartbeat = Date.now(), api('GET_STATE', null, true).
+ *  Finally setTimeout(poll, POLL_MS) – exactly one pending poll at any time. */
+async function poll() {
+  throw new Error('TODO(W1.4) poll');
+}
+/** GET /add (plain JSON, not framed); #valStrip = the label span, then one
+ *  <span class="badge <cls>"> per A.validationBadges(doc) entry; on any error A.validationBadges(null). */
+async function loadValidation() {
+  throw new Error('TODO(W1.4) loadValidation');
+}
+/** Start: theme from localStorage 'add-dashboard-theme' (default 'theme-dark'), #theme change ->
+ *  setTheme; buttons: INIT -> command('INIT'), HV -> command(A.buttons(last).HV.cmd),
+ *  MEASURE -> command('START_MEASURE'), TRAVERSE -> command('START_TRAVERSE'), STOP -> api('STOP')
+ *  (never a dialog), ACK -> command('ACK'); #confirmCancel -> closeConfirm; render(null);
+ *  loadValidation(); poll(). */
+function init() {
+  throw new Error('TODO(W1.4) init');
+}
+init();
+</script>
+</body>
+</html>

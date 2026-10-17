@@ -1,0 +1,250 @@
+/* style.css – ADD Demo System web UI (Contract V1.5.22, Sprint W1). Written by the reviewer, FROZEN.
+ * Based on the ADD Dashboard Style Guide v1.0 (CC BY 4.0, Norbert Walter): identical CSS variables
+ * (Appendix A), theme classes theme-dark / theme-light / theme-night / theme-bw on <body>.
+ * Fonts are served by the device itself (no internet in AP mode): /font-u400.woff2 ... */
+
+@font-face { font-family: 'Ubuntu'; font-weight: 400; font-style: normal; font-display: swap; src: url('/font-u400.woff2') format('woff2'); }
+@font-face { font-family: 'Ubuntu'; font-weight: 700; font-style: normal; font-display: swap; src: url('/font-u700.woff2') format('woff2'); }
+@font-face { font-family: 'Ubuntu Mono'; font-weight: 400; font-style: normal; font-display: swap; src: url('/font-m400.woff2') format('woff2'); }
+@font-face { font-family: 'Ubuntu Mono'; font-weight: 700; font-style: normal; font-display: swap; src: url('/font-m700.woff2') format('woff2'); }
+
+:root { --sans: 'Ubuntu', sans-serif; --mono: 'Ubuntu Mono', monospace; }
+
+/* ---- themes (Style Guide 4.1 - 4.4, values verbatim) ---------------------------------------- */
+body.theme-dark {
+  --bg-color:    rgb(32,32,32);
+  --bg-image:    linear-gradient(45deg,black 25%,transparent 25%,transparent 75%,black 75%,black),
+                 linear-gradient(45deg,black 25%,transparent 25%,transparent 75%,black 75%,black),
+                 linear-gradient(to bottom,rgb(8,8,8),rgb(32,32,32));
+  --bg-size:     10px 10px,10px 10px,10px 5px;
+  --bg-pos:      0px 0px,5px 5px,0px 0px;
+  --panel:       #1e1e1e;
+  --border:      #2e2e2e;
+  --text:        #c8c8c8;
+  --text-strong: #ffffff;
+  --muted:       #5a7060;
+  --label:       #8ab2d0;
+  --accent:      #00c8a0;
+  --accent2:     #0084ff;
+  --danger:      #e84040;
+  --warn:        #f5a623;
+  --ok:          #00c8a0;
+  --nmea-bg:     #0a0a0a;
+  --nmea-ts:     #444444;
+  --instr-bg:    #202020;
+  --instr-brd:   #333333;
+  --v-big-color: #ffffff;
+  --v-med-color: #ffffff;
+  --input-bg:    #161616;
+  --input-brd:   #3a3a3a;
+  --pulse-anim:  pulse 2s infinite;
+}
+body.theme-light {
+  --bg-color:    #f0f2f5;
+  --bg-image:    none;
+  --bg-size:     auto;
+  --bg-pos:      0 0;
+  --panel:       #ffffff;
+  --border:      #dde2ea;
+  --text:        #3a4050;
+  --text-strong: #111620;
+  --muted:       #8a95a8;
+  --label:       #5a80b0;
+  --accent:      #00a882;
+  --accent2:     #0066cc;
+  --danger:      #cc2020;
+  --warn:        #d4870a;
+  --ok:          #00a882;
+  --nmea-bg:     #f8f9fb;
+  --nmea-ts:     #aaaaaa;
+  --instr-bg:    #e8eaee;
+  --instr-brd:   #c8cdd8;
+  --v-big-color: #111620;
+  --v-med-color: #111620;
+  --input-bg:    #f5f7fa;
+  --input-brd:   #c8cdd8;
+  --pulse-anim:  pulse 2s infinite;
+}
+body.theme-night {
+  --bg-color:    #000000;
+  --bg-image:    none;
+  --bg-size:     auto;
+  --bg-pos:      0 0;
+  --panel:       #0d0d0d;
+  --border:      #1a1100;
+  --text:        #cc6600;
+  --text-strong: #ff9900;
+  --muted:       #664400;
+  --label:       #995500;
+  --accent:      #cc5500;
+  --accent2:     #bb4400;
+  --danger:      #aa0000;
+  --warn:        #cc7700;
+  --ok:          #886600;
+  --nmea-bg:     #050200;
+  --nmea-ts:     #442200;
+  --instr-bg:    #0a0500;
+  --instr-brd:   #221100;
+  --v-big-color: #ff9900;
+  --v-med-color: #ff9900;
+  --input-bg:    #0a0500;
+  --input-brd:   #331a00;
+  --pulse-anim:  pulse 2s infinite;
+}
+body.theme-bw {
+  --bg-color:    #ffffff;
+  --bg-image:    none;
+  --bg-size:     auto;
+  --bg-pos:      0 0;
+  --panel:       #aaaaaa;
+  --border:      #444444;
+  --text:        #444444;
+  --text-strong: #000000;
+  --muted:       #444444;
+  --label:       #444444;
+  --accent:      #000000;
+  --accent2:     #000000;
+  --danger:      #000000;
+  --warn:        #000000;
+  --ok:          #000000;
+  --nmea-bg:     #aaaaaa;
+  --nmea-ts:     #444444;
+  --instr-bg:    #aaaaaa;
+  --instr-brd:   #444444;
+  --v-big-color: #000000;
+  --v-med-color: #000000;
+  --input-bg:    #ffffff;
+  --input-brd:   #444444;
+  --pulse-anim:  none;
+}
+
+/* ---- page ------------------------------------------------------------------------------------ */
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 16px; min-height: 100vh;
+  background-color: var(--bg-color); background-image: var(--bg-image);
+  background-size: var(--bg-size); background-position: var(--bg-pos);
+  color: var(--text); font-family: var(--sans); font-size: 15px;
+}
+.wrap { max-width: 1340px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+.topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.topbar h1 { margin: 0 12px 0 0; font-size: 1.05rem; font-weight: 700; color: var(--text-strong); letter-spacing: .04em; }
+.topbar .spacer { flex: 1; }
+.topbar a { color: var(--accent2); font-family: var(--mono); font-size: .8rem; text-decoration: none; }
+.sec { font-size: .60rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 6px 2px 0; }
+
+/* grid (Style Guide 3): 1U = 160 px, 10 px gap */
+.grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+.grid.two { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+.span2 { grid-column: span 2; }
+@media (max-width: 519px) { .grid, .grid.two { grid-template-columns: 1fr; } .span2 { grid-column: span 1; } }
+
+/* ---- data panel (6.5), values (5.2) ---------------------------------------------------------- */
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+.lbl { font-size: .62rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
+.mt  { margin-top: 12px; }
+.sub { font-size: .68rem; color: var(--muted); font-family: var(--mono); margin-top: 5px; }
+.v-big { font-family: var(--mono); font-size: 2.1rem; font-weight: 700; color: var(--v-big-color); }
+.v-big .u { font-size: .9rem; font-weight: 400; color: var(--label); }
+.v-med { font-family: var(--mono); font-size: 1.5rem; font-weight: 700; color: var(--v-med-color); }
+.v-med .u { font-size: .8rem; font-weight: 400; color: var(--label); }
+.v-sm  { font-family: var(--mono); font-size: 1.0rem; font-weight: 600; color: var(--accent2); }
+.v-sm .u { font-size: .7rem; font-weight: 400; color: var(--muted); }
+canvas.chart { width: 100%; height: 160px; display: block; margin-top: 8px; }
+.legend { font-family: var(--mono); font-size: .68rem; margin-top: 6px; }
+.legend .dist { color: var(--accent); } .legend .thick { color: var(--accent2); }
+
+/* ---- state and flags: colour is never the only encoding (2.3) -------------------------------- */
+.state { font-family: var(--mono); font-size: 1.5rem; font-weight: 700; }
+.ok     { color: var(--ok); }
+.warn   { color: var(--warn); }
+.danger { color: var(--danger); }
+.chip {
+  display: inline-block; padding: 4px 10px; border-radius: 4px; margin: 0 6px 6px 0;
+  font-family: var(--mono); font-size: .75rem; font-weight: 700; border: 1px solid currentColor;
+}
+.chip.ok::before { content: '\2713  '; } .chip.warn::before { content: '!  '; } .chip.danger::before { content: '\2717  '; }
+.local-badge {
+  font-family: var(--mono); font-size: .75rem; font-weight: 700; padding: 4px 10px; border-radius: 4px;
+  color: var(--warn); border: 1px solid var(--warn);
+}
+.hint { font-size: .75rem; color: var(--warn); font-family: var(--mono); }
+.hidden { display: none !important; }
+
+/* ---- status pill (6.8) ----------------------------------------------------------------------- */
+.status-pill {
+  display: flex; align-items: center; gap: 7px; padding: 5px 13px; border-radius: 100px;
+  font-size: .7rem; font-weight: 600; font-family: var(--mono);
+  background: rgba(0,200,160,.1); border: 1px solid rgba(0,200,160,.3); color: var(--accent);
+}
+.status-pill.offline { background: rgba(200,0,0,.1); border-color: rgba(200,0,0,.3); color: var(--danger); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: var(--pulse-anim); }
+.dot.off { background: var(--danger); animation: none; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+/* ---- validation strip (6.10) ----------------------------------------------------------------- */
+.val-strip {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+}
+.val-lbl { font-size: .62rem; font-weight: 700; color: var(--muted); font-family: var(--mono); }
+.badge {
+  padding: 3px 9px; border-radius: 4px; font-size: .62rem; font-family: var(--mono); font-weight: 600;
+  background: rgba(0,200,160,.1); border: 1px solid rgba(0,200,160,.25); color: var(--accent);
+}
+.badge.warn { background: rgba(245,166,35,.1); border-color: rgba(245,166,35,.25); color: var(--warn); }
+.badge.fail { background: rgba(232,64,64,.1); border-color: rgba(232,64,64,.25); color: var(--danger); }
+.badge.info { background: rgba(0,132,255,.1); border-color: rgba(0,132,255,.25); color: var(--accent2); }
+
+/* ---- buttons (7.1); 44 px touch targets (2.4) ------------------------------------------------ */
+.btns { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn {
+  min-height: 44px; min-width: 96px; padding: 6px 16px; border-radius: 6px;
+  font-family: var(--mono); font-size: .8rem; font-weight: 600; cursor: pointer; border: 1px solid;
+  transition: background .15s;
+}
+.btn-primary { background: rgba(0,200,160,.12); border-color: rgba(0,200,160,.3); color: var(--accent); }
+.btn-primary:hover { background: rgba(0,200,160,.22); }
+.btn-secondary { background: rgba(0,132,255,.1); border-color: rgba(0,132,255,.3); color: var(--accent2); }
+.btn-secondary:hover { background: rgba(0,132,255,.22); }
+.btn-danger { background: rgba(232,64,64,.1); border-color: rgba(232,64,64,.3); color: var(--danger); }
+.btn-danger:hover { background: rgba(232,64,64,.22); }
+.btn:disabled { opacity: .35; cursor: not-allowed; }
+.btn-stop { min-width: 140px; font-size: 1rem; }
+
+/* ---- inputs (7.2, 7.5) ----------------------------------------------------------------------- */
+.form { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.input-wrap { display: flex; flex-direction: column; gap: 5px; }
+.text-input {
+  min-height: 36px; padding: 6px 10px; background: var(--input-bg); border: 1px solid var(--input-brd);
+  border-radius: 6px; color: var(--text-strong); font-family: var(--mono); font-size: .85rem; outline: none;
+  transition: border-color .15s;
+}
+.text-input:focus { border-color: var(--accent); }
+.text-input::placeholder { color: var(--muted); }
+.text-input.bad { border-color: var(--danger); }
+.range { font-size: .62rem; color: var(--muted); font-family: var(--mono); }
+.toggle-wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
+.toggle { position: relative; display: inline-block; width: 40px; height: 22px; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider { position: absolute; inset: 0; background: var(--input-brd); border-radius: 22px; cursor: pointer; transition: background .2s; }
+.toggle-slider::before {
+  content: ''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; border-radius: 50%;
+  background: var(--text-strong); transition: transform .2s;
+}
+.toggle input:checked + .toggle-slider { background: var(--accent); }
+.toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
+select.text-input { min-height: 32px; padding: 4px 8px; }
+
+/* ---- confirmation dialog (7.8) and toast ----------------------------------------------------- */
+.dialog-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 999; }
+.dialog { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 24px; max-width: 360px; width: 90%; }
+.dialog-title { font-size: 1rem; font-weight: 700; color: var(--text-strong); margin-bottom: 12px; }
+.dialog-body  { font-size: .8rem; color: var(--text); margin-bottom: 20px; font-family: var(--mono); }
+.dialog-btns  { display: flex; justify-content: flex-end; gap: 10px; }
+.toast {
+  position: fixed; right: 16px; bottom: 16px; z-index: 1000; max-width: 420px;
+  padding: 10px 14px; border-radius: 6px; font-family: var(--mono); font-size: .8rem; font-weight: 600;
+  background: var(--panel); border: 1px solid var(--accent); color: var(--accent);
+}
+.toast.err { border-color: var(--danger); color: var(--danger); }

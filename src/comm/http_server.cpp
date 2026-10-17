@@ -48,6 +48,19 @@ static void sendFile(const char* path, const char* type, bool noStore) {
     f.close();
 }
 
+/// V1.5.22: a font file, cacheable for one day (Cache-Control: max-age=86400).
+static void sendFont(const char* path) {
+    if (!SPIFFS.exists(path)) {
+        notFound();
+        return;
+    }
+    File f = SPIFFS.open(path, "r");
+    server.sendHeader("Cache-Control", "max-age=86400");
+    cors();
+    server.streamFile(f, "font/woff2");
+    f.close();
+}
+
 /// Read a file in blocks and escape "</" as "<\/". Block-wise sendContent (V1.5.17).
 static void sendScriptJson(File& f) {
     uint8_t buf[64];
@@ -254,6 +267,13 @@ void httpServerInit() {
     server.on("/settings", HTTP_GET, []() { sendFile("/www/settings.html", "text/html", false); });
     server.on("/add", HTTP_GET, []() { sendFile("/add.json", "application/json", true); });
     server.on("/doc", HTTP_GET, []() { sendFile("/doc.md", "text/markdown", false); });
+    // V1.5.22: web UI assets (Sprint W1); fonts may be cached by the browser
+    server.on("/app.js", HTTP_GET, []() { sendFile("/www/app.js", "application/javascript", false); });
+    server.on("/style.css", HTTP_GET, []() { sendFile("/www/style.css", "text/css", false); });
+    server.on("/font-u400.woff2", HTTP_GET, []() { sendFont("/www/font-u400.woff2"); });
+    server.on("/font-u700.woff2", HTTP_GET, []() { sendFont("/www/font-u700.woff2"); });
+    server.on("/font-m400.woff2", HTTP_GET, []() { sendFont("/www/font-m400.woff2"); });
+    server.on("/font-m700.woff2", HTTP_GET, []() { sendFont("/www/font-m700.woff2"); });
 
     // Dynamic handlers
     server.on("/add.html", HTTP_GET, handleAddHtml);

@@ -9,6 +9,11 @@
  *   GET  /add.html    -> /add.json embedded per ADD spec §5.3
  *   GET  /llms.txt    -> generated index (ADD spec §5.4)
  *   GET  /doc         -> SPIFFS /doc.md (text/markdown)
+ *   V1.5.22 (web UI assets, Sprint W1):
+ *   GET  /app.js      -> SPIFFS /www/app.js (application/javascript)
+ *   GET  /style.css   -> SPIFFS /www/style.css (text/css)
+ *   GET  /font-u400.woff2, /font-u700.woff2, /font-m400.woff2, /font-m700.woff2 -> SPIFFS /www/<same name>
+ *        (font/woff2, Cache-Control: max-age=86400; SPIFFS names are limited to 31 characters)
  *   GET  /log         -> logDump() (text/plain)
  *   GET  /proc        -> snapshotGet() + procToJson() (Cache-Control: no-store)
  *   POST /api         -> body max API_BODY_MAX bytes, then:

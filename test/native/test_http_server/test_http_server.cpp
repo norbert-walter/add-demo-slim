@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5.17) – Sprint P2 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.22) – Sprint P2 must make these pass. Do not modify.
 // Host test of the REAL src/comm/http_server.cpp together with the real snapshot.cpp,
 // command_queue.cpp and log_buffer.cpp, using the WebServer/SPIFFS shims in
 // test/native/freertos_shim. A thread plays the control task (replies to queued commands).
@@ -97,6 +97,30 @@ void test_static_files_and_404() {
     shimFiles().erase("/doc.md");
     const ShimResponse& m = request(HTTP_GET, "/doc");          // missing file -> 404
     TEST_ASSERT_EQUAL_INT(404, m.code); TEST_ASSERT_EQUAL_STRING("{\"error\":\"not found\"}", m.body.c_str());
+}
+void test_v1522_web_assets() {
+    shimFiles()["/www/app.js"] = "var ADDAPP={};";
+    shimFiles()["/www/style.css"] = "body{}";
+    const char* fonts[] = {"u400", "u700", "m400", "m700"};
+    for (const char* f : fonts) shimFiles()[std::string("/www/font-") + f + ".woff2"] = std::string("wOF2") + f;
+    const ShimResponse& j = request(HTTP_GET, "/app.js");
+    TEST_ASSERT_EQUAL_INT(200, j.code); TEST_ASSERT_EQUAL_STRING("application/javascript", j.type.c_str());
+    TEST_ASSERT_EQUAL_STRING("var ADDAPP={};", j.body.c_str()); assertCors(j);
+    const ShimResponse& c = request(HTTP_GET, "/style.css");
+    TEST_ASSERT_EQUAL_STRING("text/css", c.type.c_str()); TEST_ASSERT_EQUAL_STRING("body{}", c.body.c_str()); assertCors(c);
+    for (const char* f : fonts) {
+        std::string uri = std::string("/font-") + f + ".woff2";
+        const ShimResponse& r = request(HTTP_GET, uri.c_str());
+        TEST_ASSERT_EQUAL_INT_MESSAGE(200, r.code, uri.c_str());
+        TEST_ASSERT_EQUAL_STRING("font/woff2", r.type.c_str());
+        TEST_ASSERT_EQUAL_STRING((std::string("wOF2") + f).c_str(), r.body.c_str());
+        TEST_ASSERT_EQUAL_STRING("max-age=86400", r.header("Cache-Control").c_str()); assertCors(r);
+        TEST_ASSERT_TRUE_MESSAGE(strlen("/www/font-") + strlen(f) + strlen(".woff2") <= 31, "SPIFFS name length");
+    }
+    TEST_ASSERT_EQUAL_INT(0, shimOpenFiles());
+    shimFiles().erase("/www/font-m400.woff2");
+    TEST_ASSERT_EQUAL_INT(404, request(HTTP_GET, "/font-m400.woff2").code);
+    TEST_ASSERT_EQUAL_INT(404, request(HTTP_GET, "/www/app.js").code);   // only the listed routes
 }
 void test_add_html_embeds_and_escapes() {
     std::string json = "{\"name\":\"a<b & c>d\",\"x\":\"</script>\"}";
@@ -321,6 +345,7 @@ int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_init_registers_routes_and_begins);
     RUN_TEST(test_static_files_and_404);
+    RUN_TEST(test_v1522_web_assets);
     RUN_TEST(test_add_html_embeds_and_escapes);
     RUN_TEST(test_llms_txt_exact);
     RUN_TEST(test_log_endpoint);

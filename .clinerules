@@ -13,6 +13,9 @@ The task you get comes from docs/sprints/<Sprint>.md – do only that task.
    - src/app/snapshot.cpp, src/app/command_queue.cpp, src/app/control_task.cpp
      (exception: Sprint I1 may fix compile errors in control_task.cpp – report every change)
    - everything in test/ and docs/CONTRACT.md
+   - data/www/style.css, data/www/*.woff2, data/www/LICENCE-ubuntu-font.txt, scripts/fake_device.py
+   - in skeleton files (src/display/display.cpp, data/www/*.html, data/www/app.js): everything that
+     is not inside a function marked TODO for your task
    If a frozen file seems wrong: STOP and describe the problem. Do not work around it.
 2. Implement exactly the functions declared in the headers. No extra public functions,
    no changed signatures, no new global variables visible outside a .cpp file.
@@ -31,7 +34,9 @@ The task you get comes from docs/sprints/<Sprint>.md – do only that task.
 - Host tests:       pio test -e native            (single suite: -f native/test_<name>)
 - Quiet build:      pio run -e firmware -s          (complete firmware, from Sprint I1 on)
 - Partial build:    pio run -e firmware-partial -s  (Sprints L1..H1: missing later modules are ok)
-- Frozen check:     git diff --exit-code -- src/config.h ':(glob)src/**/*.h' test docs/CONTRACT.md
+- JS tests (W1):    node --test test/js/test_app.js test/js/test_pages.js
+- Frozen check:     git diff --exit-code master -- src/config.h ':(glob)src/**/*.h' test docs/CONTRACT.md data/www/style.css ':(glob)data/www/*.woff2' scripts/fake_device.py; echo "frozen $?"
+                    must print "frozen 0". Otherwise undo YOUR changes to those files (they are not yours).
 - NEVER run without explicit user approval: any "-t upload", "-t uploadfs",
   "pio test -e esp32-test", "pio device monitor". (Flashing can move the motor.)
 - NEVER without explicit user approval: serial_cmd.py with a command that can move
@@ -50,11 +55,12 @@ The task you get comes from docs/sprints/<Sprint>.md – do only that task.
    Run the full native suite, not only the sprint suite.
 2. pio run -e firmware-partial -s (L1..H1) or pio run -e firmware -s (from I1)
    -> no compile errors, no new warnings in your files
-3. Frozen check passes (no diff).
+3. Frozen check prints "frozen 0" – run it yourself as the last step of every task.
 4. Update the status table in README.md for this sprint: implementation status and
    test status (which suites are green, e.g. "test_safety_logic 52/52"), date.
    README.md is not frozen; never mark anything as done that is not green.
-5. Short report: files created, decisions taken, open questions.
+5. Report = copied tool output only (the lines the task asks for). No tables, no prose summaries,
+   no numbers typed by hand. The reviewer only trusts output the user runs himself.
 
 ## Library knowledge
 Read the real headers instead of guessing APIs:

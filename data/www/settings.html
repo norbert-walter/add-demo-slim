@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ADD Demo – Settings</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<!-- settings.html – Settings (Contract V1.5.22 §5.5, Sprint W1). SKELETON by the reviewer: the markup
+     and the given helpers stay as they are; only the functions marked TODO(W1.5) are filled in. -->
+<body class="theme-dark">
+<div class="wrap">
+
+  <div class="topbar">
+    <h1>ADD DEMO · SETTINGS</h1>
+    <div class="status-pill offline" id="pill"><span class="dot off" id="pillDot"></span><span id="pillText">Connecting…</span></div>
+    <span class="spacer"></span>
+    <a href="/">‹ Process View</a>
+    <select class="text-input" id="theme">
+      <option value="theme-dark">Dark</option><option value="theme-light">Light</option>
+      <option value="theme-night">Night</option><option value="theme-bw">B&amp;W</option>
+    </select>
+  </div>
+
+  <div class="sec">Positions and profile run</div>
+  <div class="panel form">
+    <div class="input-wrap"><label class="lbl" for="f_measure_pos">Measuring position (mm)</label><input class="text-input" id="f_measure_pos"><span class="range">61 … 242</span></div>
+    <div class="input-wrap"><label class="lbl" for="f_maint_pos">Service position (mm)</label><input class="text-input" id="f_maint_pos"><span class="range">21 … 60</span></div>
+    <div class="input-wrap"><label class="lbl" for="f_traverse_start">Profile start (mm)</label><input class="text-input" id="f_traverse_start"><span class="range">61 … 242</span></div>
+    <div class="input-wrap"><label class="lbl" for="f_traverse_end">Profile end (mm)</label><input class="text-input" id="f_traverse_end"><span class="range">61 … 242</span></div>
+    <div class="input-wrap"><label class="lbl" for="f_traverse_speed">Profile speed (mm/s)</label><input class="text-input" id="f_traverse_speed"><span class="range">1 … 20</span></div>
+    <div class="input-wrap"><label class="lbl" for="f_shutter_hold">Shutter hold time (s)</label><input class="text-input" id="f_shutter_hold"><span class="range">0 … 10</span></div>
+    <div class="input-wrap"><label class="lbl" for="f_edge_threshold">Edge threshold (mm)</label><input class="text-input" id="f_edge_threshold"><span class="range">0.5 … 100</span></div>
+    <div class="input-wrap"><label class="lbl" for="f_base_dist">Base distance (mm)</label><input class="text-input" id="f_base_dist"><span class="range">40 … 300</span></div>
+  </div>
+
+  <div class="sec">Calibration</div>
+  <div class="panel">
+    <div class="form">
+      <div class="input-wrap"><label class="lbl" for="f_calib_near_ref">Near reference (mm)</label><input class="text-input" id="f_calib_near_ref"><span class="range">40 … 300</span></div>
+      <div class="input-wrap"><label class="lbl" for="f_calib_far_ref">Far reference (mm)</label><input class="text-input" id="f_calib_far_ref"><span class="range">40 … 300</span></div>
+    </div>
+    <div class="sub mt" id="calInfo">---</div>
+    <div class="btns mt">
+      <button class="btn btn-secondary" id="btnCalNear">CAPTURE NEAR</button>
+      <button class="btn btn-secondary" id="btnCalFar">CAPTURE FAR</button>
+      <button class="btn btn-secondary" id="btnCalBase">CAPTURE BASE</button>
+      <button class="btn btn-primary" id="btnCalSave">SAVE CALIBRATION</button>
+      <button class="btn btn-danger" id="btnCalReset">RESET CALIBRATION</button>
+    </div>
+  </div>
+
+  <div class="sec">Safety flags (simulated, not stored – reset at every boot)</div>
+  <div class="panel form">
+    <label class="toggle-wrap"><span class="lbl">Interlock closed</span><span class="toggle"><input type="checkbox" id="f_interlock"><span class="toggle-slider"></span></span></label>
+    <label class="toggle-wrap"><span class="lbl">Cooling flow</span><span class="toggle"><input type="checkbox" id="f_cooling_flow"><span class="toggle-slider"></span></span></label>
+    <div class="input-wrap"><label class="lbl" for="f_temp">Cooling temperature (°C)</label><input class="text-input" id="f_temp"><span class="range">-20 … 99.9 (warning above 30, fault above 32)</span></div>
+  </div>
+
+  <div class="sec">E-stop wiring</div>
+  <div class="panel">
+    <label class="toggle-wrap"><span class="lbl">Normally-closed contact (wire break detection)</span><span class="toggle"><input type="checkbox" id="f_estop_nc"><span class="toggle-slider"></span></span></label>
+    <div class="hint">Must match the wiring – a wrong setting shows a permanent E-stop. Only accepted while the axis is idle and HV is off.</div>
+  </div>
+
+  <div class="sec">Router (station mode, effective after reboot)</div>
+  <div class="panel">
+    <div class="form">
+      <div class="input-wrap"><label class="lbl" for="f_wifi_ssid">SSID (empty = no router)</label><input class="text-input" id="f_wifi_ssid"><span class="range">0 … 32 characters</span></div>
+      <div class="input-wrap"><label class="lbl" for="f_wifi_pass">Password (empty = keep)</label><input class="text-input" type="password" id="f_wifi_pass" autocomplete="new-password"><span class="range">8 … 63 characters</span></div>
+    </div>
+    <div class="sub mt" id="wifiInfo">---</div>
+    <div class="btns mt"><button class="btn btn-danger" id="btnReboot">REBOOT</button></div>
+  </div>
+
+  <div class="panel btns">
+    <button class="btn btn-primary" id="btnSave">SAVE</button>
+    <button class="btn btn-secondary" id="btnReload">RELOAD</button>
+  </div>
+</div>
+
+<div class="dialog-overlay hidden" id="confirmOverlay">
+  <div class="dialog">
+    <div class="dialog-title" id="confirmTitle">Confirm</div>
+    <div class="dialog-body" id="confirmBody"></div>
+    <div class="dialog-btns">
+      <button class="btn btn-secondary" id="confirmCancel">Cancel</button>
+      <button class="btn btn-danger" id="confirmOk">Execute</button>
+    </div>
+  </div>
+</div>
+<div class="toast hidden" id="toast"></div>
+
+<script src="/app.js"></script>
+<script>
+'use strict';
+// ---- given helpers (do not change) -----------------------------------------------------------
+const A = window.ADDAPP;
+const $ = (id) => document.getElementById(id);
+let cfg = null;              // "config" object of the last GET_CONFIG, null before the first
+
+function setTheme(name) {
+  document.body.className = name;
+  $('theme').value = name;
+  try { localStorage.setItem('add-dashboard-theme', name); } catch (e) {}
+}
+let toastTimer = null;
+function toast(text, isError) {
+  const t = $('toast');
+  t.textContent = text; t.className = 'toast' + (isError ? ' err' : '');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = 'toast hidden'; }, 4000);
+}
+function showConfirm(title, body, action) {
+  $('confirmTitle').textContent = title; $('confirmBody').textContent = body;
+  $('confirmOk').onclick = () => { closeConfirm(); action(); };
+  $('confirmOverlay').classList.remove('hidden');
+}
+function closeConfirm() { $('confirmOverlay').classList.add('hidden'); }
+function setPill(conn) {
+  const pl = A.pill(conn);
+  $('pillText').textContent = pl.text;
+  $('pill').className = 'status-pill' + (pl.offline ? ' offline' : '');
+  $('pillDot').className = 'dot' + (pl.offline ? ' off' : '');
+}
+
+// ---- TODO(W1.5) --------------------------------------------------------------------------------
+/** POST /api with A.apiBody(cmd, params). Returns the reply object or null (as in index.html);
+ *  setPill(reply ? 'ok' : 'offline'). Unless quiet: toast(A.replyText(reply), !reply || reply.err !== 0). */
+async function api(cmd, params, quiet) {
+  throw new Error('TODO(W1.5) api');
+}
+/** Form values for A.configDiff: for every A.PARAMS key the element #f_<key>:
+ *  type 'bool' -> checkbox .checked, else .value (string). */
+function readForm() {
+  throw new Error('TODO(W1.5) readForm');
+}
+/** Fill the form from c: 'bool' -> .checked = !!c[key]; wifi_pass -> .value = '' and placeholder
+ *  'stored' if c.wifi_pass_set else 'not set'; other keys -> .value = String(c[key]); remove the
+ *  class 'bad' from every input. #calInfo = 'near raw <fmt(calib_near_raw)> mm · far raw
+ *  <fmt(calib_far_raw)> mm · ' + ('valid' | 'INVALID' from calib_valid);
+ *  #wifiInfo = 'Router: ' + (wifi_ssid || 'none') + ' · password ' + ('stored' | 'not set'). */
+function fillForm(c) {
+  throw new Error('TODO(W1.5) fillForm');
+}
+/** GET_CONFIG (quiet); reply with err 0 and an object reply.config -> cfg = reply.config, fillForm(cfg);
+ *  else toast('GET_CONFIG failed', true). */
+async function load() {
+  throw new Error('TODO(W1.5) load');
+}
+/** Save: nothing before the first load (cfg null). d = A.configDiff(cfg, readForm()).
+ *  Errors: class 'bad' on #f_<key> of every error (removed from all others), toast
+ *  'Invalid: ' + errors as '<key> (<error>)' joined by ', ', true – and NO command is sent.
+ *  No errors and no sets: toast('No changes', false). Else send every set in order:
+ *  await api('SET', {key, value}) (one at a time, each reply is a toast); then await load(). */
+async function save() {
+  throw new Error('TODO(W1.5) save');
+}
+/** One SET at once (safety toggles): await api('SET', {key, value}); then await load(). */
+async function setNow(key, value) {
+  throw new Error('TODO(W1.5) setNow');
+}
+/** Start: theme as in index.html; #f_interlock / #f_cooling_flow change -> setNow(key, checked);
+ *  calibration buttons -> api('CALIB', {action}) with near / far / base / save, then load();
+ *  #btnCalReset -> showConfirm(A.confirmText('CALIB_RESET') ...) -> api('CALIB', {action:'reset'}), then load();
+ *  #btnReboot -> showConfirm(A.confirmText('REBOOT') ...) -> api('REBOOT');
+ *  #btnSave -> save(); #btnReload -> load(); #confirmCancel -> closeConfirm; finally load(). */
+function init() {
+  throw new Error('TODO(W1.5) init');
+}
+init();
+</script>
+</body>
+</html>

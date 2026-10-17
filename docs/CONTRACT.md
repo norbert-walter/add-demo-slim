@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.21 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-16
+**Version:** 1.5.22 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-17
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.6
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -169,6 +169,14 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 1 | `test_hardware` crashed in `test_nvs_roundtrip` (Guru Meditation "Cache disabled but cached memory region accessed", PC in `StepperQueue::fill_i2s_buffer`). Cause in FastAccelStepper 96459ed: the I2S TX-done interrupt runs permanently with I2S_MUX and is IRAM-safe, but `fill_i2s_buffer()` and `I2sManager::i2sMuxSetBit()` were in flash; every flash operation (NVS write, SPIFFS read, OTA) crashed the board, also with the motor idle. Fix: both functions `IRAM_ATTR` (fork `norbert-walter/FastAccelStepper`, commit a64ceff on 96459ed; pull request to gin66 pending). Checked with nm/objdump: every function reachable from the interrupt is in IRAM, no literals into flash | `platformio.ini` |
 | 2 | Post-build check `scripts/check_iram.py` (all ESP32 environments): the build fails if one of the I2S interrupt functions is linked into flash (protects against library updates). Verified: fails with 96459ed, passes with a64ceff | `platformio.ini`, `scripts/` |
 | 3 | The nine native H1 tests could not see this (no flash cache on the host); the first five on-device tests were green (inputs, sensor, outputs, E-stop polarity change) | – |
+
+**Additions 1.5.22 (preparation of Sprint W1 – web UI, 2026-10-17):**
+
+| # | Addition | Where |
+|---|---|---|
+| 1 | **Web UI split into a tested logic module and two pages:** `data/www/app.js` (pure functions, no DOM/fetch/timers, global `ADDAPP` in the browser, `require` in node), `index.html` (process view), `settings.html`; style sheet `style.css` and the Ubuntu fonts written/provided by the reviewer. Exact rules in §5.5 and in the comments of `app.js` | `data/www/*` |
+| 2 | **Six more static routes** in `http_server`: `/app.js`, `/style.css`, `/font-u400.woff2`, `/font-u700.woff2`, `/font-m400.woff2`, `/font-m700.woff2` (fonts `font/woff2`, `Cache-Control: max-age=86400`). SPIFFS names are limited to 31 characters, so the fonts lie in `/www/` directly (Pflichtenheft: `/www/fonts/`). Fonts: Ubuntu / Ubuntu Mono latin 400/700 from fontsource 5.3.0, Ubuntu Font Licence 1.0 (`data/www/LICENCE-ubuntu-font.txt`) | `http_server.h/.cpp`, `test_http_server` (+1) |
+| 3 | Tests in JavaScript with node's built-in runner (node ≥ 18, no packages): `test/js/test_app.js` (27 tests, logic of `app.js`) and `test/js/test_pages.js` (10 static checks: frozen markup and helpers by SHA-256, script compiles, no own protocol code, only device URLs, ids). Behaviour of the pages: reviewer check in Chromium against `scripts/fake_device.py` (simulated `/proc`, `/api`, `/add`). Mutation test `app.js`: 66 mutants, 62 caught, 4 equivalent | `test/js`, `scripts/fake_device.py` |
 
 **Correction 1.5.21 (first flash of the complete firmware, 2026-10-16):**
 
@@ -529,6 +537,35 @@ because of a full normal queue (§6.7).
 `/` and `/settings` (web UI), `/add` (ADD document, `Cache-Control: no-store`),
 `/add.html` and `/llms.txt` (ADD spec §5.3/§5.4), `/doc` (Markdown), `/log`
 (last 20 log lines). All responses carry `Access-Control-Allow-Origin: *`.
+V1.5.22: `/app.js`, `/style.css` and the four font files of the web UI (§5.5).
+
+### 5.5 Web UI (V1.5.22, Sprint W1)
+
+Language English, ADD Dashboard Style Guide v1.0 (identical CSS variables, themes `theme-dark`,
+`theme-light`, `theme-night`, `theme-bw`, localStorage key `add-dashboard-theme`), fonts from the
+device (no CDN – in AP mode there is no internet).
+
+| File | Content | Written by |
+|---|---|---|
+| `app.js` | protocol (`parseFramed`, `apiBody`, names, `fmt`, `replyText`), process-view rules (`view`, `flags`, `buttons`, `confirmText`, `heartbeatDue`, `seriesPush`, `pill`, `validationBadges`), settings rules (`PARAMS`, `checkParam`, `configDiff`) – exact behaviour in the comment of each function | Qwen (skeleton: constants and CRC given) |
+| `index.html` | process view: state, HV, shutter, mode, POS/SPEED/DIST/THICK/AVG, chart of the last 100 valid samples, flag chips with SIM, buttons INIT · HV ON/OFF · MEASURE · TRAVERSE · ACK · STOP, LOCAL badge and hint, validation strip from `/add` | Qwen (markup and helpers given) |
+| `settings.html` | positions, profile, shutter hold, edge threshold, base distance, calibration references and CALIB buttons, simulated safety flags (toggles send `SET` at once), `estop_nc` with warning, router SSID/password, REBOOT | Qwen (markup and helpers given) |
+| `style.css`, fonts | Style Guide components, themes, 44 px touch targets | reviewer |
+
+Rules that are not obvious from the Pflichtenheft:
+- `/proc` every 500 ms, the next request only after the previous one has finished; CRC or JSON
+  error → status pill "CRC error", no data shown as valid, only STOP enabled; network error → "Offline".
+- Commands are never repeated automatically (also not after `BUSY`); the next `/proc` decides.
+- Confirmation dialog for `HV_ON`, `ACK`, `REBOOT` and calibration reset; never for `STOP`.
+- Heartbeat `GET_STATE` every 2 s only while `safety.comm_armed`.
+- While `local`: INIT, HV ON, MEASURE, TRAVERSE and ACK disabled (they would get `LOCAL_CONTROL`),
+  STOP and HV OFF stay enabled; hint "Operator at display has priority".
+- THICK shows `---` also off the material (`!on_material`), DIST only while `!valid`.
+- Settings: invalid fields are marked and **no** `SET` is sent; otherwise one `SET` per changed key
+  (in `PARAMS` order), then `GET_CONFIG` again. The router password is sent only when typed
+  (empty field = keep). The live router connection state is not part of `/proc`; it is shown on
+  the device display (IP line), the settings page shows the configured SSID and whether a password
+  is stored.
 
 ---
 
