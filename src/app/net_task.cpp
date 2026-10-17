@@ -13,6 +13,7 @@
 #include "system/system.h"
 #include "app/net_task.h"
 #include "app/command_queue.h"   // V1.5.23: serial console
+#include "app/control_task.h"    // V1.5.25: cycle diagnostics
 #include "logic/types.h"
 #include "logic/wifi_logic.h"
 #include <stdio.h>
@@ -181,6 +182,24 @@ static void commDiagnostics(uint32_t now_ms) {
     if (!armed && !timeout) s_max_gap = 0;
 }
 
+// ---- V1.5.25: control cycle diagnostics -------------------------------------------------------
+static uint32_t s_diag_seq = 0;
+static uint32_t s_diag_log_ms = 0;
+static bool     s_diag_logged = false;
+
+static void cycleDiagnostics(uint32_t now_ms) {
+    CycleDiag d;
+    controlGetCycleDiag(d);
+    if (d.seq == s_diag_seq) return;
+    if (s_diag_logged && (uint32_t)(now_ms - s_diag_log_ms) < CYCLE_DIAG_LOG_MS) return;   // keep seq: log later
+    logLine("ctrl: cycle %u us, period %u us (adc %u, tick %u, cmd %u, out %u, pub %u), %u events",
+            (unsigned)d.total_us, (unsigned)d.period_us, (unsigned)d.adc_us, (unsigned)d.tick_us,
+            (unsigned)d.cmd_us, (unsigned)d.out_us, (unsigned)d.pub_us, (unsigned)(d.seq - s_diag_seq));
+    s_diag_seq = d.seq;
+    s_diag_log_ms = now_ms;
+    s_diag_logged = true;
+}
+
 static void netTask(void* parameter) {
     for (;;) {
         netTaskStep(millis());
@@ -225,6 +244,9 @@ void netTaskStep(uint32_t now_ms) {
 
     // 2a. comm diagnostics (V1.5.24)
     commDiagnostics(now_ms);
+
+    // 2b. control cycle diagnostics (V1.5.25)
+    cycleDiagnostics(now_ms);
 
     // 3. Persist request: save config copy to NVS
     if (snapshotTakePersistRequest()) {

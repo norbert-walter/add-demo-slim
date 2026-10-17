@@ -117,6 +117,14 @@ class Sim:
             if st != 'RUNNING': return -5, None
             if not self.homed: return -6, None
             if self.mstate != 'idle': return -7, None
+            # V1.5.25: parameter ranges as on the device (measuring zone > 60 ... 242 mm, speed 1 ... 20)
+            zone = lambda v: isinstance(v, (int, float)) and 60 < v <= 242
+            if cmd == 'START_TRAVERSE':
+                for k, d in (('start', self.cfg['traverse_start']), ('end', self.cfg['traverse_end'])):
+                    if not zone(params.get(k, d)): return -4, None
+                sp = params.get('speed', self.cfg['traverse_speed'])
+                if not (isinstance(sp, (int, float)) and 1 <= sp <= 20): return -4, None
+            elif not zone(params.get('pos', self.cfg['measure_pos'])): return -4, None
             self.comm_armed = True; self.shutter = 'open'; self.mstate = 'moving'
             if cmd == 'START_MEASURE': self.mode, self.target, self.vel = 'measure', self.cfg['measure_pos'], 10.0
             else: self.mode, self.pos, self.target, self.vel = 'traverse', self.cfg['traverse_start'], self.cfg['traverse_end'], self.cfg['traverse_speed']

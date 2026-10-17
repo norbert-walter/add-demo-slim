@@ -101,42 +101,74 @@ def cycle_ok(host, base):
     return ok
 
 
-def prepare(host):
-    """--prepare: INIT (homing), wait for READY with GET_STATE as heartbeat, then HV_ON."""
-    print("  prepare: INIT (homing) ...")
-    r, _ = api(host, "INIT")
-    if r["err"] != 0:
-        raise SystemExit(f"INIT failed: {r}")
+def wait_idle(host, what, limit=60.0):
+    """Poll with GET_STATE (keeps the watchdog fed) until the axis is idle in /proc."""
     t0 = time.time()
     while True:
         r, _ = api(host, "GET_STATE")
-        if r.get("state") == "READY":
-            break
         if r.get("state") in ("FAULT", "WAIT_ACK"):
-            raise SystemExit(f"ABORT: {r.get('state')} during INIT, sys_err={r.get('sys_err')}")
-        if time.time() - t0 > 60:
-            raise SystemExit("FAIL: not READY 60 s after INIT")
-        time.sleep(0.5)
-    r, _ = api(host, "HV_ON")
-    if r["err"] != 0:
-        raise SystemExit(f"HV_ON failed: {r} (interlock, cooling_flow, temp?)")
-    print("  prepare: READY, HV on")
+            raise SystemExit(f"ABORT: {r.get('state')} during {what}, sys_err={r.get('sys_err')}")
+        p = proc(host)
+        if p["motion"]["state"] == "idle" and r.get("state") != "SAFE_START":
+            return p
+        if time.time() - t0 > limit:
+            raise SystemExit(f"FAIL: axis not idle {limit:.0f} s after {what}")
+        time.sleep(0.3)
+
+
+def prepare(host):
+    """--prepare: INIT (homing) if not homed, wait until the axis is idle, then HV_ON."""
+    p = proc(host)
+    fail_on_fault(p)
+    if not p["motion"]["homed"] or p["state"] == "SAFE_START":
+        print("  prepare: INIT (homing) ...")
+        r, _ = api(host, "INIT")
+        if r["err"] != 0:
+            raise SystemExit(f"INIT failed: {r}")
+    p = wait_idle(host, "INIT")
+    if not p["safety"]["hv_on"]:
+        r, _ = api(host, "HV_ON")
+        if r["err"] != 0:
+            raise SystemExit(f"HV_ON failed: {r} (interlock, cooling_flow, temp?)")
+    print("  prepare: homed, axis idle, HV on")
 
 
 def t_latency(host, n, do_prepare):
+    try:
+        return latency_run(host, n, do_prepare)
+    finally:
+        if do_prepare:
+            try:
+                api(host, "STOP")
+                api(host, "HV_OFF")           # leave the device safe: the watchdog disarms (axis idle, HV off)
+                print("  STOP, HV_OFF sent")
+            except Exception as e:  # noqa: BLE001
+                print("  WARNING: STOP/HV_OFF at the end failed:", e)
+
+
+def latency_run(host, n, do_prepare):
     if do_prepare:
         prepare(host)
     p = proc(host)
     fail_on_fault(p)
     if p["state"] != "RUNNING":
         raise SystemExit("precondition: state RUNNING (INIT, HV_ON) - or start with --prepare")
+    # V1.5.25: traverse inside the measuring zone (> 60 ... 242 mm, CONTRACT §2), at most 20 mm/s
+    cfg, _ = api(host, "GET_CONFIG")
+    c = cfg["config"]
+    trav = {"start": c["traverse_start"], "end": c["traverse_end"], "speed": min(20.0, max(10.0, c["traverse_speed"]))}
+    print(f"  traverse {trav['start']} -> {trav['end']} mm at {trav['speed']} mm/s")
     base = overruns(host)
     replies, idles = [], []
     for i in range(n):
-        r, _ = api(host, "START_TRAVERSE", {"start": 60, "end": 240, "speed": 20})   # mm/s (V1.3)
+        wait_idle(host, "STOP" if i else "start")
+        r, _ = api(host, "START_TRAVERSE", trav)
         if r["err"] != 0:
             raise SystemExit(f"START_TRAVERSE failed: {r}")
-        time.sleep(0.8 + 0.37 * (i % 3))      # stop at different phases
+        t_end = time.time() + 0.8 + 0.37 * (i % 3)      # stop at different phases, heartbeat meanwhile
+        while time.time() < t_end:
+            api(host, "GET_STATE")
+            time.sleep(0.2)
         r, dt = api(host, "STOP")
         t0 = time.perf_counter()
         if r["err"] != 0:
@@ -152,16 +184,11 @@ def t_latency(host, n, do_prepare):
         replies.append(dt)
         idles.append(idle)
         print(f"  #{i + 1}: STOP reply {dt:6.1f} ms, idle in /proc after {idle:6.1f} ms")
-        time.sleep(0.5)
     ok = max(replies) < 150 and max(idles) < 1000
     print(f"reply  min/median/max: {min(replies):.1f} / {statistics.median(replies):.1f} / {max(replies):.1f} ms")
     print(f"idle   min/median/max: {min(idles):.1f} / {statistics.median(idles):.1f} / {max(idles):.1f} ms")
     print("  (HTTP round trip incl. WLAN; the device-internal STOP latency is prio_lat_max_us below)")
-    ok = cycle_ok(host, base) and ok
-    if do_prepare:
-        api(host, "HV_OFF")                   # leave the device safe: watchdog disarms (axis idle, HV off)
-        print("  HV_OFF sent")
-    return ok
+    return cycle_ok(host, base) and ok
 
 
 def t_flood(host, n):

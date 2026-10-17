@@ -12,6 +12,7 @@
 #include "logic/types.h"
 #include "logic/wifi_logic.h"
 #include "config.h"
+#include "app/control_task.h"
 
 static std::vector<std::string> g_calls;
 static void rec(const std::string& s) { g_calls.push_back(s); }
@@ -31,6 +32,8 @@ void cmdQueueInit() { rec("cmdQueueInit"); }
 bool controlTaskStart(const Params& p) { rec(std::string("controlTaskStart ") + p.wifi_ssid); return g_ctrl_ok; }
 bool displayStart() { rec("displayStart"); return g_disp_ok; }
 void controlResetCycleStats() { rec("controlResetCycleStats"); }   // V1.5.25
+static CycleDiag g_diag;                                              // V1.5.25
+void controlGetCycleDiag(CycleDiag& d) { d = g_diag; }
 void wifiInit(const char* ssid, const char* pass) { rec(std::string("wifiInit ") + ssid + " " + pass); }
 void wifiLoop(uint32_t now) { rec("wifiLoop " + std::to_string(now)); }
 void httpServerInit() { rec("httpServerInit"); }
@@ -331,6 +334,25 @@ void test_v1525_slow_parts_and_gaps_logged() {
     TEST_ASSERT_EQUAL_INT(1, logs("net: "));
     TEST_ASSERT_TRUE(indexOf("wifiLoop 9300") > 0);                 // the gap line comes first
 }
+void test_v1525_cycle_diag_logged_rate_limited() {
+    g_diag = CycleDiag(); step(20000); g_calls.clear();
+    g_diag.seq = 3; g_diag.total_us = 1215; g_diag.period_us = 2357; g_diag.adc_us = 900;
+    g_diag.tick_us = 120; g_diag.cmd_us = 30; g_diag.out_us = 50; g_diag.pub_us = 40;
+    step(20005);
+    TEST_ASSERT_EQUAL_INT(1, logs("ctrl: cycle 1215 us, period 2357 us (adc 900, tick 120, cmd 30, out 50, pub 40), 3 events"));
+    g_calls.clear();
+    g_diag.seq = 5;
+    step(20005 + CYCLE_DIAG_LOG_MS - 1);                             // within 5 s: not logged
+    step(20005 + CYCLE_DIAG_LOG_MS - 1);
+    TEST_ASSERT_EQUAL_INT(0, logs("ctrl: "));
+    step(20005 + CYCLE_DIAG_LOG_MS);                                 // then logged, with both events
+    TEST_ASSERT_EQUAL_INT(1, logs("ctrl: "));
+    bool two = false; for (auto& c : g_calls) if (c.rfind("log ctrl: ", 0) == 0 && c.find(", 2 events") != std::string::npos) two = true;
+    TEST_ASSERT_TRUE(two);
+    g_calls.clear();
+    step(40000);                                                     // no new event: nothing
+    TEST_ASSERT_EQUAL_INT(0, logs("ctrl: "));
+}
 void test_v1524_comm_gap_and_timeout_logged() {
     g_proc = ProcData(); g_proc.safety.comm_armed = false; g_last_rx = 500;
     g_calls.clear(); step(500);
@@ -378,5 +400,6 @@ int main(int, char**) {
     RUN_TEST(test_v1523_console_partial_lines_limits_and_one_command_per_step);
     RUN_TEST(test_v1524_comm_gap_and_timeout_logged);
     RUN_TEST(test_v1525_slow_parts_and_gaps_logged);
+    RUN_TEST(test_v1525_cycle_diag_logged_rate_limited);
     return UNITY_END();
 }

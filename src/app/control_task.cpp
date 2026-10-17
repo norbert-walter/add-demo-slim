@@ -34,6 +34,16 @@ static volatile bool s_reset_stats = false;   // V1.5.25: set by setup() at "boo
 
 void controlResetCycleStats() { s_reset_stats = true; }
 
+// V1.5.25: breakdown of the last overrun / late start (written here, read by the net task)
+static portMUX_TYPE s_diag_mux = portMUX_INITIALIZER_UNLOCKED;
+static CycleDiag    s_diag;
+
+void controlGetCycleDiag(CycleDiag& d) {
+    taskENTER_CRITICAL(&s_diag_mux);
+    d = s_diag;
+    taskEXIT_CRITICAL(&s_diag_mux);
+}
+
 static AppConfig makeConfig() {
     AppConfig c;
     c.motion.steps_per_mm = STEPS_PER_MM;
@@ -92,6 +102,7 @@ static void controlLoop(void*) {
             const uint32_t period = t_start - prev_start_us;
             if (period > cs.period_max_us) cs.period_max_us = period;
         }
+        const uint32_t period_us = have_prev ? t_start - prev_start_us : 0;
         prev_start_us = t_start;
         have_prev = true;
         const uint32_t now = millis();
@@ -106,10 +117,12 @@ static void controlLoop(void*) {
                 appMeasure(s_app, s_cfg, medianMean(samples, n_samples, ADC_DISCARD), now);
             n_samples = 0;
         }
+        const uint32_t t_adc = (uint32_t)esp_timer_get_time();
 
         // 2. cyclic logic
         HwInputs hw = readInputs(now);
         HwOutputs out = appTick(s_app, hw, s_cfg);
+        const uint32_t t_tick = (uint32_t)esp_timer_get_time();
 
         // 3a. ALL pending priority commands (STOP, HV_OFF, SHUTTER_CLOSE) in this
         //     cycle – idempotent, safe direction, driver requests merged by rank.
@@ -127,6 +140,8 @@ static void controlLoop(void*) {
             if (cmd.id == CmdId::SET && cmd_err == ApiError::OK)
                 snapshotPublishConfig(s_app.params, s_app.flags);   // GET_CONFIG sees flags too
         }
+
+        const uint32_t t_cmd = (uint32_t)esp_timer_get_time();
 
         // 4. outputs
         applyOutputs(out);
@@ -156,6 +171,19 @@ static void controlLoop(void*) {
         if (dt_us > cs.cycle_max_us) cs.cycle_max_us = dt_us;
         if (dt_us > CONTROL_PERIOD_MS * 1000u) cs.overruns++;
         snapshotSetCycleStats(cs);
+        // V1.5.25: keep the breakdown of an overrun or a late start for the /log (net task)
+        if (dt_us > CONTROL_PERIOD_MS * 1000u || period_us > CYCLE_DIAG_PERIOD_US) {
+            taskENTER_CRITICAL(&s_diag_mux);
+            s_diag.seq++;
+            s_diag.total_us  = dt_us;
+            s_diag.period_us = period_us;
+            s_diag.adc_us    = t_adc - t_start;
+            s_diag.tick_us   = t_tick - t_adc;
+            s_diag.cmd_us    = t_cmd - t_tick;
+            s_diag.out_us    = t_out - t_cmd;
+            s_diag.pub_us    = (t_start + dt_us) - t_out;
+            taskEXIT_CRITICAL(&s_diag_mux);
+        }
 
         esp_task_wdt_reset();
     }
