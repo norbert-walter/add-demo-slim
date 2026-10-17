@@ -127,12 +127,28 @@ function setPill(conn) {
 /** POST /api with A.apiBody(cmd, params). Returns the reply object or null (as in index.html);
  *  setPill(reply ? 'ok' : 'offline'). Unless quiet: toast(A.replyText(reply), !reply || reply.err !== 0). */
 async function api(cmd, params, quiet) {
-  throw new Error('TODO(W1.5) api');
+  let reply = null;
+  try {
+    const r = await fetch('/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: A.apiBody(cmd, params) });
+    const parsed = A.parseFramed(await r.text());
+    if (parsed.ok) reply = parsed.data;
+  } catch (e) {
+    reply = null;   // network error: offline pill and 'no reply' toast instead of an uncaught rejection
+  }
+  setPill(reply ? 'ok' : 'offline');
+  if (!quiet) toast(A.replyText(reply), !reply || reply.err !== 0);
+  return reply;
 }
 /** Form values for A.configDiff: for every A.PARAMS key the element #f_<key>:
  *  type 'bool' -> checkbox .checked, else .value (string). */
 function readForm() {
-  throw new Error('TODO(W1.5) readForm');
+  const form = {};
+  for (const p of A.PARAMS) {
+    const el = $('f_' + p.key);
+    if (!el) continue;
+    form[p.key] = p.type === 'bool' ? el.checked : el.value;
+  }
+  return form;
 }
 /** Fill the form from c: 'bool' -> .checked = !!c[key]; wifi_pass -> .value = '' and placeholder
  *  'stored' if c.wifi_pass_set else 'not set'; other keys -> .value = String(c[key]); remove the
@@ -140,12 +156,32 @@ function readForm() {
  *  <fmt(calib_far_raw)> mm · ' + ('valid' | 'INVALID' from calib_valid);
  *  #wifiInfo = 'Router: ' + (wifi_ssid || 'none') + ' · password ' + ('stored' | 'not set'). */
 function fillForm(c) {
-  throw new Error('TODO(W1.5) fillForm');
+  for (const p of A.PARAMS) {
+    const el = $('f_' + p.key);
+    if (!el) continue;
+    if (p.type === 'bool') {
+      el.checked = !!c[p.key];
+    } else if (p.key === 'wifi_pass') {
+      el.value = '';
+      el.placeholder = c.wifi_pass_set ? 'stored' : 'not set';
+    } else {
+      el.value = String(c[p.key]);
+    }
+    el.classList.remove('bad');
+  }
+  $('calInfo').textContent = 'near raw ' + A.fmt(c.calib_near_raw) + ' mm · far raw ' + A.fmt(c.calib_far_raw) + ' mm · ' + (c.calib_valid ? 'valid' : 'INVALID');
+  $('wifiInfo').textContent = 'Router: ' + (c.wifi_ssid || 'none') + ' · password ' + (c.wifi_pass_set ? 'stored' : 'not set');
 }
 /** GET_CONFIG (quiet); reply with err 0 and an object reply.config -> cfg = reply.config, fillForm(cfg);
  *  else toast('GET_CONFIG failed', true). */
 async function load() {
-  throw new Error('TODO(W1.5) load');
+  const reply = await api('GET_CONFIG', null, true);
+  if (reply && reply.err === 0) {
+    cfg = reply.config;
+    fillForm(cfg);
+  } else {
+    toast('GET_CONFIG failed', true);
+  }
 }
 /** Save: nothing before the first load (cfg null). d = A.configDiff(cfg, readForm()).
  *  Errors: class 'bad' on #f_<key> of every error (removed from all others), toast
@@ -153,11 +189,33 @@ async function load() {
  *  No errors and no sets: toast('No changes', false). Else send every set in order:
  *  await api('SET', {key, value}) (one at a time, each reply is a toast); then await load(). */
 async function save() {
-  throw new Error('TODO(W1.5) save');
+  if (!cfg) return;
+  const d = A.configDiff(cfg, readForm());
+  if (d.errors.length > 0) {
+    for (const p of A.PARAMS) {
+      const el = $('f_' + p.key);
+      if (el) el.classList.remove('bad');
+    }
+    for (const e of d.errors) {
+      const el = $('f_' + e.key);
+      if (el) el.classList.add('bad');
+    }
+    toast('Invalid: ' + d.errors.map(e => e.key + ' (' + e.error + ')').join(', '), true);
+    return;
+  }
+  if (d.sets.length === 0) {
+    toast('No changes', false);
+    return;
+  }
+  for (const s of d.sets) {
+    await api('SET', { key: s.key, value: s.value });
+  }
+  await load();
 }
 /** One SET at once (safety toggles): await api('SET', {key, value}); then await load(). */
 async function setNow(key, value) {
-  throw new Error('TODO(W1.5) setNow');
+  await api('SET', { key: key, value: value });
+  await load();
 }
 /** Start: theme as in index.html; #f_interlock / #f_cooling_flow change -> setNow(key, checked);
  *  calibration buttons -> api('CALIB', {action}) with near / far / base / save, then load();
@@ -165,7 +223,19 @@ async function setNow(key, value) {
  *  #btnReboot -> showConfirm(A.confirmText('REBOOT') ...) -> api('REBOOT');
  *  #btnSave -> save(); #btnReload -> load(); #confirmCancel -> closeConfirm; finally load(). */
 function init() {
-  throw new Error('TODO(W1.5) init');
+  try { const saved = localStorage.getItem('add-dashboard-theme'); if (saved) setTheme(saved); } catch (e) {}
+  $('f_interlock').onchange = () => setNow('interlock', $('f_interlock').checked);
+  $('f_cooling_flow').onchange = () => setNow('cooling_flow', $('f_cooling_flow').checked);
+  $('btnCalNear').onclick = async () => { await api('CALIB', { action: 'near' }); await load(); };
+  $('btnCalFar').onclick = async () => { await api('CALIB', { action: 'far' }); await load(); };
+  $('btnCalBase').onclick = async () => { await api('CALIB', { action: 'base' }); await load(); };
+  $('btnCalSave').onclick = async () => { await api('CALIB', { action: 'save' }); await load(); };
+  $('btnCalReset').onclick = () => showConfirm(A.confirmText('CALIB_RESET').title, A.confirmText('CALIB_RESET').body, async () => { await api('CALIB', { action: 'reset' }); await load(); });
+  $('btnReboot').onclick = () => showConfirm(A.confirmText('REBOOT').title, A.confirmText('REBOOT').body, async () => { await api('REBOOT'); });
+  $('btnSave').onclick = save;
+  $('btnReload').onclick = load;
+  $('confirmCancel').onclick = closeConfirm;
+  load();
 }
 init();
 </script>

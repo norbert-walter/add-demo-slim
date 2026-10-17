@@ -60,34 +60,51 @@
    *  {ok:false, error:'crc'} (not a string or verify fails) |
    *  {ok:false, error:'json'} (CRC fine, but JSON.parse throws or the result is not a plain object). */
   function parseFramed(text) {
-    throw new Error('TODO(W1.1) parseFramed');
+    if (typeof text !== 'string') return { ok: false, error: 'crc' };
+    const trimmed = text.trimEnd();
+    if (!verify(trimmed)) return { ok: false, error: 'crc' };
+    let data;
+    try { data = JSON.parse(trimmed); } catch (_) { return { ok: false, error: 'json' }; }
+    if (data === null || typeof data !== 'object' || Array.isArray(data)) return { ok: false, error: 'json' };
+    return { ok: true, data };
   }
   /** Request body for POST /api: frame({cmd, params}); params defaults to {} (also for null). */
   function apiBody(cmd, params) {
-    throw new Error('TODO(W1.1) apiBody');
+    return frame({ cmd, params: params ?? {} });
   }
   /** API result name (§3.3); unknown code c -> 'ERR c'. */
   function errName(code) {
-    throw new Error('TODO(W1.1) errName');
+    const name = ERR_NAMES[String(code)];
+    return name ?? `ERR ${code}`;
   }
   /** System error name (§3.2); unknown code c -> 'ERR c'. */
   function sysErrName(code) {
-    throw new Error('TODO(W1.1) sysErrName');
+    const name = SYS_ERR_NAMES[code];
+    return name ?? `ERR ${code}`;
   }
   /** Number with `digits` decimals (default 1); not a finite number (incl. null/undefined) -> '---'. */
   function fmt(x, digits) {
-    throw new Error('TODO(W1.1) fmt');
+    if (x === null || x === undefined || !Number.isFinite(x)) return '---';
+    const d = digits !== undefined ? digits : 1;
+    return x.toFixed(d);
   }
   /** Toast text of an /api reply object: err 0 -> '<cmd>: OK'; else '<cmd>: <errName>' plus
    *  ' - <msg>' if msg is a non-empty string. No reply (null) -> 'no reply'. */
   function replyText(resp) {
-    throw new Error('TODO(W1.1) replyText');
+    if (resp === null) return 'no reply';
+    const cmd = resp.cmd;
+    if (resp.err === 0) return `${cmd}: OK`;
+    let s = `${cmd}: ${errName(resp.err)}`;
+    if (typeof resp.msg === 'string' && resp.msg !== '') s += ` - ${resp.msg}`;
+    return s;
   }
 
   // ---- W1.2: process view rules ------------------------------------------------------------------
   /** Colour class of a safety state: READY/RUNNING 'ok', FAULT/WAIT_ACK 'danger', every other 'warn'. */
   function stateClass(state) {
-    throw new Error('TODO(W1.2) stateClass');
+    if (state === 'READY' || state === 'RUNNING') return 'ok';
+    if (state === 'FAULT' || state === 'WAIT_ACK') return 'danger';
+    return 'warn';
   }
   /** Display strings of a /proc object p:
    *  { state, stateCls: stateClass(state), pos, vel (fmt), dist: fmt if measure.valid else '---',
@@ -95,7 +112,23 @@
    *    n: String(measure.n), mode: motion.mode, err: '' if err === 0 else sysErrName(err),
    *    hv: 'ON'|'OFF', shutter: 'OPEN'|'CLOSED' (safety.shutter === 'open'), local: !!p.local } */
   function view(p) {
-    throw new Error('TODO(W1.2) view');
+    const m = p.measure;
+    const s = p.safety;
+    return {
+      state: p.state,
+      stateCls: stateClass(p.state),
+      pos: fmt(p.motion.pos),
+      vel: fmt(p.motion.vel),
+      dist: m.valid ? fmt(m.dist) : '---',
+      thick: (m.valid && m.on_material) ? fmt(m.thick) : '---',
+      avg: m.n > 0 ? fmt(m.avg) : '---',
+      n: String(m.n),
+      mode: p.motion.mode,
+      err: p.err === 0 ? '' : sysErrName(p.err),
+      hv: s.hv_on ? 'ON' : 'OFF',
+      shutter: s.shutter === 'open' ? 'OPEN' : 'CLOSED',
+      local: !!p.local,
+    };
   }
   /** Safety flag chips, always these four in this order:
    *  {id:'estop', text:'E-STOP ACTIVE'|'E-STOP OK', cls: estop ? 'danger' : 'ok'},
@@ -103,7 +136,13 @@
    *  {id:'cooling', text:'COOLING (SIM)', cls: cooling_flow ? 'ok' : 'danger'},
    *  {id:'temp', text:'TEMP (SIM) <fmt(temp)> °C', cls: temp_ok ? 'ok' : (temp > TEMP_FAULT_C ? 'danger' : 'warn')} */
   function flags(p) {
-    throw new Error('TODO(W1.2) flags');
+    const s = p.safety;
+    return [
+      { id: 'estop', text: s.estop ? 'E-STOP ACTIVE' : 'E-STOP OK', cls: s.estop ? 'danger' : 'ok' },
+      { id: 'interlock', text: 'INTERLOCK (SIM)', cls: s.interlock ? 'ok' : 'danger' },
+      { id: 'cooling', text: 'COOLING (SIM)', cls: s.cooling_flow ? 'ok' : 'danger' },
+      { id: 'temp', text: `TEMP (SIM) ${fmt(s.temp)} °C`, cls: s.temp_ok ? 'ok' : (s.temp > TEMP_FAULT_C ? 'danger' : 'warn') },
+    ];
   }
   /** Button rules of the process view. p = last valid /proc object or null (no data yet / offline).
    *  Returns { INIT, HV, MEASURE, TRAVERSE, STOP, ACK } each {enabled:bool}, HV additionally
@@ -118,7 +157,46 @@
    *  hint:     local ? 'Operator at display has priority' : ''
    *  p === null: all disabled except STOP, HV {label:'HV ON', cmd:'HV_ON'}, hint ''. */
   function buttons(p) {
-    throw new Error('TODO(W1.2) buttons');
+    if (p === null) {
+      return {
+        INIT: { enabled: false },
+        HV: { label: 'HV ON', cmd: 'HV_ON', enabled: false },
+        MEASURE: { enabled: false },
+        TRAVERSE: { enabled: false },
+        STOP: { enabled: true },
+        ACK: { enabled: false },
+        hint: '',
+      };
+    }
+
+    const idle = p.motion.state === 'idle';
+    const local = !!p.local;
+    const st = p.state;
+    const s = p.safety;
+
+    const INIT = !local && (st === 'SAFE_START' || st === 'READY') && idle;
+
+    let HV;
+    if (s.hv_on) {
+      HV = { label: 'HV OFF', cmd: 'HV_OFF', enabled: true };
+    } else {
+      HV = { label: 'HV ON', cmd: 'HV_ON', enabled: !local && (st === 'READY' || st === 'RUNNING') && s.hv_ok };
+    }
+
+    const MEASURE = !local && st === 'RUNNING' && p.motion.homed && idle;
+    const TRAVERSE = !local && st === 'RUNNING' && p.motion.homed && idle;
+    const STOP = true;
+    const ACK = !local && st === 'WAIT_ACK';
+
+    return {
+      INIT: { enabled: INIT },
+      HV: HV,
+      MEASURE: { enabled: MEASURE },
+      TRAVERSE: { enabled: TRAVERSE },
+      STOP: { enabled: STOP },
+      ACK: { enabled: ACK },
+      hint: local ? 'Operator at display has priority' : '',
+    };
   }
   /** Commands that need the confirmation dialog (Style Guide 7.8): HV_ON, ACK, REBOOT, CALIB_RESET.
    *  Returns {title, body} or null. Texts:
@@ -127,22 +205,38 @@
    *  REBOOT: 'Reboot device?', 'The device restarts. The connection is lost for some seconds.'
    *  CALIB_RESET: 'Reset calibration?', 'The calibration returns to the factory values.' */
   function confirmText(cmd) {
-    throw new Error('TODO(W1.2) confirmText');
+    const map = {
+      HV_ON: { title: 'Switch HV on?', body: 'The X-ray source (HV LED) is switched on.' },
+      ACK: { title: 'Acknowledge fault?', body: 'The cause is gone. The system returns to READY or SAFE_START.' },
+      REBOOT: { title: 'Reboot device?', body: 'The device restarts. The connection is lost for some seconds.' },
+      CALIB_RESET: { title: 'Reset calibration?', body: 'The calibration returns to the factory values.' },
+    };
+    return map[cmd] || null;
   }
   /** true if a GET_STATE heartbeat must be sent now: p not null, p.safety.comm_armed and
    *  (now - lastSent) >= HEARTBEAT_MS. */
   function heartbeatDue(p, now, lastSent) {
-    throw new Error('TODO(W1.2) heartbeatDue');
+    return p !== null && p.safety.comm_armed && (now - lastSent) >= HEARTBEAT_MS;
   }
   /** Time series for the chart: if p.measure.valid push {dist, thick} (numbers from p.measure);
    *  then drop from the front until length <= max (default SERIES_MAX). Mutates and returns series. */
   function seriesPush(series, p, max) {
-    throw new Error('TODO(W1.2) seriesPush');
+    const m = p.measure;
+    if (m.valid) {
+      series.push({ dist: m.dist, thick: m.thick });
+    }
+    const limit = max !== undefined ? max : SERIES_MAX;
+    while (series.length > limit) {
+      series.shift();
+    }
+    return series;
   }
   /** Status pill: conn 'ok' -> {text:'Online', offline:false}; 'crc' -> {text:'CRC error', offline:true};
    *  every other value -> {text:'Offline', offline:true}. */
   function pill(conn) {
-    throw new Error('TODO(W1.2) pill');
+    if (conn === 'ok') return { text: 'Online', offline: false };
+    if (conn === 'crc') return { text: 'CRC error', offline: true };
+    return { text: 'Offline', offline: true };
   }
   /** Validation strip (Style Guide 6.10) from the /add document (object or null).
    *  No add.validation.validated_by array or an empty one -> [{text:'not validated', cls:'warn'}].
@@ -153,7 +247,40 @@
    *  followed by {text: '<STATUS> · <version> · <validated_at first 10 chars>', cls:'info'} with
    *  STATUS = status in upper case, '_' replaced by ' ' (e.g. 'PASSED WITH WARNINGS'). */
   function validationBadges(add) {
-    throw new Error('TODO(W1.2) validationBadges');
+    if (!add || !add.validation || !Array.isArray(add.validation.validated_by) || add.validation.validated_by.length === 0) {
+      return [{ text: 'not validated', cls: 'warn' }];
+    }
+
+    let best = null;
+    for (const entry of add.validation.validated_by) {
+      if (!best || entry.validated_at > best.validated_at) {
+        best = entry;
+      }
+    }
+
+    const badges = [];
+    for (const key of Object.keys(best.score)) {
+      const score = best.score[key];
+      let text, cls;
+      if (score === 'pass') {
+        text = `✓ ${key}`;
+        cls = '';
+      } else if (score === 'warning') {
+        text = `! ${key}`;
+        cls = 'warn';
+      } else {
+        text = `✗ ${key}`;
+        cls = 'fail';
+      }
+      badges.push({ text, cls });
+    }
+
+    const status = best.status.toUpperCase().replace(/_/g, ' ');
+    const version = best.version;
+    const validated_at = best.validated_at.substring(0, 10);
+    badges.push({ text: `${status} · ${version} · ${validated_at}`, cls: 'info' });
+
+    return badges;
   }
 
   // ---- W1.3: settings rules ----------------------------------------------------------------------
@@ -165,7 +292,31 @@
    *          configDiff, not here); else {ok:false, error:'<min> ... <max> characters'}
    *  unknown key -> {ok:false, error:'unknown key'} */
   function checkParam(key, raw) {
-    throw new Error('TODO(W1.3) checkParam');
+    var param = PARAMS.find(function (p) { return p.key === key; });
+    if (!param) { return { ok: false, error: 'unknown key' }; }
+
+    if (param.type === 'num') {
+      var s = String(raw).trim();
+      if (s === '') { return { ok: false, error: String(param.min) + ' ... ' + String(param.max) }; }
+      var x = Number(s);
+      if (!isFinite(x) || x < param.min || x > param.max) { return { ok: false, error: String(param.min) + ' ... ' + String(param.max) }; }
+      return { ok: true, value: x };
+    }
+
+    if (param.type === 'bool') {
+      if (raw === true || raw === 'true' || raw === '1') { return { ok: true, value: true }; }
+      if (raw === false || raw === 'false' || raw === '0') { return { ok: true, value: false }; }
+      return { ok: false, error: 'true or false' };
+    }
+
+    if (param.type === 'str') {
+      var str = String(raw);
+      if ('min' in param && str.length < param.min) { return { ok: false, error: String(param.min) + ' ... ' + String(param.max) + ' characters' }; }
+      if ('max' in param && str.length > param.max) { return { ok: false, error: String(param.min) + ' ... ' + String(param.max) + ' characters' }; }
+      return { ok: true, value: str };
+    }
+
+    return { ok: false, error: 'unknown key' };
   }
   /** SET commands for the changes of a settings form.
    *  cfg: the "config" object of GET_CONFIG; form: {key: raw value} for some or all PARAMS keys.
@@ -175,7 +326,42 @@
    *    -> sets.push({key, value}). Numbers count as different if |a - b| > 0.0001.
    *  Returns {sets, errors}. */
   function configDiff(cfg, form) {
-    throw new Error('TODO(W1.3) configDiff');
+    var sets = [];
+    var errors = [];
+
+    for (var i = 0; i < PARAMS.length; i++) {
+      var key = PARAMS[i].key;
+      if (!(key in form)) { continue; }
+
+      var raw = form[key];
+
+      // wifi_pass: skip if empty string (keep stored password)
+      if (key === 'wifi_pass' && raw === '') { continue; }
+
+      var result = checkParam(key, raw);
+
+      if (!result.ok) {
+        errors.push({ key: key, error: result.error });
+      } else {
+        // wifi_pass is always sent when typed (no comparison with cfg)
+        if (key === 'wifi_pass') {
+          sets.push({ key: key, value: result.value });
+        } else {
+          var oldVal = cfg[key];
+          var different;
+          if (typeof result.value === 'number' && typeof oldVal === 'number') {
+            different = Math.abs(result.value - oldVal) > 0.0001;
+          } else {
+            different = result.value !== oldVal;
+          }
+          if (different) {
+            sets.push({ key: key, value: result.value });
+          }
+        }
+      }
+    }
+
+    return { sets: sets, errors: errors };
   }
 
   return { ERR_NAMES, SYS_ERR_NAMES, TEMP_FAULT_C, HEARTBEAT_MS, SERIES_MAX, PARAMS,
