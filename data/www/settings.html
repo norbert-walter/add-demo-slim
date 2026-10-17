@@ -127,10 +127,14 @@ function setPill(conn) {
 /** POST /api with A.apiBody(cmd, params). Returns the reply object or null (as in index.html);
  *  setPill(reply ? 'ok' : 'offline'). Unless quiet: toast(A.replyText(reply), !reply || reply.err !== 0). */
 async function api(cmd, params, quiet) {
-  const r = await fetch('/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: A.apiBody(cmd, params) });
-  const text = await r.text();
-  const parsed = A.parseFramed(text);
-  const reply = parsed.ok ? parsed.data : null;
+  let reply = null;
+  try {
+    const r = await fetch('/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: A.apiBody(cmd, params) });
+    const parsed = A.parseFramed(await r.text());
+    if (parsed.ok) reply = parsed.data;
+  } catch (e) {
+    reply = null;   // network error: offline pill and 'no reply' toast instead of an uncaught rejection
+  }
   setPill(reply ? 'ok' : 'offline');
   if (!quiet) toast(A.replyText(reply), !reply || reply.err !== 0);
   return reply;

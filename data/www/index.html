@@ -137,18 +137,17 @@ function drawChart() {
  *  null (network error, HTTP error without a framed body, CRC/JSON error).
  *  Unless quiet: toast(A.replyText(reply), !reply || reply.err !== 0). Never retries (also not on BUSY). */
 async function api(cmd, params, quiet) {
+  let reply = null;
   try {
+    // HTTP 400 (BAD_CRC, BAD_JSON) also carries a framed reply - read the body for every status
     const res = await fetch('/api', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: A.apiBody(cmd, params) });
-    if (!res.ok) return null;
-    const text = await res.text();
-    const parsed = A.parseFramed(text);
-    if (!parsed.ok) return null;
-    const reply = parsed.data;
-    if (!quiet) toast(A.replyText(reply), !reply || reply.err !== 0);
-    return reply;
+    const parsed = A.parseFramed(await res.text());
+    if (parsed.ok) reply = parsed.data;
   } catch (e) {
-    return null;
+    reply = null;
   }
+  if (!quiet) toast(A.replyText(reply), !reply || reply.err !== 0);   // also 'no reply' as an error
+  return reply;
 }
 /** A user command: with A.confirmText(cmd) -> showConfirm(title, body, () => api(cmd)); else api(cmd). */
 function command(cmd) {
