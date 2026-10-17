@@ -101,7 +101,7 @@ def cycle_ok(host, base):
     r, _ = api(host, "GET_STATE")
     new = r.get("overruns", 0) - base
     ok = True
-    parts = [f"overruns +{new} (info; since boot ready {r.get('overruns')})"]
+    parts = [f"cycles over 1 ms +{new} (info; since boot ready {r.get('overruns')})"]
     for k, lim in LIMITS.items():
         v = r.get(k)
         good = v is not None and v <= lim
@@ -282,6 +282,8 @@ def t_soak(host, minutes, web=False):
         th.start()
     k = 0
     shown = {}
+    t_start = time.time()
+    next_dot, next_line = t_start + 10, t_start + 60
     try:
         while time.time() < end:
             r, _ = api(host, "GET_STATE")
@@ -291,13 +293,17 @@ def t_soak(host, minutes, web=False):
             for key, lim in LIMITS.items():                 # report each limit violation once
                 v = r.get(key, 0)
                 if v > lim and shown.get(key) != v:
-                    print(f"  over the limit: {key}={v} after {k} s")
+                    print(f"\n  over the limit: {key}={v} after {time.time() - t_start:.0f} s")
                     shown[key] = v
-            if k % 10 == 0 and k % 60:
-                print(".", end="", flush=True)
-            if k % 60 == 0:
-                print(f"\n  {k // 60} min: overruns +{r.get('overruns', 0) - base}, cycle_max_us={r.get('cycle_max_us')}, "
+            now = time.time()                               # V1.5.25: real time, not heartbeat count
+            if now >= next_line:
+                next_line += 60
+                next_dot = now + 10
+                print(f"\n  {round((now - t_start) / 60)} min: cycles over 1 ms +{r.get('overruns', 0) - base}, cycle_max_us={r.get('cycle_max_us')}, "
                       f"period_max_us={r.get('period_max_us')}" + (f", web files {stats['ok']} ok / {stats['err']} failed" if web else ""), flush=True)
+            elif now >= next_dot:
+                next_dot += 10
+                print(".", end="", flush=True)
             time.sleep(1.0)
     finally:
         stop.set()
@@ -362,7 +368,7 @@ def main():
         "local": "local: manual test of the display priority (only with LOCAL_HOLD_MS > 0)",
     }[a.test]
     print(f"{time.strftime('%H:%M:%S')} {a.host}: {info}", flush=True)
-    print("  limits: cycle_max_us, period_max_us, prio_lat_max_us <= 3000; no COMM_TIMEOUT; overruns = info", flush=True)
+    print("  limits: cycle_max_us, period_max_us, prio_lat_max_us <= 3000; no COMM_TIMEOUT; cycles over 1 ms (overruns) = info", flush=True)
     try:
         if a.test == "latency":
             ok = t_latency(a.host, a.n or 10, a.prepare)

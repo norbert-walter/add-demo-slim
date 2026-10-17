@@ -22,12 +22,20 @@
 - **Fehler im Kommunikations-Watchdog behoben:** Ein Paket, das die Netz-Task während eines
   Regelzyklus eintrug, galt als 49 Tage alt (vorzeichenlose Differenz) – COMM_TIMEOUT, obwohl
   Pakete ankamen. Das Alter wird jetzt vorzeichenbehaftet gerechnet.
-- **Zeitverhalten neu festgelegt (Entscheidung Norbert Walter):** ein Grenzwert von **3 ms**, der unter
-  allen geprüften Bedingungen gilt – Zykluszeit `cycle_max_us`, Abstand zweier Zyklusstarts
-  `period_max_us` und Prioritätsbefehl-Latenz `prio_lat_max_us` jeweils ≤ 3000 µs. Überläufe
-  (Zyklen > 1 ms) werden nur angezeigt; eine Häufigkeit von Ausreißern ist durch Messen nicht
-  abzusichern. Die bisherigen Werte (500 µs / 1,5 ms / 2 ms, V1.5) galten ohne laufende Motortask
-  und ohne WLAN-Last und wurden auf der Anlage nicht erreicht.
+- **Zeitverhalten neu festgelegt (Entscheidung Norbert Walter):** Die Regelschleife läuft im
+  Nenntakt von 1 ms. Unter Last (WLAN, REST-Anfragen, dauerhaftes Laden der Weboberfläche)
+  überschreiten einzelne Zyklen diesen Takt, gemessen etwa 0,05 % der Zyklen (`overruns`, nur
+  Information). Die maximale Zykluszeit, der maximale Abstand zweier Zyklusstarts und die Latenz
+  von Prioritätsbefehlen sind jeweils **≤ 3 ms**, nachgewiesen mit `stress_api.py` (Flood, Parallel,
+  Latenz bei fahrender Achse, 10-min-Soak mit Weblast; gemessen max. 2,22 / 2,41 / 1,73 ms). Gilt im
+  Betrieb; Einstellwerte werden nur im Stillstand gespeichert, weil ein Flash-Schreibvorgang beide
+  Kerne für einige 10 ms anhält. Die bisherigen Werte (500 µs / 1,5 ms / 2 ms, Überläufe 0, V1.5)
+  galten ohne laufende Motortask und ohne WLAN-Last und wurden auf der Anlage nicht erreicht.
+- **REST-Antwortzeit bei gleichzeitigem Seitenladen:** Der Webserver bedient eine Verbindung nach
+  der anderen. Lädt jemand die Weboberfläche, wartet ein `/api`-Befehl, bis die laufende Datei
+  gesendet ist (gemessen bis etwa 0,3 s). Die Grenze von 150 ms für die STOP-Antwort über REST gilt
+  daher ohne gleichzeitiges Laden von Seiten. Nicht betroffen: STOP am Display, Not-Aus, die
+  Reaktion im Gerät nach Annahme des Befehls (≤ 3 ms) und der Watchdog (5 s).
 - **Speichern nur im Stillstand:** Ein Schreibvorgang in den Flash hält beide Kerne für einige
   10 ms an, auch die Regelschleife und die Not-Aus-Auswertung. Geänderte Einstellwerte gelten
   sofort (RAM); gespeichert wird erst, wenn die Achse steht und HV aus ist (spätestens vor einem
