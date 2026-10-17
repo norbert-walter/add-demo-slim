@@ -100,18 +100,18 @@ class Shell:
       shutter_hold, edge_threshold, base_dist, calib_near_ref, calib_far_ref, estop_nc, wifi_ssid, wifi_pass)
   CALIB action=near|far|base|save|reset     GET_STATE     GET_CONFIG
 shell: proc [full] | watch [seconds, default 30, Ctrl+C stops] | hb on|off | log | get <path> | help | quit
-Heartbeat: after an accepted INIT, MOVE, PARK, SERVICE, START_MEASURE, START_TRAVERSE or HV_ON the
-shell sends GET_STATE every second until /proc reports comm_armed=false (axis idle and HV off)."""
-    ARMING = {"INIT", "MOVE", "PARK", "SERVICE", "START_MEASURE", "START_TRAVERSE", "HV_ON"}
+Heartbeat: from the start the shell sends GET_STATE every second, in the background. Commands can be
+typed at any time. A message appears when no GET_STATE answer came for 10 s and when answers resume.
+"hb off" stops the heartbeat (to provoke COMM_TIMEOUT on purpose), "hb on" starts it again."""
     PERIOD = 1.0      # s between two heartbeats
-    WARN = 2.5        # s without an answer -> warning (the device fires at 5 s)
+    LOST = 10.0       # s without a GET_STATE answer -> message
 
     def __init__(self, host):
         self.host = host
         self.enabled = True          # "hb on|off"
-        self.active = False          # heartbeat running (watchdog armed)
         self.last_tx = 0.0           # last /api request sent (any command counts for the device)
-        self.last_ok = time.time()   # last /api answer received
+        self.last_ok = time.time()   # last valid GET_STATE answer of the heartbeat
+        self.lost = False            # "no answer" message shown
         self.io = threading.Lock()   # one /api request at a time
         self.run = True
 
@@ -121,41 +121,28 @@ shell sends GET_STATE every second until /proc reports comm_armed=false (axis id
     def api(self, cmd, params, timeout=3.0):
         with self.io:
             self.last_tx = time.time()
-            r = http(self.host, "/api", build(cmd, params), timeout=timeout)
-            self.last_ok = time.time()
-            return r
-
-    def armed(self):
-        t = http(self.host, "/proc", timeout=2.0)
-        return verify(t) and json.loads(t)["safety"]["comm_armed"]
-
-    def start(self, why):
-        if not self.active:
-            self.active = True
-            self.last_ok = time.time()
-            self.say(f"[watchdog armed ({why}) - heartbeat every {self.PERIOD:.0f} s]")
+            return http(self.host, "/api", build(cmd, params), timeout=timeout)
 
     def heartbeat(self):
         while self.run:
             time.sleep(0.1)
-            if not (self.enabled and self.active) or time.time() - self.last_tx < self.PERIOD:
+            if not self.enabled:
+                self.last_ok = time.time()
                 continue
-            try:
-                self.api("GET_STATE", {}, timeout=1.5)
-            except Exception:  # noqa: BLE001 - retry at once, then warn
+            if time.time() - self.last_tx >= self.PERIOD:
                 try:
-                    self.api("GET_STATE", {}, timeout=1.5)
-                except Exception as e:  # noqa: BLE001
-                    age = time.time() - self.last_ok
-                    if age > self.WARN:
-                        self.say(f"!! no answer for {age:.1f} s - the watchdog fires at 5 s ({e})")
-                    continue
-            try:
-                if not self.armed():
-                    self.active = False
-                    self.say("[watchdog off - heartbeat stopped]")
-            except Exception:  # noqa: BLE001 - /proc missed once: keep pinging
-                pass
+                    r = self.api("GET_STATE", {}, timeout=2.0)
+                    if verify(r):
+                        self.last_ok = time.time()
+                        if self.lost:
+                            self.lost = False
+                            self.say("[heartbeat: answers again]")
+                except Exception:  # noqa: BLE001 - counted by the 10 s check below
+                    pass
+            age = time.time() - self.last_ok
+            if age >= self.LOST and not self.lost:
+                self.lost = True
+                self.say(f"!! heartbeat: no GET_STATE answer for {age:.0f} s - device not reachable")
 
     def line(self, ln):
         w = ln.split()
@@ -181,7 +168,7 @@ shell sends GET_STATE every second until /proc reports comm_armed=false (axis id
                 print()
         elif op == "hb":
             self.enabled = len(w) < 2 or w[1] != "off"
-            print("heartbeat", "on" if self.enabled else "OFF (the watchdog will fire while armed)")
+            print("heartbeat", "on (GET_STATE every 1 s)" if self.enabled else "OFF (the watchdog fires 5 s after the last /api packet while armed)")
         elif op == "log":
             print(http(self.host, "/log"))
         elif op == "get":
@@ -198,20 +185,13 @@ shell sends GET_STATE every second until /proc reports comm_armed=false (axis id
             ok = verify(r)
             e = json.loads(r).get("err") if ok else None
             print(r.strip(), f"  [{ERR.get(e, e)}, {ms:.0f} ms]" if ok else "  <-- CRC INVALID")
-            if e == 0 and cmd in self.ARMING:
-                self.start(cmd)
 
     def loop(self):
         try:
             import readline  # noqa: F401 - history and line editing where available
         except ImportError:
             pass
-        print(f"ADD console for http://{self.host}  (help, quit)")
-        try:
-            if self.armed():
-                self.start("already armed")
-        except Exception as e:  # noqa: BLE001
-            print("device not reachable:", e)
+        print(f"ADD console for http://{self.host}  (help, quit) - heartbeat GET_STATE every 1 s")
         threading.Thread(target=self.heartbeat, daemon=True).start()
         while True:
             try:

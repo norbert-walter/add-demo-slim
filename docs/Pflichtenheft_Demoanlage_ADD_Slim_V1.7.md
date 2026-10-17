@@ -17,8 +17,8 @@
   Anfragen über 3 s – der Watchdog löste trotz Heartbeat aus.
 - Watchdog-Logik unverändert (HV_ON bleibt überwacht: HV ist ein andauernder Zustand). Neu nur
   Diagnose im Log: `/api`-Lücken > 2 s bei scharfem Watchdog und beim Timeout das Alter des letzten
-  Pakets. `add_client.py shell` hält den Watchdog nach jedem überwachten Befehl mit `GET_STATE`
-  jede Sekunde am Leben, bis `/proc` `comm_armed = false` meldet.
+  Pakets. `add_client.py shell` sendet ab dem Start jede Sekunde `GET_STATE` und meldet,
+  wenn 10 s lang keine Antwort kommt.
 
 ### V1.7.6 → V1.7.7 (Contract V1.5.23, 17.10.2026, Entscheidung Norbert Walter)
 - **Simulierte Sicherheitsflags nach jedem Boot `interlock = true`, `cooling_flow = true`**
