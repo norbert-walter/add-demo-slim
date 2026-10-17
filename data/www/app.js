@@ -60,28 +60,43 @@
    *  {ok:false, error:'crc'} (not a string or verify fails) |
    *  {ok:false, error:'json'} (CRC fine, but JSON.parse throws or the result is not a plain object). */
   function parseFramed(text) {
-    throw new Error('TODO(W1.1) parseFramed');
+    if (typeof text !== 'string') return { ok: false, error: 'crc' };
+    const trimmed = text.trimEnd();
+    if (!verify(trimmed)) return { ok: false, error: 'crc' };
+    let data;
+    try { data = JSON.parse(trimmed); } catch (_) { return { ok: false, error: 'json' }; }
+    if (data === null || typeof data !== 'object' || Array.isArray(data)) return { ok: false, error: 'json' };
+    return { ok: true, data };
   }
   /** Request body for POST /api: frame({cmd, params}); params defaults to {} (also for null). */
   function apiBody(cmd, params) {
-    throw new Error('TODO(W1.1) apiBody');
+    return frame({ cmd, params: params ?? {} });
   }
   /** API result name (§3.3); unknown code c -> 'ERR c'. */
   function errName(code) {
-    throw new Error('TODO(W1.1) errName');
+    const name = ERR_NAMES[String(code)];
+    return name ?? `ERR ${code}`;
   }
   /** System error name (§3.2); unknown code c -> 'ERR c'. */
   function sysErrName(code) {
-    throw new Error('TODO(W1.1) sysErrName');
+    const name = SYS_ERR_NAMES[code];
+    return name ?? `ERR ${code}`;
   }
   /** Number with `digits` decimals (default 1); not a finite number (incl. null/undefined) -> '---'. */
   function fmt(x, digits) {
-    throw new Error('TODO(W1.1) fmt');
+    if (x === null || x === undefined || !Number.isFinite(x)) return '---';
+    const d = digits !== undefined ? digits : 1;
+    return x.toFixed(d);
   }
   /** Toast text of an /api reply object: err 0 -> '<cmd>: OK'; else '<cmd>: <errName>' plus
    *  ' - <msg>' if msg is a non-empty string. No reply (null) -> 'no reply'. */
   function replyText(resp) {
-    throw new Error('TODO(W1.1) replyText');
+    if (resp === null) return 'no reply';
+    const cmd = resp.cmd;
+    if (resp.err === 0) return `${cmd}: OK`;
+    let s = `${cmd}: ${errName(resp.err)}`;
+    if (typeof resp.msg === 'string' && resp.msg !== '') s += ` - ${resp.msg}`;
+    return s;
   }
 
   // ---- W1.2: process view rules ------------------------------------------------------------------
