@@ -102,7 +102,9 @@
   // ---- W1.2: process view rules ------------------------------------------------------------------
   /** Colour class of a safety state: READY/RUNNING 'ok', FAULT/WAIT_ACK 'danger', every other 'warn'. */
   function stateClass(state) {
-    throw new Error('TODO(W1.2) stateClass');
+    if (state === 'READY' || state === 'RUNNING') return 'ok';
+    if (state === 'FAULT' || state === 'WAIT_ACK') return 'danger';
+    return 'warn';
   }
   /** Display strings of a /proc object p:
    *  { state, stateCls: stateClass(state), pos, vel (fmt), dist: fmt if measure.valid else '---',
@@ -110,7 +112,23 @@
    *    n: String(measure.n), mode: motion.mode, err: '' if err === 0 else sysErrName(err),
    *    hv: 'ON'|'OFF', shutter: 'OPEN'|'CLOSED' (safety.shutter === 'open'), local: !!p.local } */
   function view(p) {
-    throw new Error('TODO(W1.2) view');
+    const m = p.measure;
+    const s = p.safety;
+    return {
+      state: p.state,
+      stateCls: stateClass(p.state),
+      pos: fmt(p.motion.pos),
+      vel: fmt(p.motion.vel),
+      dist: m.valid ? fmt(m.dist) : '---',
+      thick: (m.valid && m.on_material) ? fmt(m.thick) : '---',
+      avg: m.n > 0 ? fmt(m.avg) : '---',
+      n: String(m.n),
+      mode: p.motion.mode,
+      err: p.err === 0 ? '' : sysErrName(p.err),
+      hv: s.hv_on ? 'ON' : 'OFF',
+      shutter: s.shutter === 'open' ? 'OPEN' : 'CLOSED',
+      local: !!p.local,
+    };
   }
   /** Safety flag chips, always these four in this order:
    *  {id:'estop', text:'E-STOP ACTIVE'|'E-STOP OK', cls: estop ? 'danger' : 'ok'},
@@ -118,7 +136,13 @@
    *  {id:'cooling', text:'COOLING (SIM)', cls: cooling_flow ? 'ok' : 'danger'},
    *  {id:'temp', text:'TEMP (SIM) <fmt(temp)> °C', cls: temp_ok ? 'ok' : (temp > TEMP_FAULT_C ? 'danger' : 'warn')} */
   function flags(p) {
-    throw new Error('TODO(W1.2) flags');
+    const s = p.safety;
+    return [
+      { id: 'estop', text: s.estop ? 'E-STOP ACTIVE' : 'E-STOP OK', cls: s.estop ? 'danger' : 'ok' },
+      { id: 'interlock', text: 'INTERLOCK (SIM)', cls: s.interlock ? 'ok' : 'danger' },
+      { id: 'cooling', text: 'COOLING (SIM)', cls: s.cooling_flow ? 'ok' : 'danger' },
+      { id: 'temp', text: `TEMP (SIM) ${fmt(s.temp)} °C`, cls: s.temp_ok ? 'ok' : (s.temp > TEMP_FAULT_C ? 'danger' : 'warn') },
+    ];
   }
   /** Button rules of the process view. p = last valid /proc object or null (no data yet / offline).
    *  Returns { INIT, HV, MEASURE, TRAVERSE, STOP, ACK } each {enabled:bool}, HV additionally
@@ -133,7 +157,46 @@
    *  hint:     local ? 'Operator at display has priority' : ''
    *  p === null: all disabled except STOP, HV {label:'HV ON', cmd:'HV_ON'}, hint ''. */
   function buttons(p) {
-    throw new Error('TODO(W1.2) buttons');
+    if (p === null) {
+      return {
+        INIT: { enabled: false },
+        HV: { label: 'HV ON', cmd: 'HV_ON', enabled: false },
+        MEASURE: { enabled: false },
+        TRAVERSE: { enabled: false },
+        STOP: { enabled: true },
+        ACK: { enabled: false },
+        hint: '',
+      };
+    }
+
+    const idle = p.motion.state === 'idle';
+    const local = !!p.local;
+    const st = p.state;
+    const s = p.safety;
+
+    const INIT = !local && (st === 'SAFE_START' || st === 'READY') && idle;
+
+    let HV;
+    if (s.hv_on) {
+      HV = { label: 'HV OFF', cmd: 'HV_OFF', enabled: true };
+    } else {
+      HV = { label: 'HV ON', cmd: 'HV_ON', enabled: !local && (st === 'READY' || st === 'RUNNING') && s.hv_ok };
+    }
+
+    const MEASURE = !local && st === 'RUNNING' && p.motion.homed && idle;
+    const TRAVERSE = !local && st === 'RUNNING' && p.motion.homed && idle;
+    const STOP = true;
+    const ACK = !local && st === 'WAIT_ACK';
+
+    return {
+      INIT: { enabled: INIT },
+      HV: HV,
+      MEASURE: { enabled: MEASURE },
+      TRAVERSE: { enabled: TRAVERSE },
+      STOP: { enabled: STOP },
+      ACK: { enabled: ACK },
+      hint: local ? 'Operator at display has priority' : '',
+    };
   }
   /** Commands that need the confirmation dialog (Style Guide 7.8): HV_ON, ACK, REBOOT, CALIB_RESET.
    *  Returns {title, body} or null. Texts:
@@ -142,22 +205,38 @@
    *  REBOOT: 'Reboot device?', 'The device restarts. The connection is lost for some seconds.'
    *  CALIB_RESET: 'Reset calibration?', 'The calibration returns to the factory values.' */
   function confirmText(cmd) {
-    throw new Error('TODO(W1.2) confirmText');
+    const map = {
+      HV_ON: { title: 'Switch HV on?', body: 'The X-ray source (HV LED) is switched on.' },
+      ACK: { title: 'Acknowledge fault?', body: 'The cause is gone. The system returns to READY or SAFE_START.' },
+      REBOOT: { title: 'Reboot device?', body: 'The device restarts. The connection is lost for some seconds.' },
+      CALIB_RESET: { title: 'Reset calibration?', body: 'The calibration returns to the factory values.' },
+    };
+    return map[cmd] || null;
   }
   /** true if a GET_STATE heartbeat must be sent now: p not null, p.safety.comm_armed and
    *  (now - lastSent) >= HEARTBEAT_MS. */
   function heartbeatDue(p, now, lastSent) {
-    throw new Error('TODO(W1.2) heartbeatDue');
+    return p !== null && p.safety.comm_armed && (now - lastSent) >= HEARTBEAT_MS;
   }
   /** Time series for the chart: if p.measure.valid push {dist, thick} (numbers from p.measure);
    *  then drop from the front until length <= max (default SERIES_MAX). Mutates and returns series. */
   function seriesPush(series, p, max) {
-    throw new Error('TODO(W1.2) seriesPush');
+    const m = p.measure;
+    if (m.valid) {
+      series.push({ dist: m.dist, thick: m.thick });
+    }
+    const limit = max !== undefined ? max : SERIES_MAX;
+    while (series.length > limit) {
+      series.shift();
+    }
+    return series;
   }
   /** Status pill: conn 'ok' -> {text:'Online', offline:false}; 'crc' -> {text:'CRC error', offline:true};
    *  every other value -> {text:'Offline', offline:true}. */
   function pill(conn) {
-    throw new Error('TODO(W1.2) pill');
+    if (conn === 'ok') return { text: 'Online', offline: false };
+    if (conn === 'crc') return { text: 'CRC error', offline: true };
+    return { text: 'Offline', offline: true };
   }
   /** Validation strip (Style Guide 6.10) from the /add document (object or null).
    *  No add.validation.validated_by array or an empty one -> [{text:'not validated', cls:'warn'}].
@@ -168,7 +247,40 @@
    *  followed by {text: '<STATUS> · <version> · <validated_at first 10 chars>', cls:'info'} with
    *  STATUS = status in upper case, '_' replaced by ' ' (e.g. 'PASSED WITH WARNINGS'). */
   function validationBadges(add) {
-    throw new Error('TODO(W1.2) validationBadges');
+    if (!add || !add.validation || !Array.isArray(add.validation.validated_by) || add.validation.validated_by.length === 0) {
+      return [{ text: 'not validated', cls: 'warn' }];
+    }
+
+    let best = null;
+    for (const entry of add.validation.validated_by) {
+      if (!best || entry.validated_at > best.validated_at) {
+        best = entry;
+      }
+    }
+
+    const badges = [];
+    for (const key of Object.keys(best.score)) {
+      const score = best.score[key];
+      let text, cls;
+      if (score === 'pass') {
+        text = `✓ ${key}`;
+        cls = '';
+      } else if (score === 'warning') {
+        text = `! ${key}`;
+        cls = 'warn';
+      } else {
+        text = `✗ ${key}`;
+        cls = 'fail';
+      }
+      badges.push({ text, cls });
+    }
+
+    const status = best.status.toUpperCase().replace(/_/g, ' ');
+    const version = best.version;
+    const validated_at = best.validated_at.substring(0, 10);
+    badges.push({ text: `${status} · ${version} · ${validated_at}`, cls: 'info' });
+
+    return badges;
   }
 
   // ---- W1.3: settings rules ----------------------------------------------------------------------
