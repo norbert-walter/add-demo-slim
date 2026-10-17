@@ -55,10 +55,15 @@ LOCAL_CONTROL = -10
 BUSY = -7
 
 
+SLOWEST = [0.0, ""]          # V1.5.25: slowest /api round trip of the whole run (ms, command)
+
+
 def api(host, cmd, params=None, timeout=3.0):
     t0 = time.perf_counter()
     txt = http(host, "/api", build(cmd, params or {}), timeout=timeout)
     dt = (time.perf_counter() - t0) * 1000.0
+    if dt > SLOWEST[0]:
+        SLOWEST[0], SLOWEST[1] = dt, cmd
     if not verify(txt):
         raise SystemExit(f"FAIL: invalid CRC frame in reply to {cmd}: {txt}")
     return json.loads(txt), dt
@@ -281,6 +286,20 @@ def t_local(host):
     return a and b and c and d
 
 
+def device_log(host):
+    """V1.5.25: after every test (also after an abort) the diagnostic lines of the device log."""
+    print(f"  slowest /api round trip: {SLOWEST[0]:.1f} ms ({SLOWEST[1] or '-'})")
+    try:
+        lines = [ln for ln in http(host, "/log").splitlines()
+                 if ln.startswith(("ctrl:", "net:", "comm:", "http:", "sta:"))]
+    except Exception as e:  # noqa: BLE001
+        print("  device log not readable:", e)
+        return
+    print("  device log (ctrl/net/comm/http/sta):" + ("" if lines else " -"))
+    for ln in lines:
+        print("    " + ln)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--host", default="192.168.4.1")
@@ -290,16 +309,19 @@ def main():
     ap.add_argument("--n", type=int, default=0)
     ap.add_argument("--minutes", type=float, default=10)
     a = ap.parse_args()
-    if a.test == "latency":
-        ok = t_latency(a.host, a.n or 10, a.prepare)
-    elif a.test == "flood":
-        ok = t_flood(a.host, a.n or 200)
-    elif a.test == "parallel":
-        ok = t_parallel(a.host, a.n or 400, a.threads)
-    elif a.test == "soak":
-        ok = t_soak(a.host, a.minutes)
-    else:
-        ok = t_local(a.host)
+    try:
+        if a.test == "latency":
+            ok = t_latency(a.host, a.n or 10, a.prepare)
+        elif a.test == "flood":
+            ok = t_flood(a.host, a.n or 200)
+        elif a.test == "parallel":
+            ok = t_parallel(a.host, a.n or 400, a.threads)
+        elif a.test == "soak":
+            ok = t_soak(a.host, a.minutes)
+        else:
+            ok = t_local(a.host)
+    finally:
+        device_log(a.host)
     print("RESULT:", "PASS" if ok else "FAIL")
     sys.exit(0 if ok else 1)
 
