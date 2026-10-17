@@ -57,7 +57,7 @@ Teil der Definition of Done in `.clinerules`.
 | P2 | `comm/wifi_manager.cpp`, `comm/http_server.cpp` | ✅ fertig (Qwen) | `test_wifi_manager` 10/10 · `test_http_server` 19/19 · firmware-partial ✅ | ✅ 15.10.2026, Tag `sprint-p2` |
 | H1 | `hal/hal_io.cpp`, `hal/motion_drv.cpp` | ✅ fertig (Qwen) | `test_hal_io` 16/16 · `test_motion_drv` 10/10 · firmware-partial ✅ · `test_hardware` am Gerät 8/8 | ✅ 16.10.2026, Tag `sprint-h1` |
 | I1 | `app/net_task.cpp`, `main.cpp`, `display/display.cpp`, Gesamt-Build | ✅ fertig (Qwen; Display-Gerüst und Korrekturen Claude) | `test_net_task` 10/10 · `test_display` 15/15 · `pio run -e firmware` ✅ · Prüfliste am Gerät 8/8 | ✅ 17.10.2026, Tag `sprint-i1` |
-| W1 | `data/www/app.js`, `index.html`, `settings.html` | ⬜ offen | `test_app` 27 · `test_pages` 10 · Browser-Prüfung (Review) · Gerät | – |
+| W1 | `data/www/app.js`, `index.html`, `settings.html` | ✅ fertig (Qwen) | `test_app` 27/27 · `test_pages` 10/10 · Browser-Prüfung offen · Gerät offen | in Review |
 | A1 | Abnahme | ⬜ offen | Pflichtenheft Kapitel 10 | – |
 | D1 | `data/add.json`, `data/doc.md`, Demo-Skripte | ⬜ offen | KI-Validierung | – |
 
