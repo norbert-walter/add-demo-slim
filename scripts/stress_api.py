@@ -293,13 +293,15 @@ def t_soak(host, minutes, web=False):
                 if v > lim and shown.get(key) != v:
                     print(f"  over the limit: {key}={v} after {k} s")
                     shown[key] = v
+            if k % 10 == 0 and k % 60:
+                print(".", end="", flush=True)
             if k % 60 == 0:
-                print(f"  {k // 60} min: overruns +{r.get('overruns', 0) - base}, cycle_max_us={r.get('cycle_max_us')}, "
-                      f"period_max_us={r.get('period_max_us')}" + (f", web files {stats['ok']} ok / {stats['err']} failed" if web else ""))
+                print(f"\n  {k // 60} min: overruns +{r.get('overruns', 0) - base}, cycle_max_us={r.get('cycle_max_us')}, "
+                      f"period_max_us={r.get('period_max_us')}" + (f", web files {stats['ok']} ok / {stats['err']} failed" if web else ""), flush=True)
             time.sleep(1.0)
     finally:
         stop.set()
-    print(f"  {k} heartbeats" + (f", web load: {stats['ok']} files ({stats['bytes'] // 1024} kB) ok, {stats['err']} failed" if web else ""))
+    print(f"\n  {k} heartbeats" + (f", web load: {stats['ok']} files ({stats['bytes'] // 1024} kB) ok, {stats['err']} failed" if web else ""))
     if web and stats["ok"] == 0:
         print("  WARNING: no web file could be loaded (data uploaded with uploadfs?) - the web load did not happen")
     return cycle_ok(host, base)
@@ -348,6 +350,19 @@ def main():
     ap.add_argument("--minutes", type=float, default=10)
     ap.add_argument("--web", action="store_true", help="soak: load the web UI files without pause meanwhile")
     a = ap.parse_args()
+    info = {
+        "latency": f"latency: {a.n or 10} x START_TRAVERSE / STOP, measures STOP reply and time until the axis is idle"
+                   + (" (prepare: INIT if not homed, HV_ON; STOP + HV_OFF at the end)" if a.prepare else "")
+                   + " - THE AXIS MOVES, E-stop in reach",
+        "flood": f"flood: {a.n or 200} x SET temp=18.0 one after the other, then the cycle timing (a few seconds)",
+        "parallel": f"parallel: {a.n or 400} mixed commands from {a.threads} threads, every reply checked (about 10 ... 30 s)",
+        "soak": f"soak: GET_STATE every second for {a.minutes:g} min"
+                + (", meanwhile the web UI files are loaded without pause" if a.web else "")
+                + "; a line every minute, a dot every 10 s; Ctrl+C aborts",
+        "local": "local: manual test of the display priority (only with LOCAL_HOLD_MS > 0)",
+    }[a.test]
+    print(f"{time.strftime('%H:%M:%S')} {a.host}: {info}", flush=True)
+    print("  limits: cycle_max_us, period_max_us, prio_lat_max_us <= 3000; no COMM_TIMEOUT; overruns = info", flush=True)
     try:
         if a.test == "latency":
             ok = t_latency(a.host, a.n or 10, a.prepare)
