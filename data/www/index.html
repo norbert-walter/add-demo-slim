@@ -137,11 +137,27 @@ function drawChart() {
  *  null (network error, HTTP error without a framed body, CRC/JSON error).
  *  Unless quiet: toast(A.replyText(reply), !reply || reply.err !== 0). Never retries (also not on BUSY). */
 async function api(cmd, params, quiet) {
-  throw new Error('TODO(W1.4) api');
+  try {
+    const res = await fetch('/api', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: A.apiBody(cmd, params) });
+    if (!res.ok) return null;
+    const text = await res.text();
+    const parsed = A.parseFramed(text);
+    if (!parsed.ok) return null;
+    const reply = parsed.data;
+    if (!quiet) toast(A.replyText(reply), !reply || reply.err !== 0);
+    return reply;
+  } catch (e) {
+    return null;
+  }
 }
 /** A user command: with A.confirmText(cmd) -> showConfirm(title, body, () => api(cmd)); else api(cmd). */
 function command(cmd) {
-  throw new Error('TODO(W1.4) command');
+  const ct = A.confirmText(cmd);
+  if (ct) {
+    showConfirm(ct.title, ct.body, () => api(cmd));
+  } else {
+    api(cmd);
+  }
 }
 /** Show p (or "no data" for null) on the page:
  *  pill (A.pill(conn): #pillText text, #pill class 'status-pill' + ' offline', #pillDot 'dot' + ' off'),
@@ -150,7 +166,64 @@ function command(cmd) {
  *  <span class="chip <cls>"> per A.flags(p) entry (textContent = text);
  *  always: every button disabled = !A.buttons(p).<KEY>.enabled, #btnHv text = HV.label, #hint = hint. */
 function render(p) {
-  throw new Error('TODO(W1.4) render');
+  // Pill
+  const pL = A.pill(conn);
+  $('pillText').textContent = pL.text;
+  $('pill').className = 'status-pill' + (pL.offline ? ' offline' : '');
+  $('pillDot').className = 'dot' + (pL.offline ? ' off' : '');
+
+  if (p === null) {
+    $('state').textContent = '---';
+    $('state').className = 'state warn';
+    $('err').textContent = '';
+    $('hv').textContent = '---';
+    $('shutter').textContent = '---';
+    $('mode').textContent = '---';
+    $('pos').textContent = '---';
+    $('vel').textContent = '---';
+    $('dist').textContent = '---';
+    $('thick').textContent = '---';
+    $('avg').textContent = '---';
+    $('n').textContent = '0';
+    $('localBadge').classList.add('hidden');
+    $('flags').innerHTML = '';
+  } else {
+    const v = A.view(p);
+    $('state').textContent = v.state;
+    $('state').className = 'state ' + v.stateCls;
+    $('err').textContent = v.err;
+    $('hv').textContent = v.hv;
+    $('shutter').textContent = v.shutter;
+    $('mode').textContent = v.mode;
+    $('pos').textContent = v.pos;
+    $('vel').textContent = v.vel;
+    $('dist').textContent = v.dist;
+    $('thick').textContent = v.thick;
+    $('avg').textContent = v.avg;
+    $('n').textContent = v.n;
+    if (v.local) { $('localBadge').classList.remove('hidden'); }
+    else { $('localBadge').classList.add('hidden'); }
+    // flags
+    const fl = A.flags(p);
+    $('flags').innerHTML = '';
+    for (const f of fl) {
+      const span = document.createElement('span');
+      span.className = 'chip ' + f.cls;
+      span.textContent = f.text;
+      $('flags').appendChild(span);
+    }
+  }
+
+  // Buttons
+  const b = A.buttons(p);
+  $('btnInit').disabled = !b.INIT.enabled;
+  $('btnHv').disabled = !b.HV.enabled;
+  $('btnMeasure').disabled = !b.MEASURE.enabled;
+  $('btnTraverse').disabled = !b.TRAVERSE.enabled;
+  $('btnAck').disabled = !b.ACK.enabled;
+  $('btnStop').disabled = !b.STOP.enabled;
+  $('btnHv').textContent = b.HV.label;
+  $('hint').textContent = b.hint;
 }
 /** One poll: GET '/proc?t=' + Date.now(). Framed and valid -> conn 'ok', last = data,
  *  A.seriesPush(series, last), drawChart(); CRC/JSON error -> conn 'crc', last = null;
@@ -158,20 +231,72 @@ function render(p) {
  *  A.heartbeatDue(last, Date.now(), lastHeartbeat): lastHeartbeat = Date.now(), api('GET_STATE', null, true).
  *  Finally setTimeout(poll, POLL_MS) – exactly one pending poll at any time. */
 async function poll() {
-  throw new Error('TODO(W1.4) poll');
+  try {
+    const res = await fetch('/proc?t=' + Date.now());
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    const parsed = A.parseFramed(text);
+    if (!parsed.ok) { conn = 'crc'; last = null; }
+    else { conn = 'ok'; last = parsed.data; A.seriesPush(series, last); drawChart(); }
+  } catch (e) {
+    conn = 'offline'; last = null;
+  }
+  render(last);
+  if (A.heartbeatDue(last, Date.now(), lastHeartbeat)) {
+    lastHeartbeat = Date.now();
+    api('GET_STATE', null, true);
+  }
+  setTimeout(poll, POLL_MS);
 }
 /** GET /add (plain JSON, not framed); #valStrip = the label span, then one
  *  <span class="badge <cls>"> per A.validationBadges(doc) entry; on any error A.validationBadges(null). */
 async function loadValidation() {
-  throw new Error('TODO(W1.4) loadValidation');
+  try {
+    const res = await fetch('/add?t=' + Date.now());
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const doc = await res.json();
+    const badges = A.validationBadges(doc);
+    const vs = $('valStrip');
+    while (vs.children.length > 1) vs.removeChild(vs.lastChild);
+    for (const b of badges) {
+      const span = document.createElement('span');
+      span.className = 'badge ' + b.cls;
+      span.textContent = b.text;
+      vs.appendChild(span);
+    }
+  } catch (e) {
+    const badges = A.validationBadges(null);
+    const vs = $('valStrip');
+    while (vs.children.length > 1) vs.removeChild(vs.lastChild);
+    for (const b of badges) {
+      const span = document.createElement('span');
+      span.className = 'badge ' + b.cls;
+      span.textContent = b.text;
+      vs.appendChild(span);
+    }
+  }
 }
-/** Start: theme from localStorage 'add-dashboard-theme' (default 'theme-dark'), #theme change ->
- *  setTheme; buttons: INIT -> command('INIT'), HV -> command(A.buttons(last).HV.cmd),
- *  MEASURE -> command('START_MEASURE'), TRAVERSE -> command('START_TRAVERSE'), STOP -> api('STOP')
- *  (never a dialog), ACK -> command('ACK'); #confirmCancel -> closeConfirm; render(null);
- *  loadValidation(); poll(). */
+
 function init() {
-  throw new Error('TODO(W1.4) init');
+  try {
+    const saved = localStorage.getItem('add-dashboard-theme');
+    if (saved) setTheme(saved);
+  } catch (e) {}
+
+  $('theme').onchange = (e) => setTheme(e.target.value);
+
+  $('btnInit').onclick = () => command('INIT');
+  $('btnHv').onclick = () => command(A.buttons(last).HV.cmd);
+  $('btnMeasure').onclick = () => command('START_MEASURE');
+  $('btnTraverse').onclick = () => command('START_TRAVERSE');
+  $('btnStop').onclick = () => api('STOP');
+  $('btnAck').onclick = () => command('ACK');
+
+  $('confirmCancel').onclick = closeConfirm;
+
+  render(null);
+  loadValidation();
+  poll();
 }
 init();
 </script>
