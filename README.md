@@ -13,6 +13,7 @@ agentenbasierte Entwicklung mit code-server + Cline.
 | `docs/Sprint_Prompts_Demoanlage_ADD_Slim_V2.md` | Sprint-Plan V3 (Reihenfolge, Begründung, Ablauf), bisherige Prompts |
 | `docs/sprints/` | Sprint-Dateien für Cline (eine Aufgabe pro Datei) |
 | `docs/reviews/` | Review-Protokolle je Sprint |
+| `docs/Hardware_Dokumentation_V1_0.md` | Hardware-Dokumentation: Sicherheitshinweise, Komponenten, Anschlüsse, Motortreiber, Inbetriebnahme, Fehlersuche |
 | `docs/Smoketest_Protokoll.md` | Sprint 0a an der Hardware |
 | `docs/reference/` | ADD Spec, Developer Guide, Style Guide v1.0 allgemein (+ Auszug für S4), `ADD_Style_Guide_IMS_V1_0.md` für Webseiten im Stil der IMS-Bedienoberfläche (ergänzt den allgemeinen) |
 | `.clinerules` / `.clineignore` | Regeln und Ausschlüsse für Cline |
