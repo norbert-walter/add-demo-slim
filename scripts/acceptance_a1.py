@@ -169,6 +169,7 @@ class Device:
         if not s["cooling_flow"]: self.ok("SET", key="cooling_flow", value=True)
         if s["temp"] != 18.0: self.ok("SET", key="temp", value=18.0)
         if not p["motion"]["homed"] or p["state"] == "SAFE_START":
+            print("  Referenzfahrt (INIT) läuft – bitte warten, nichts drücken ...", flush=True)
             self.ok("INIT")
             self.wait(lambda q: q["state"] == "READY" and q["motion"]["homed"] and self.still(q), 120, "INIT")
         if hv and not self.proc()["safety"]["hv_on"]:
@@ -536,7 +537,11 @@ def t16(c):
     with d.io:
         t_last = d.last_api
     try:
-        p = d.wait(lambda q: q["state"] in ("FAULT", "WAIT_ACK"), 10, "COMM_TIMEOUT", allow_fault=True, period=0.05)
+        try:
+            p = d.wait(lambda q: q["state"] in ("FAULT", "WAIT_ACK"), 10, "COMM_TIMEOUT", allow_fault=True, period=0.05)
+        except Fail as e:
+            raise Fail(str(e) + " – sendet ein anderer Client (Browser mit der Weboberfläche, add_client shell) noch"
+                       " GET_STATE? Für T16 alle anderen Clients schließen")
         dt = time.time() - t_last
     finally:
         d.hb = True
@@ -624,8 +629,9 @@ def t19(c):
         med = v[len(v) // 2] if v else float("nan")
         rows.append("%d: %.1f" % (pos, med))
         if not v or abs(med - thick) > 1.0: bad.append(pos)
-    check(abs(first - 105) <= 3 and abs(last - 225) <= 3, "Kanten bei %.1f / %.1f mm (erwartet 105 / 225 ±3)" % (first, last))
-    check(not bad, "Stufen außerhalb ±1 mm: %s (%s)" % (bad, ", ".join(rows)))
+    info = "Kanten %.1f / %.1f mm; Stufen (Median) %s; Mittel %.2f, n=%d" % (first, last, ", ".join(rows), avg, n)
+    check(abs(first - 105) <= 3 and abs(last - 225) <= 3, "Kanten außerhalb 105 / 225 ±3 mm | " + info)
+    check(not bad, "Stufen außerhalb ±1 mm: %s | %s" % (bad, info))
     check(5.0 <= avg <= 30.0 and n > 50, "Statistik: Mittel %.2f, n %d" % (avg, n))
     return "Messgut %.1f … %.1f mm; Stufen (Median) %s; Mittel %.2f mm, n=%d" % (first, last, ", ".join(rows), avg, n)
 
@@ -659,9 +665,11 @@ def t22(c):
     d.ready()
     d.move(60)
     if not c.args.sim:
-        c.prompt("Gleich fährt die Achse langsam von 60 nach 200 mm. Dann den VORDEREN Endschalter kurz von Hand drücken")
+        c.prompt("Gleich fährt die Achse langsam von 60 nach 200 mm. Erst bei 'JETZT' den VORDEREN Endschalter kurz drücken")
         if c.args.no_manual: raise Skip("Handprüfung übersprungen")
     d.ok("MOVE", pos=200, speed=5)
+    d.wait(lambda q: q["motion"]["state"] == "moving", 3, "Fahrt läuft")
+    print("\n  >>> JETZT den VORDEREN Endschalter kurz drücken <<<\n", flush=True)
     if c.args.sim:
         time.sleep(1.0); d.hook(press_fwd=1); time.sleep(0.2); d.hook(press_fwd=0)
     p = d.wait(lambda q: q["state"] in ("FAULT", "WAIT_ACK"), 40, "MOTOR_FAULT", allow_fault=True)
@@ -680,12 +688,14 @@ def t23(c):
     d = c.d
     d.ready(hv=True)
     if not c.args.sim:
-        c.prompt("Gleich startet eine Profilfahrt. Sobald sie läuft, NOT-AUS drücken und gedrückt halten")
+        c.prompt("Gleich startet eine Profilfahrt. Erst bei 'JETZT' NOT-AUS drücken und gedrückt halten")
         if c.args.no_manual: raise Skip("Handprüfung übersprungen")
     d.ok("START_TRAVERSE", start=80, end=240, speed=5)
     d.wait(lambda q: q["motion"]["mode"] == "traverse" and q["safety"]["shutter"] == "open", 60, "Profilfahrt läuft")
     if c.args.sim:
         d.hook(estop=1)
+    else:
+        print("\n  >>> JETZT NOT-AUS drücken und gedrückt halten <<<\n", flush=True)
     p = d.wait(lambda q: q["state"] in ("FAULT", "WAIT_ACK"), 60, "Not-Aus", allow_fault=True)
     check(p["err"] == 1 and p["safety"]["estop"], "Fehler %s (erwartet ESTOP)" % SYS_ERR[p["err"]])
     check(not p["safety"]["hv_on"] and p["safety"]["shutter"] == "closed", "HV/Shutter nicht aus")
