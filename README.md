@@ -15,6 +15,7 @@ agentenbasierte Entwicklung mit code-server + Cline.
 | `docs/reviews/` | Review-Protokolle je Sprint |
 | `docs/Hardware_Dokumentation_V1_0.md` | Hardware-Dokumentation: Sicherheitshinweise, Komponenten, Anschlüsse, Motortreiber, Inbetriebnahme, Fehlersuche |
 | `docs/Software_Dokumentation_V1_0.md` | Software-Dokumentation: Architektur, Sicherheitslogik, Entwicklung mit KI, Module, pio-Befehle, API, Endpunkte, Bedienoberflächen, Kalibrierung, ADD mit KI, Tests und Werkzeuge |
+| `docs/REST_API_V1_0.md` | Kurzübersicht der REST-API: Befehle, Parameter, Fehlercodes, `/proc`, Endpunkte |
 | `docs/Smoketest_Protokoll.md` | Sprint 0a an der Hardware |
 | `docs/reference/` | ADD Spec, Developer Guide, Style Guide v1.0 allgemein (+ Auszug für S4), `ADD_Style_Guide_IMS_V1_0.md` für Webseiten im Stil der IMS-Bedienoberfläche (ergänzt den allgemeinen) |
 | `.clinerules` / `.clineignore` | Regeln und Ausschlüsse für Cline |
