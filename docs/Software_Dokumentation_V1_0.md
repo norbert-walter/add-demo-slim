@@ -582,7 +582,7 @@ Pflichtenhefts.
 | I1 | `net_task`, `main`, `display`, Gesamt-Build | zwei Suiten, Gerätetest |
 | W1 | Weboberfläche | JS-Tests, Browserprüfung |
 | IMS-UI | IMS-Bedienoberfläche ersetzt W1 | JS-Tests, Browserprüfung |
-| A1 | Abnahme nach Pflichtenheft Kapitel 10 | offen |
+| A1 | Abnahme nach Pflichtenheft Kapitel 10 | vorbereitet: `docs/sprints/A1.md`, `scripts/acceptance_a1.py` |
 | D1 | `add.json`, Demo-Skripte | offen |
 
 Der aktuelle Stand steht in der Statustabelle der `README.md`, die Befunde in `docs/reviews/`.
@@ -1081,7 +1081,7 @@ Eine Zeile, ≤ 512 Byte, feste Reihenfolge, Gleitkommazahlen mit einer Nachkomm
 | `err` | Systemfehler (4.2), gehalten bis ACK |
 | `local` | Bedienvorrang aktiv |
 | `motion.pos`, `vel` | Position (mm), Geschwindigkeit (mm/s) |
-| `motion.state` | `idle`, `moving`, `homing`, `error` (letzter Ablauf mit Fehler beendet) |
+| `motion.state` | `idle`, `moving`, `homing`, `error`. `moving` gilt für **jeden** aktiven Ablauf – auch während einer stehenden Messung, obwohl die Achse steht; `error` bleibt nach einem Fehler in Fahrt bis zum nächsten erfolgreichen Start. Ende eines Ablaufs: `idle` oder `error` und `mode = none` |
 | `motion.mode` | `none`, `measure`, `traverse` |
 | `motion.homed` | Referenz gültig |
 | `motion.limit_fwd`, `limit_bwd` | Endschalter betätigt |
@@ -1661,7 +1661,7 @@ Vorfall „move 2010“).
 
 ### 14.4 Python-Werkzeuge (`scripts/`)
 
-Alle nutzen nur die Standardbibliothek (außer `serial_cmd.py`: `pyserial`).
+Alle nutzen nur die Standardbibliothek (außer `serial_cmd.py`: `pyserial`; `sim_device.py` braucht g++).
 
 **`add_client.py` – Referenz-Client der API**
 
@@ -1703,6 +1703,30 @@ einen Fehler meldet.
 ```
 python3 scripts/stress_api.py --host 192.168.4.1 soak --minutes 10 --web
 ```
+
+**`sim_device.py` – Gerät mit der echten Firmware-Logik auf dem PC**
+
+```
+python3 scripts/sim_device.py 8090
+```
+Führt den Code aus `src/logic` (Sicherheitsautomat, Ablaufsteuerung, Messkette, Parameter, Parser,
+`/proc`) in `scripts/sim/logic_sim.cpp` mit simulierter Achse und dem Stufenkörper als Sensor aus –
+in Echtzeit, mit den Endpunkten des Geräts (`/`, `/proc`, `/api`, `/log`, `/doc` …). Wird beim ersten
+Start mit g++ gebaut (ArduinoJson aus `.pio/libdeps/native`, also vorher einmal
+`pio test -e native`). Nicht simuliert: WLAN, Display, Zeitwerte, Not-Aus-Verdrahtung.
+Test-Hooks: `GET /sim/set?estop=1&press_fwd=1&press_bwd=1&block=1` (Not-Aus, Endschalter, Achse
+blockiert). Ideal, um Skripte und KI-Agenten vor dem ersten Lauf an der Anlage zu prüfen.
+
+**`acceptance_a1.py` – Abnahme Sprint A1**
+
+```
+python3 scripts/acceptance_a1.py --host 192.168.4.1 --out docs/reviews/Abnahme_A1_automatisch.md
+```
+Prüft 28 Abnahmepunkte aus Pflichtenheft Kapitel 10 über die REST-API (T01 … T29) und schreibt ein
+Protokoll. Sinnesprüfungen (LEDs, Summer) und Handgriffe (Not-Aus, Endschalter, Messschieber) fragt
+es an der passenden Stelle ab. **Bewegt die Achse, schaltet die HV, startet die Anlage neu.**
+Optionen: `--only T05,T18`, `--no-manual`, `--skip-soak`, `--sim` (gegen `sim_device.py`, betätigt
+Not-Aus und Endschalter über die Test-Hooks). Ablauf: `docs/sprints/A1.md`.
 
 **`fake_device.py` – simuliertes Gerät**
 

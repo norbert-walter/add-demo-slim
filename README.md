@@ -30,6 +30,8 @@ agentenbasierte Entwicklung mit code-server + Cline.
 | `scripts/serial_cmd.py` | nicht-interaktiver Serial-Client (Smoketest und Firmware-Konsole: `status`, `wifi <ssid> <pw>`; wartet nach dem Öffnen den Boot ab) |
 | `scripts/add_client.py` | REST-Client mit CRC-Rahmenregel (Referenz); `shell` = interaktive Konsole mit Heartbeat |
 | `scripts/fake_device.py` | simuliertes Gerät für die Webseiten (W1) |
+| `scripts/sim_device.py` | Gerät mit der echten Firmware-Logik (`src/logic`) auf dem PC, simulierte Achse, gleiche Endpunkte |
+| `scripts/acceptance_a1.py` | Abnahmeskript Sprint A1 (Pflichtenheft Kapitel 10, API-Teil) |
 | `scripts/verify_reference.sh` | alle nativen Tests gegen die Referenzimplementierung (`referenz_logic.zip`, separat geliefert) in einem temporären Worktree – Nachweis, dass die eingefrorenen Tests widerspruchsfrei und erfüllbar sind |
 | `scripts/stress_api.py` | Abnahme V1.1: STOP-Latenz, Queue-Flut, parallele Anfragen, Dauerlauf, Bedienvorrang |
 
@@ -64,7 +66,7 @@ Teil der Definition of Done in `.clinerules`.
 | I1 | `app/net_task.cpp`, `main.cpp`, `display/display.cpp`, Gesamt-Build | ✅ fertig (Qwen; Display-Gerüst und Korrekturen Claude) | `test_net_task` 10/10 · `test_display` 15/15 · `pio run -e firmware` ✅ · Prüfliste am Gerät 8/8 | ✅ 17.10.2026, Tag `sprint-i1` |
 | W1 | `data/www/app.js`, `index.html`, `settings.html` | ✅ fertig (Qwen; 2 Korrekturen Claude) | `test_app` 27/27 · `test_pages` 10/10 · Browser- und Offline-Prüfung ✅ · Gerät offen | ✅ 18.10.2026, Review_W1 |
 | IMS-UI | `data/www/index.html` (ersetzt die W1-Seiten), `settings.html` → `/#settings` | ✅ fertig (Claude, Entwurf Norbert Walter) | `test_app` + `test_pages` 35/35 · Browserprüfung Gerätemodus und lokale Datei ✅ · Gerät offen | Contract V1.5.28 (Hilfe-Symbol) |
-| A1 | Abnahme | ⬜ offen | Pflichtenheft Kapitel 10 | – |
+| A1 | Abnahme | 🔄 vorbereitet (`docs/sprints/A1.md`) | Pflichtenheft Kapitel 10; Skript gegen `sim_device.py` 26/26 + T21 Hand | – |
 | D1 | `data/add.json`, Demo-Skripte | ⬜ offen | KI-Validierung | – |
 
 Reihenfolge und Begründung: `docs/Sprint_Prompts_Demoanlage_ADD_Slim_V2.md`, Abschnitt

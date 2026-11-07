@@ -20,6 +20,8 @@
   - Abnahme: Bedienvorrang nur mit `LOCAL_HOLD_MS > 0` prüfbar; `/doc` und Hilfe-Symbol ergänzt.
   - Offene Punkte: Bedienvorrang (Standard aus), Sprint-Namen S6 → D1, Ideen „Offline-Doku“ und
     „Dokumentation per KI“ teilweise umgesetzt, Gerätetest bewegt die Achse.
+- Sprint A1 vorbereitet: Abnahmeskript `scripts/acceptance_a1.py` (API-Teil von Kapitel 10) und
+  `scripts/sim_device.py` (Gerät mit der echten Firmware-Logik auf dem PC zum Testen von Skripten).
 - Die Quelldateien der Weboberfläche gibt es nicht mehr getrennt; `data/www/index.html` ist ab jetzt
   selbst die Quelle und wird direkt bearbeitet (Prüfung: `test/js/test_pages.js`, Browserprüfung).
 
@@ -447,7 +449,8 @@ test/native/<suite>/         eingefrorene Host-Tests
 test/embedded/test_hardware/ On-Target-Tests                              H1/A1
 data/                        www/ (W1), doc.html, add.json (D1)          W1/D1
 scripts/                     add_client.py, stress_api.py, fake_device.py, serial_cmd.py,
-                             check_iram.py, verify_reference.sh
+                             check_iram.py, verify_reference.sh, acceptance_a1.py (A1),
+                             sim_device.py + sim/logic_sim.cpp (echte Logik auf dem PC)
 docs/                        CONTRACT.md, Pflichtenheft, Hardware_Dokumentation_V1_0.md,
                              Software_Dokumentation_V1_0.md, REST_API_V1_0.md,
                              Endpoints_V1_0.md, Smoketest_Protokoll.md, sprints/, reviews/,

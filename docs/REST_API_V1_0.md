@@ -118,7 +118,7 @@ Standard.
 Die wahren Abstände der Kalibrierpunkte stehen in `calib_near_ref` / `calib_far_ref` (`SET`).
 
 Ablauf an der Demoanlage: `MOVE pos=215` → `CALIB near` → `MOVE pos=115` → `CALIB far` →
-`CALIB save` (jeweils erst, wenn `motion.state = idle`).
+`CALIB save` (jeweils erst, wenn die Fahrt beendet ist: `motion.state = idle`).
 
 ---
 
@@ -172,7 +172,7 @@ Nach `ACK` bleiben HV und Shutter aus (kein automatischer Wiederanlauf).
 | `err` | 0 … 5 | Systemfehler (5.2) |
 | `local` | bool | Bedienvorrang des Displays |
 | `motion.pos` / `vel` | mm / mm/s | Position, Geschwindigkeit |
-| `motion.state` | `idle` `moving` `homing` `error` | Achse |
+| `motion.state` | `idle` `moving` `homing` `error` | Ablauf der Achse: `moving` bei **jedem** aktiven Ablauf – auch während einer stehenden Messung (`START_MEASURE`), obwohl die Achse steht; `error` nach einem Fehler in Fahrt bis zum nächsten erfolgreichen Start. „Achse fertig“ = `idle` oder `error` und `mode = none` |
 | `motion.mode` | `none` `measure` `traverse` | laufendes Messprogramm |
 | `motion.homed` | bool | Referenz gültig |
 | `motion.limit_fwd` / `limit_bwd` | bool | Endschalter vorn / hinten |
