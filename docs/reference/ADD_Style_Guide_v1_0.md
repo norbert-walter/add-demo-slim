@@ -4,6 +4,11 @@
 Version 1.0 | CC BY 4.0 © 2026 Norbert Walter / Open Boat Projects
 https://github.com/norbert-walter/ai-device-description-add
 
+> **Note for this repository (not part of the upstream text):** for operator pages in the style of
+> the IMS operator UI of the demo plant, use the complementary
+> [ADD Style Guide – IMS Operator UI v1.0](ADD_Style_Guide_IMS_V1_0.md). This generic guide stays
+> valid for brand-neutral ADD dashboards.
+
 ---
 
 ## Table of Contents

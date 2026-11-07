@@ -1,8 +1,13 @@
-# ADD Style Guide – IMS Operator UI
+# ADD Style Guide – IMS Operator UI v1.0
 
 **AI Device Description — style guide for external operator pages**
 Version 1.0 · 2026-11-07 · Norbert Walter
 Reference implementation: `data/www/index.html` (IMS operator UI, CONTRACT V1.5.26 §5.5)
+
+> **Which guide?** This guide complements the generic
+> [ADD Dashboard Style Guide v1.0](ADD_Style_Guide_v1_0.md) and does not replace it. Use the
+> generic guide for brand-neutral ADD dashboards (themes, instruments, pictograms); use this guide
+> for operator pages in the IMS style (demo plant, IMS-style devices).
 
 ---
 
@@ -43,8 +48,8 @@ A page that follows this guide
 
 | Document | Role |
 |---|---|
-| `docs/reference/ADD_Style_Guide_v1_0.md` | ADD Dashboard Style Guide v1.0 – generic, brand-neutral dashboards with themes and instruments. Still valid for generic ADD dashboards |
-| **this guide** | IMS industrial operator style: one dark colour scheme, navigation rail, alarm header. Use it for pages that belong to the demo plant or to IMS-style devices |
+| `docs/reference/ADD_Style_Guide_v1_0.md` | ADD Dashboard Style Guide v1.0 – generic, brand-neutral dashboards with themes and instruments. Remains valid for generic ADD dashboards |
+| **this guide** (`docs/reference/ADD_Style_Guide_IMS_V1_0.md`) | IMS industrial operator style: one dark colour scheme, navigation rail, alarm header. Use it for pages that belong to the demo plant or to IMS-style devices |
 | `docs/CONTRACT.md` §4, §5 | binding definition of the CRC32 frame, `/proc`, `/api`, error codes |
 | `data/www/app.js` (ADDAPP) | protocol and rule functions; external pages embed a copy |
 | `data/www/index.html` | reference implementation of everything in this guide |
@@ -849,4 +854,4 @@ body {
 
 | Version | Date | Change |
 |---|---|---|
-| 1.0 | 2026-11-07 | First version, derived from the IMS operator UI of the ADD demo plant (CONTRACT V1.5.26) |
+| 1.0 | 2026-11-07 | First version (`docs/reference/ADD_Style_Guide_IMS_V1_0.md`), derived from the IMS operator UI of the ADD demo plant (CONTRACT V1.5.26) |
