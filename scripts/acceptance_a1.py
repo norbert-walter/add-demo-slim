@@ -980,7 +980,7 @@ def measure_steps(c):
     return res
 
 
-@test("T18", 2, "2, 8", "Stehende Messung je Stufe: Dicke ±0,5 mm, Abstand ±1 mm (Mittelwert, Sigma)")
+@test("T18", 2, "2, 8", "Stehende Messung je Stufe: Dicke und Abstand ±0,5 mm (Mittelwert, Sigma)")
 def t18(c):
     res = measure_steps(c)
     bad = []
@@ -988,7 +988,7 @@ def t18(c):
         r = res[pos]
         dm, dsd, dmin, dmax, n = stats(r["dist"])
         tm, tsd, tmin, tmax, _ = stats(r["thick"])
-        sts = [c.val("%d mm: Abstand Mittelwert" % pos, dm, "mm", nom=dist, tol=1.0),
+        sts = [c.val("%d mm: Abstand Mittelwert" % pos, dm, "mm", nom=dist, tol=0.5),       # K1: Tabelle
                c.val("%d mm: Dicke Mittelwert" % pos, tm, "mm", nom=thick, tol=0.5),
                c.val("%d mm: Dicke Mittelwert der Anlage (avg)" % pos, r["avg"], "mm", nom=thick, tol=0.5),
                c.val("%d mm: Dicke Sigma" % pos, tsd, "mm", mx=0.17, target="≤ 0,17 (3σ ≤ 0,5)"),
@@ -1038,23 +1038,28 @@ def t19(c):
     return "Kanten und Stufen in Toleranz"
 
 
-@test("T20", 2, "8", "Kalibrierung gespeichert und wirksam (Abweichung je Stufe mit Mittelwert und Sigma)")
+@test("T20", 2, "8", "Kalibriertabelle (6 Stufen) gespeichert und wirksam: Abweichung je Stufe ±0,5 mm (Mittelwert, Sigma)")
 def t20(c):
     cfg = c.d.config()
     for k in sorted(k for k in cfg if k.startswith("calib_") and k != "calib_valid"):
         c.val("Parameter %s" % k, cfg[k], "mm")
     c.val("calib_valid", cfg["calib_valid"], eq=True)
     check(cfg["calib_valid"], "calib_valid = false")
+    if "calib_raw_1" not in cfg:
+        raise Problem("Firmware ohne Kalibriertabelle (vor Contract V1.6.0) – erst K1 flashen")
+    if all(abs(cfg["calib_raw_%d" % i] - cfg["calib_ref_%d" % i]) < 0.01 for i in range(1, 7)):
+        raise Problem("Werkstabelle (Rohwert = Referenz): erst kalibrieren – Seite Kalibrierung, "
+                      "„Alle 6 Stufen automatisch“")
     res = measure_steps(c)
     bad = []
     for pos, dist, thick in STEPS:
         dm, dsd, _, _, n = stats(res[pos]["dist"])
-        st = c.val("Stufe %d mm: Abweichung Abstand (Mittelwert – %.0f mm)" % (pos, dist), dm - dist, "mm", nom=0.0, tol=1.0)
+        st = c.val("Stufe %d mm: Abweichung Abstand (Mittelwert – %.0f mm)" % (pos, dist), dm - dist, "mm", nom=0.0, tol=0.5)
         c.val("Stufe %d mm: Sigma Abstand" % pos, dsd, "mm")
         if st == "fail":
             bad.append("%d mm" % pos)
     check(not bad, "Kalibrierung nicht wirksam an: %s" % ", ".join(bad))
-    return "calib_valid, Abweichung je Stufe ≤ 1 mm"
+    return "Tabelle gültig und kalibriert, Abweichung je Stufe ≤ 0,5 mm"
 
 
 def stress(c, name, *extra, timeout=900):

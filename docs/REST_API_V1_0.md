@@ -1,6 +1,6 @@
 # REST-API – Kurzübersicht
 
-**Demoanlage ADD (Slim)** · Version 1.0 · Stand 2026-11-07 · Contract V1.5.27
+**Demoanlage ADD (Slim)** · Version 1.1 · Stand 2026-11-08 · Contract V1.6.2
 Ausführlich: `docs/Software_Dokumentation_V1_0.md` Kapitel 9–11, verbindlich: `docs/CONTRACT.md` §4–§5
 
 ---
@@ -63,7 +63,8 @@ Ausführlich: `docs/Software_Dokumentation_V1_0.md` Kapitel 9–11, verbindlich:
 | `START_TRAVERSE` | `start` | Zahl | | > 60 … 242 mm | `traverse_start` (80) |
 | `START_TRAVERSE` | `end` | Zahl | | > 60 … 242 mm, ≥ 1 mm von start; end < start erlaubt | `traverse_end` (240) |
 | `START_TRAVERSE` | `speed` | Zahl | | 1 … 20 mm/s | `traverse_speed` (10) |
-| `CALIB` | `action` | Text | ✓ | `near` · `far` · `base` · `save` · `reset` | – |
+| `CALIB` | `action` | Text | ✓ | `point` · `base` · `save` · `reset` | – |
+| `CALIB` | `index` | Zahl | bei `point` ✓ | ganze Zahl 1 … 6 (Kalibrierpunkt) | – |
 | `SET` | `key` | Text | ✓ | Schlüssel aus Abschnitt 3, max. 23 Zeichen | – |
 | `SET` | `value` | Zahl, bool oder Text | ✓ | je Schlüssel, Text max. 63 Zeichen | – |
 
@@ -74,7 +75,7 @@ Bei allen anderen Befehlen werden `params` ignoriert. Zahlen müssen endlich sei
 | Befehl | Zusatzfelder |
 |---|---|
 | `GET_STATE` | `"state"`, `"sys_err"`, `"local"`, `"cycle_max_us"`, `"period_max_us"`, `"overruns"`, `"prio_lat_max_us"` |
-| `GET_CONFIG` | `"config":{…}` mit allen Parametern aus Abschnitt 3 (ohne `wifi_pass`) und zusätzlich `calib_near_raw`, `calib_far_raw`, `calib_valid`, `wifi_pass_set` |
+| `GET_CONFIG` | `"config":{…}` mit allen Parametern aus Abschnitt 3 (ohne `wifi_pass`) und zusätzlich `calib_raw_1` … `calib_raw_6`, `calib_valid`, `wifi_pass_set` |
 
 ---
 
@@ -93,8 +94,7 @@ Bei allen anderen Befehlen werden `params` ignoriert. Zahlen müssen endlich sei
 | `shutter_hold` | Zahl | 3,0 | 0 … 10 s | Shutter bleibt nach einem Lauf so lange offen | ✓ |
 | `edge_threshold` | Zahl | 3,0 | 0,5 … 100 mm | Dicke, ab der „auf dem Messgut“ gilt | ✓ |
 | `base_dist` | Zahl | 70,0 | 40 … 300 mm | Bezugsebene: Dicke = `base_dist` − Abstand | ✓ |
-| `calib_near_ref` | Zahl | 40,0 | 40 … 300 mm | wahrer Abstand des nahen Kalibrierpunkts | ✓ |
-| `calib_far_ref` | Zahl | 65,0 | 40 … 300 mm | wahrer Abstand des fernen Kalibrierpunkts | ✓ |
+| `calib_ref_1` … `calib_ref_6` | Zahl | 65,0 · 60,0 · 55,0 · 50,0 · 45,0 · 40,0 | 40 … 300 mm | wahrer Abstand der Kalibrierpunkte 1 … 6 | ✓ |
 | `estop_nc` | bool | false | nur bei stehender Achse und HV aus | Not-Aus als Öffner (true) oder Schließer (false) | ✓ |
 | `wifi_ssid` | Text | "" | 0 … 32 Zeichen, leer = kein Router | Router-WLAN; wirksam nach `REBOOT` | ✓ |
 | `wifi_pass` | Text | "" | 0 oder 8 … 63 Zeichen | Router-Passwort; wird nie zurückgemeldet | ✓ |
@@ -107,18 +107,22 @@ Standard.
 
 ## 4. Kalibrierung (`CALIB`)
 
+Kalibriertabelle mit 6 Punkten; Punkt i liegt auf der Stufe bei **95 + 20·i mm** (115 … 215 mm).
+
 | `action` | Voraussetzung | Wirkung | mögliche Fehler |
 |---|---|---|---|
-| `near` | Achse steht, Rohabstand 500 ms innerhalb ±0,5 mm stabil | aktuellen unkalibrierten Abstand als nahen Punkt übernehmen (`calib_near_raw`) | `BUSY`, `NOT_STABLE` |
-| `far` | wie `near` | dasselbe für den fernen Punkt (`calib_far_raw`) | `BUSY`, `NOT_STABLE` |
+| `point` + `index` 1 … 6 | Achse steht, Rohabstand 500 ms innerhalb ±0,5 mm stabil | aktuellen unkalibrierten Abstand als Punkt `index` übernehmen (`calib_raw_<index>`); nicht gespeichert | `BAD_PARAM`, `BUSY`, `NOT_STABLE` |
 | `base` | Achse steht, Sensor im Bereich, stabil | `base_dist` = aktueller kalibrierter Abstand | `BUSY`, `PRECONDITION`, `NOT_STABLE` |
-| `save` | Achse steht; Rohwerte und Referenzen je ≥ 5 mm auseinander, Referenzen 40 … 300 mm | Kalibrierung gültig, alle Parameter speichern | `BUSY`, `CALIB_INVALID` |
-| `reset` | Achse steht | Werkswerte 40/40 und 65/65 (erst mit `save` dauerhaft) | `BUSY` |
+| `save` | Achse steht; Tabelle gültig: Referenzen 40 … 300 mm, nach Referenz sortiert steigen Referenzen und Rohwerte um je ≥ 1 mm | alle Parameter speichern | `BUSY`, `CALIB_INVALID` |
+| `reset` | Achse steht | Werkstabelle (Rohwert = Referenz = 65 … 40 mm), erst mit `save` dauerhaft | `BUSY` |
 
-Die wahren Abstände der Kalibrierpunkte stehen in `calib_near_ref` / `calib_far_ref` (`SET`).
+Die wahren Abstände stehen in `calib_ref_1` … `calib_ref_6` (`SET`). Zwischen zwei Punkten wird
+linear interpoliert, außerhalb mit dem ersten bzw. letzten Abschnitt verlängert. `near`/`far`
+(bis Contract V1.5) gibt es nicht mehr (`BAD_PARAM`).
 
-Ablauf an der Demoanlage: `MOVE pos=215` → `CALIB near` → `MOVE pos=115` → `CALIB far` →
-`CALIB save` (jeweils erst, wenn die Fahrt beendet ist: `motion.state = idle`).
+Ablauf an der Demoanlage: für i = 1 … 6 `MOVE pos=95+20·i` → `CALIB action=point index=i`, dann
+`CALIB action=save` (jeweils erst, wenn die Fahrt beendet ist: `motion.state = idle`). Die
+Weboberfläche macht das mit „Alle 6 Stufen automatisch“.
 
 ---
 

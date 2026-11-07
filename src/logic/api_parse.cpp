@@ -166,12 +166,13 @@ ApiError apiParseRequest(const char* body, size_t len, Command& out) {
             if (ca == CalibAction::POINT) {
                 JsonVariantConst idxVal = params["index"];
                 if (idxVal.isNull()) return ApiError::BAD_PARAM;
-                if (!idxVal.is<float>()) return ApiError::BAD_PARAM;
-                float f = idxVal.as<float>();
-                if (!std::isfinite(f)) return ApiError::BAD_PARAM;
-                int ival = static_cast<int>(f);
-                if (static_cast<float>(ival) != f) return ApiError::BAD_PARAM; // reject non-integers like 3.5
-                if (ival < 1 || ival > CALIB_POINTS) return ApiError::BAD_PARAM;
+                if (!idxVal.is<double>()) return ApiError::BAD_PARAM;
+                // V1.6.2 (review K1): check in double BEFORE the cast (3e9 -> int was undefined
+                // behaviour) and compare in double (as float, 3.0000001 was accepted as 3)
+                const double d = idxVal.as<double>();
+                if (!(d >= 1.0 && d <= static_cast<double>(CALIB_POINTS))) return ApiError::BAD_PARAM;
+                const int ival = static_cast<int>(d);
+                if (static_cast<double>(ival) != d) return ApiError::BAD_PARAM; // reject non-integers like 3.5
                 out.calib_index = static_cast<uint8_t>(ival);
             }
             break;

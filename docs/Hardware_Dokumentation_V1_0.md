@@ -1,6 +1,6 @@
 # Hardware-Dokumentation – Demoanlage ADD (Slim)
 
-**Version:** 1.0 · **Stand:** 2026-11-07 · **Autor:** Norbert Walter
+**Version:** 1.1 · **Stand:** 2026-11-08 · **Autor:** Norbert Walter
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.10, Smoketest-Protokoll 0a, `src/config.h`
 
 ---
@@ -481,7 +481,8 @@ Der Sensor arbeitet nur mit diesen Änderungen zuverlässig (Pflichtenheft V1.7.
    `analogReadMilliVolts`).
 2. Alle 20 ms bildet die Firmware aus den Werten Median und Mittelwert.
 3. Die Spannung wird mit der Kennlinie **Abstand = 168,8 · U^−1,398** (U in V, Abstand in mm) in
-   den Abstand umgerechnet und mit einer Zweipunkt-Kalibrierung (Nah/Fern) korrigiert.
+   den Abstand umgerechnet und mit einer Kalibriertabelle über alle sechs Stufen korrigiert (seit
+   Contract V1.6.0; eine Zweipunkt-Kalibrierung ließ bis 0,87 mm Restfehler).
 4. Dicke = `base_dist` (70 mm) − Abstand.
 
 Kalibrierpunkte (Smoketest 0a, mit 11 kΩ Last):
@@ -819,3 +820,4 @@ Referenzpunkt anfahren und erfassen, Basis erfassen, speichern.
 | Version | Datum | Änderung |
 |---|---|---|
 | 1.0 | 2026-11-07 | Erste Ausgabe auf Basis von Pflichtenheft V1.7.10 und Smoketest 0a |
+| 1.1 | 2026-11-08 | Echter TMC2209 eingebaut: `DIR_POSITIVE_HIGH` = true; Messkette mit Kalibriertabelle (6 Stufen) |

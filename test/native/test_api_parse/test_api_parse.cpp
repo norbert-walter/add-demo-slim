@@ -192,6 +192,17 @@ void test_calib_point_bad_index() {
     };
     for (const char* j : bad) API(ApiError::BAD_PARAM, parse(j));
 }
+// V1.6.2 (review K1): no float rounding, no undefined float->int cast for huge numbers
+void test_v162_calib_index_exact_and_huge() {
+    const char* bad[] = {"3.0000001", "2.9999999", "6.0000004", "0.9999999", "3e9", "-3e9", "1e20", "1e300", "-0.0"};
+    for (const char* v : bad) {
+        char j[128];
+        snprintf(j, sizeof j, "{\"cmd\":\"CALIB\",\"params\":{\"action\":\"point\",\"index\":%s}}", v);
+        TEST_ASSERT_EQUAL_INT_MESSAGE((int)ApiError::BAD_PARAM, (int)parse(j), v);
+    }
+    API(ApiError::OK, parse("{\"cmd\":\"CALIB\",\"params\":{\"action\":\"point\",\"index\":6e0}}"));
+    TEST_ASSERT_EQUAL_INT(6, Cm.calib_index);
+}
 void test_calib_index_ignored_for_other_actions() {
     API(ApiError::OK, parse("{\"cmd\":\"CALIB\",\"params\":{\"action\":\"point\",\"index\":5}}"));
     API(ApiError::OK, parse("{\"cmd\":\"CALIB\",\"params\":{\"action\":\"save\",\"index\":9}}"));
@@ -251,6 +262,7 @@ int main(int, char**) {
     RUN_TEST(test_calib_point_index);
     RUN_TEST(test_calib_point_bad_index);
     RUN_TEST(test_calib_index_ignored_for_other_actions);
+    RUN_TEST(test_v162_calib_index_exact_and_huge);
     RUN_TEST(test_command_is_reset_between_parses);
     RUN_TEST(test_v1511_set_number_keeps_double_precision);
     RUN_TEST(test_v1512_absent_numbers_stay_zero);

@@ -1,6 +1,6 @@
 # Software-Dokumentation – Demoanlage ADD (Slim)
 
-**Version:** 1.0 · **Stand:** 2026-11-07 · **Autor:** Norbert Walter
+**Version:** 1.1 · **Stand:** 2026-11-08 · **Autor:** Norbert Walter
 **Firmware:** `FW_VERSION` 1.0.0 · **Contract:** V1.5.28 · **Pflichtenheft:** V1.7.12
 **Hardware:** siehe `docs/Hardware_Dokumentation_V1_0.md`
 
@@ -94,7 +94,7 @@ Die Spezifikation besteht aus dem Pflichtenheft (deutsch, für Menschen) und dem
 | REST-API | `POST /api` mit JSON und CRC32-Rahmen, 17 Befehle, Fehlercodes, BUSY-Regel | 9 |
 | Prozessabbild | `GET /proc`, ≤ 512 Byte, mit CRC32, alle 500 ms abgefragt | 10.2 |
 | Parameter | 16 Schlüssel, Bereichsprüfung, Speicherung im Flash (NVS) nur im Stillstand | 9.5 |
-| Messkette | 1 ADC-Wert je ms, Median-Mittel alle 20 ms, Kennlinie, IIR-Filter, Zweipunkt-Kalibrierung, Dicke = Bezugsebene − Abstand | 3.4 |
+| Messkette | 1 ADC-Wert je ms, Median-Mittel alle 20 ms, Kennlinie, IIR-Filter, Kalibriertabelle (6 Stufen), Dicke = Bezugsebene − Abstand | 3.4 |
 | Zeitverhalten | Regelzyklus 1 ms; Zykluszeit, Jitter und STOP-Latenz jeweils ≤ 3 ms | 3.3 |
 | Display | 480 × 320, 7 Tasten, Fehlerbild mit ACK durch 1 s Halten, englisch | 12.2 |
 | Weboberfläche | IMS-Bedienoberfläche, deutsch, eine Seite, auch lokal als Datei nutzbar | 12.1 |
@@ -169,7 +169,7 @@ add-demo-slim/
 | `comm/http_server.*` | alle HTTP-Endpunkte, CORS, Trennen wartender Verbindungen |
 | `comm/wifi_manager.*` | Access Point, Router-Verbindung, mDNS |
 | `comm/log_buffer.*` | Ringpuffer der letzten 20 Logzeilen, Ausgabe auch seriell |
-| `system/nvs_config.*` | Parameter im Flash (Namespace `add_demo`, Schema-Version 4) |
+| `system/nvs_config.*` | Parameter im Flash (Namespace `add_demo`, Schema-Version 5) |
 | `system/system.*` | Task-Watchdog (10 s), Neustart |
 | `hal/hal_io.*` | Endschalter, Not-Aus (Pegel per `estop_nc`), ADC, LEDs, Summer |
 | `hal/motion_drv.*` | FastAccelStepper mit I2S-Multiplexer, setzt Treiber-Anforderungen um |
@@ -272,7 +272,8 @@ gemessen max. 2,22 / 2,41 / 1,73 ms). Der Netz-Task protokolliert lange Zyklen a
 3. Kennlinie: `dist_raw = 168,8 · U^−1,398` (U in V, Ergebnis in mm).
 4. Außerhalb 35 … 300 mm: `in_range = false`, Filter zurückgesetzt, Dicke 0.
 5. IIR-Filter (α = 0,8).
-6. Zweipunkt-Kalibrierung (`calib_near/far_raw` → `calib_near/far_ref`).
+6. Kalibriertabelle mit 6 Punkten (`calib_raw_i` → `calib_ref_i`, i = 1 … 6): zwischen zwei Punkten
+   linear, außerhalb mit dem ersten bzw. letzten Abschnitt verlängert; ungültige Tabelle → Rohwert.
 7. `thick = max(0, base_dist − dist)`; `on_material = thick > edge_threshold`.
 8. `valid` nur bei offenem Shutter (simuliert: ohne Strahlung keine Messung).
 9. Statistik (`avg`, `n`) über gültige Werte auf dem Messgut während der Erfassung.
@@ -935,7 +936,7 @@ const res = ADDAPP.parseFramed(await (await fetch('/proc')).text()); // {ok, dat
 | `GET_STATE` | – | alle | Heartbeat; Antwort mit Zustand und Zeitwerten (9.4) |
 | `GET_CONFIG` | – | alle | Antwort mit allen Parametern (9.5) |
 | `SET` | `key`, `value` | alle | Parameter setzen (9.5) |
-| `CALIB` | `action`: `near` `far` `base` `save` `reset` | SAFE_START, READY, RUNNING | Kalibrierung (12.3) |
+| `CALIB` | `action`: `point` (mit `index` 1 … 6) `base` `save` `reset` | SAFE_START, READY, RUNNING | Kalibrierung (12.3) |
 | `ACK` | – | WAIT_ACK | Fehler quittieren; `PRECONDITION`, solange die Ursache anliegt |
 | `HV_ON` | – | READY, RUNNING | READY → RUNNING, wenn Freigabe erfüllt |
 | `HV_OFF` | – | alle | RUNNING → READY |
@@ -974,20 +975,20 @@ Prioritätsbefehle (eigene Warteschlange, nie `BUSY` wegen voller Normal-Queue):
 | `shutter_hold` | Zahl | 3,0 | 0 … 10 s | ja |
 | `edge_threshold` | Zahl | 3,0 | 0,5 … 100 mm (Dicke) | ja |
 | `base_dist` | Zahl | 70,0 | 40 … 300 mm (Bezugsebene) | ja |
-| `calib_near_ref` | Zahl | 40,0 | 40 … 300 mm | ja |
-| `calib_far_ref` | Zahl | 65,0 | 40 … 300 mm | ja |
+| `calib_ref_1` … `calib_ref_6` | Zahl | 65,0 · 60,0 · 55,0 · 50,0 · 45,0 · 40,0 | 40 … 300 mm (wahrer Abstand der Stufe) | ja |
 | `estop_nc` | bool / 0/1 | false | nur bei stehender Achse und HV aus | ja |
 | `wifi_ssid` | Text | "" | 0 … 32 Zeichen (leer = kein Router) | ja, wirksam nach REBOOT |
 | `wifi_pass` | Text | "" | 0 oder 8 … 63 Zeichen | ja, wird nie zurückgemeldet |
 
-`GET_CONFIG` liefert zusätzlich `calib_near_raw`, `calib_far_raw`, `calib_valid` und
+`GET_CONFIG` liefert zusätzlich `calib_raw_1` … `calib_raw_6`, `calib_valid` und
 `wifi_pass_set` (nur lesbar):
 
 ```
 "config":{"measure_pos":155.0,"maint_pos":40.0,"traverse_start":80.0,"traverse_end":240.0,
-"traverse_speed":10.0,"shutter_hold":3.0,"edge_threshold":3.0,"base_dist":70.0,"calib_near_raw":40.0,
-"calib_near_ref":40.0,"calib_far_raw":65.0,"calib_far_ref":65.0,"calib_valid":true,"interlock":true,
-"cooling_flow":true,"temp":18.0,"estop_nc":false,"wifi_ssid":"","wifi_pass_set":false}
+"traverse_speed":10.0,"shutter_hold":3.0,"edge_threshold":3.0,"base_dist":70.0,
+"calib_raw_1":65.0,"calib_ref_1":65.0,"calib_raw_2":60.0,"calib_ref_2":60.0,"calib_raw_3":55.0,"calib_ref_3":55.0,
+"calib_raw_4":50.0,"calib_ref_4":50.0,"calib_raw_5":45.0,"calib_ref_5":45.0,"calib_raw_6":40.0,"calib_ref_6":40.0,
+"calib_valid":true,"interlock":true,"cooling_flow":true,"temp":18.0,"estop_nc":false,"wifi_ssid":"","wifi_pass_set":false}
 ```
 
 Gespeichert wird im Stillstand bei HV aus (3.7).
@@ -1283,7 +1284,7 @@ läuft
 | **Prozess** (`#process`) | Zeile mit Zustand, Position, Geschwindigkeit, Abstand, Dicke, Temperatur; Messwerte Max/Avg/Min/Ist/n; Rundinstrument; Tasten INIT · HV EIN/AUS · MESSEN · TRAVERSE · PARK · SERVICE · ACK · STOP mit Hinweiszeile; Verlauf der Dicke mit Kantenschwelle und Verlauf des Abstands mit Bezugsebene |
 | **Status** (`#status`) | System (Host, Laufzeit, WLAN, Zykluszeiten), Achse, Sicherheitseingänge, Ein-/Ausgänge, ADD-Validierung aus `/add` |
 | **Einstellungen** (`#settings`) | alle Parameter (Positionen, Profil, Messung), simulierte Sicherheitsflags, Not-Aus-Verdrahtung, Router-Zugang, Neustart |
-| **Kalibrierung** (`#calibration`) | Live-Abstand und Position, geführter Ablauf, Referenztabelle, Kennliniendiagramm |
+| **Kalibrierung** (`#calibration`) | Tabelle mit 6 Stufen (Fahren, Übernehmen, Status), „Alle 6 Stufen automatisch“, STOP, Live-Abstand, Rohwert und Position, Referenzen, Kennliniendiagramm |
 | **Log** (`#log`) | Geräte-Log (`/log`) und Ereignistabelle der Seite |
 | **Hilfe** (Fragezeichen) | öffnet `/doc` in einem neuen Tab – die Bedienoberfläche läuft weiter |
 
@@ -1291,7 +1292,7 @@ Regeln:
 
 - `/proc` alle 500 ms; Heartbeat `GET_STATE` jede Sekunde, solange `comm_armed`.
 - Tasten folgen dem Zustand (`ADDAPP.buttons`); **STOP** ist immer bedienbar und hat keinen Dialog.
-- Bestätigungsdialog für HV EIN, ACK, Neustart, Kalibrierung zurücksetzen und Not-Aus-Verdrahtung.
+- Bestätigungsdialog für HV EIN, ACK, Neustart, Kalibrierung zurücksetzen, automatische Kalibrierung und Not-Aus-Verdrahtung.
 - Jede Antwort erscheint als Meldung unten rechts und in der Ereignistabelle.
 - Dicke: HV aus → 0 · HV an, Shutter zu → „–“ · neben dem Messgut → 0 · auf dem Messgut → Wert.
 - Ungültige Eingaben in den Einstellungen werden rot markiert und nicht gesendet.
@@ -1321,53 +1322,65 @@ Lokale Bedienung ohne WLAN, englisch, 480 × 320, Neuzeichnen alle 200 ms, Touch
 
 ### 12.3 Kalibrierung durchführen
 
-Die Kalibrierung gleicht den Abstandssensor mit zwei Referenzstufen ab. Sie ist nötig nach dem
-Tausch von Sensor, Board oder ESP32 oder wenn die Messwerte abweichen.
+Die Kalibrierung gleicht den Abstandssensor an allen **sechs Stufen** des Stufenkörpers ab
+(Kalibriertabelle, seit Contract V1.6.0). Zwei Punkte reichen nicht: die Sensorkurve hat über den
+Messbereich einen S-förmigen Restfehler von bis zu ±0,5 mm, den nur eine Tabelle durch alle Stufen
+ausgleicht. Nötig nach dem Tausch von Sensor, Board oder ESP32, nach dem Flashen einer Firmware mit
+neuer Schema-Version oder wenn die Messwerte abweichen.
 
-**Mit der Weboberfläche (Seite „Kalibrierung“):**
+| Punkt | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|
+| Position (Stufenmitte, 95 + 20·i) | 115 | 135 | 155 | 175 | 195 | 215 mm |
+| Referenz ab Werk (`calib_ref_i`) | 65 | 60 | 55 | 50 | 45 | 40 mm |
 
-1. Voraussetzung: Referenzfahrt erfolgt (INIT), Zustand READY, **HV aus**.
-2. **Nahe Stufe anfahren:** Position 215 mm (Mitte der Stufe mit 40 mm Abstand) → „Fahren“.
-3. Warten, bis die Achse steht und „Abstand jetzt“ ruhig ist → **„Nah übernehmen“**
-   (`CALIB near`). Die Firmware übernimmt den Wert nur, wenn er 500 ms innerhalb ±0,5 mm stabil
-   ist; sonst Meldung `NOT_STABLE` – kurz warten und erneut drücken.
-4. **Ferne Stufe anfahren:** Position 115 mm (Mitte der Stufe mit 65 mm Abstand) → „Fahren“.
-5. **„Fern übernehmen“** (`CALIB far`).
-6. **Referenzwerte prüfen:** in der Tabelle Nah = 40 mm, Fern = 65 mm (die wahren Abstände der
-   Stufen). Bei einem anderen Messobjekt die wahren Abstände eintragen → „Referenzen setzen“
-   (`SET calib_near_ref`, `SET calib_far_ref`).
-7. **„Speichern“** (`CALIB save`). Die Firmware prüft: Rohwert-Abstand ≥ 5 mm, Referenz-Abstand
-   ≥ 5 mm, Referenzen 40 … 300 mm. Ungültig → `CALIB_INVALID`.
-8. Kontrolle: die Kennlinie im Diagramm liegt nahe der gestrichelten 1:1-Linie; auf der
-   Messposition (155 mm) zeigt die Anlage etwa 55 mm Abstand bzw. 15 mm Dicke.
+**Mit der Weboberfläche (Seite „Kalibrierung“), automatisch:**
+
+1. Voraussetzung: Referenzfahrt erfolgt (INIT), Zustand READY, **HV aus**, Stufenkörper fixiert.
+2. Referenzwerte in der Tabelle prüfen (Werkswerte 65 … 40 mm). Bei einem anderen Messobjekt die
+   wahren Abstände eintragen → „Referenzen setzen“ (`SET calib_ref_1` … `calib_ref_6`).
+3. **„Alle 6 Stufen automatisch“** → bestätigen. Die Seite fährt jede Stufe an, wartet 1 s, übernimmt
+   den Rohwert (`CALIB point`) und speichert am Ende (`CALIB save`). Meldet die Firmware
+   `NOT_STABLE`, wiederholt die Seite bis zu fünfmal im Abstand von 0,5 s. Dauer etwa 40 s.
+4. Jede Zeile zeigt „OK“, unten „fertig: 6 Stufen übernommen und gespeichert“, Tabelle „gültig“.
+5. **STOP** (auf derselben Seite) oder ein Fehler bricht ab; dann wird **nicht** gespeichert.
+   Bereits übernommene Punkte stehen nur im RAM – „Zurücksetzen“ oder ein neuer Lauf.
+
+**Von Hand, Zeile für Zeile:** „Fahren“ (MOVE auf die Stufenmitte) → warten, bis die Achse steht
+und „Abstand jetzt“ ruhig ist → „Übernehmen“ (`CALIB point index=i`). Die Firmware übernimmt den Wert
+nur, wenn er 500 ms innerhalb ±0,5 mm stabil ist; sonst `NOT_STABLE`. Nach allen gewünschten Zeilen
+**„Speichern“** (`CALIB save`).
+
+**Gültigkeit** (geprüft bei „Speichern“, sonst `CALIB_INVALID`): alle Werte endlich, Referenzen
+40 … 300 mm; nach Referenz sortiert steigen Referenzen **und** Rohwerte von Punkt zu Punkt um
+mindestens 1 mm. Die Reihenfolge der Punkte in der Tabelle spielt keine Rolle.
+
+**Kontrolle:** Die Kennlinie im Diagramm liegt nahe der gestrichelten 1:1-Linie und läuft durch alle
+sechs Punkte; auf der Messposition (155 mm) zeigt die Anlage 55 mm Abstand bzw. 15 mm Dicke.
 
 **Weitere Funktionen:**
 
-- **„Zurücksetzen“** (`CALIB reset`, mit Dialog): Werkswerte (40/40, 65/65) – erst mit „Speichern“
-  dauerhaft.
+- **„Zurücksetzen“** (`CALIB reset`, mit Dialog): Werkstabelle (Rohwert = Referenz, 65 … 40 mm) –
+  erst mit „Speichern“ dauerhaft.
 - **„Bezugsebene übernehmen“** (`CALIB base`): setzt `base_dist` auf den aktuellen Abstand
   (Nullabgleich auf einer Fläche ohne Messgut). An der Demoanlage wird `base_dist` normalerweise
   auf 70 mm gesetzt (Kante des Messguts, Einstellungsseite).
 
-**Mit der API:**
+**Mit der API** (je Stufe i = 1 … 6 erst fahren, dann übernehmen; Beispiel Stufe 1):
 
-```
-python3 scripts/add_client.py --host 192.168.4.1 cmd MOVE pos=215
-```
-```
-python3 scripts/add_client.py --host 192.168.4.1 cmd CALIB action=near
-```
 ```
 python3 scripts/add_client.py --host 192.168.4.1 cmd MOVE pos=115
 ```
 ```
-python3 scripts/add_client.py --host 192.168.4.1 cmd CALIB action=far
+python3 scripts/add_client.py --host 192.168.4.1 cmd CALIB action=point index=1
 ```
+
+… ebenso `pos=135 index=2` bis `pos=215 index=6`, zum Schluss:
+
 ```
 python3 scripts/add_client.py --host 192.168.4.1 cmd CALIB action=save
 ```
 
-(Die Befehle erst senden, wenn die vorige Fahrt beendet ist – `motion.state = idle` in `/proc`.)
+(Den nächsten Befehl erst senden, wenn die Fahrt beendet ist – `motion.state = idle` in `/proc`.)
 
 ---
 
@@ -1599,18 +1612,18 @@ Bibliotheksfunktionen gibt es Nachbildungen in `test/native/freertos_shim/` (u. 
 | `test_env` | 1 | Testumgebung |
 | `test_types_crc` | 22 | Namen, CRC32, Rahmen, Testvektoren |
 | `test_safety_logic` | 63 | Regeln R1–R7, Invarianten I1–I8, Zufallstest über 60 000 Schritte |
-| `test_measure_logic` | 40 | Kennlinie, Filter, Kalibrierung, Stabilität, Statistik |
-| `test_params` | 20 | Bereiche, Standardwerte, JSON |
+| `test_measure_logic` | 44 | Kennlinie, Filter, Kalibriertabelle, Stabilität, Statistik |
+| `test_params` | 21 | Bereiche, Standardwerte, JSON |
 | `test_motion_seq` | 38 | Referenzfahrt, Fahrten, Profil, Endschalter, Not-Halt |
 | `test_sound_logic` | 9 | Muster, Prioritäten |
 | `test_wifi_logic` | 15 | Wiederverbindungsstrategie |
-| `test_app_logic` | 85 | vollständige Abläufe mit simulierter Achse (`fake_axis.h`) |
+| `test_app_logic` | 89 | vollständige Abläufe mit simulierter Achse (`fake_axis.h`) |
 | `test_proc_json` | 20 | `/proc`, Antworten, Größe ≤ 512 Byte |
-| `test_api_parse` | 22 | Parser, Typen, unsinnige Eingaben (NaN, ±Inf) |
+| `test_api_parse` | 27 | Parser, Typen, unsinnige Eingaben (NaN, ±Inf) |
 | `test_display_logic` | 12 | Bildschirmmodus, ACK-Halten |
 | `test_command_queue` | 9 | Warteschlangen mit 8 Threads, Latch, Antworten |
 | `test_log_buffer` | 12 | Ringpuffer, Nebenläufigkeit |
-| `test_nvs_config` | 14 | Laden/Speichern, Schema-Version |
+| `test_nvs_config` | 17 | Laden/Speichern, Schema-Version, Übernahme von Version 4 |
 | `test_system` | 4 | Watchdog, Neustart |
 | `test_wifi_manager` | 10 | AP, Router, mDNS |
 | `test_http_server` | 21 | alle Endpunkte, CORS, Fehlerfälle |
@@ -1851,3 +1864,4 @@ Anmerkungen:
 | Version | Datum | Änderung |
 |---|---|---|
 | 1.0 | 2026-11-07 | Erste Ausgabe (Contract V1.5.27, Pflichtenheft V1.7.10); ADD-Kapitel vorläufig bis Sprint D1. Ergänzt: Bedienwege (1.1), WLAN-Einbuchen per Konsole (10.7, 11.1), Umfang (16.4) |
+| 1.1 | 2026-11-08 | Kalibriertabelle mit 6 Stufen (Contract V1.6.2, Sprint K1): Messkette 3.4, Befehle, Parameter, `GET_CONFIG`, NVS Version 5, Kapitel 12.3 neu, Testzahlen |

@@ -1,6 +1,6 @@
 # HTTP-Endpunkte – Kurzübersicht
 
-**Demoanlage ADD (Slim)** · Version 1.0 · Stand 2026-11-07 · Contract V1.5.27
+**Demoanlage ADD (Slim)** · Version 1.0 · Stand 2026-11-08 · Contract V1.6.2
 Befehle für `/api`: `docs/REST_API_V1_0.md` · ausführlich: `docs/Software_Dokumentation_V1_0.md`
 Kapitel 10 · verbindlich: `src/comm/http_server.h`
 
