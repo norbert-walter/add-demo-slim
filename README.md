@@ -14,6 +14,7 @@ agentenbasierte Entwicklung mit code-server + Cline.
 | `docs/sprints/` | Sprint-Dateien für Cline (eine Aufgabe pro Datei) |
 | `docs/reviews/` | Review-Protokolle je Sprint |
 | `docs/Smoketest_Protokoll.md` | Sprint 0a an der Hardware |
+| `docs/ADD_Style_Guide.md` | Style Guide für externe Webseiten im Stil der IMS-Bedienoberfläche (englisch) |
 | `docs/reference/` | ADD Spec, Developer Guide, Style Guide (+ Auszug für S4) |
 | `.clinerules` / `.clineignore` | Regeln und Ausschlüsse für Cline |
 | `src/logic/*.h` | reine Logik – Verträge (eingefroren) |
