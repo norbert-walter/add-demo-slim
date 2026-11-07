@@ -102,6 +102,11 @@ test('index: help link opens /doc in a new tab (V1.5.27)', () => {
   assert.match(page, /\$\('navHelp'\)\.href = baseUrl\(\) \+ '\/doc';/, 'own origin on the device, host when opened as a file');
 });
 
+test('web-ui/ims-demo-ui.html is a byte-identical copy of data/www/index.html', () => {
+  const copy = fs.readFileSync(path.join(__dirname, '..', '..', 'web-ui', 'ims-demo-ui.html'), 'utf8').replace(/\r\n/g, '\n');
+  assert.equal(copy, read('index.html'), 'copy data/www/index.html to web-ui/ims-demo-ui.html');
+});
+
 test('settings: redirects to the settings page of the single-page UI', () => {
   const h = read('settings.html');
   assert.match(h, /<meta http-equiv="refresh" content="0; url=\/#settings">/);
