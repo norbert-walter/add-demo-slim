@@ -1,6 +1,7 @@
 #include <Preferences.h>
 #include <math.h>
 #include <string.h>
+#include <stdio.h>
 #include "config.h"
 #include "system/nvs_config.h"
 
@@ -16,9 +17,10 @@ void nvsLoadParams(Params& p) {
 
     Preferences pr;
     if (!pr.begin(NVS_NAMESPACE, true)) return;
-    if (pr.getUChar("ver", 0) != 4) { pr.end(); return; }
+    uint8_t ver = pr.getUChar("ver", 0);
+    if (ver != 4 && ver != 5) { pr.end(); return; }
 
-    // Float fields via loadNum
+    // Float fields via loadNum (same for ver 4 and ver 5)
     loadNum(p, pr, "mpos",     "measure_pos",     p.measure_pos);
     loadNum(p, pr, "maint",    "maint_pos",       p.maint_pos);
     loadNum(p, pr, "tstart",   "traverse_start",  p.traverse_start);
@@ -28,15 +30,26 @@ void nvsLoadParams(Params& p) {
     loadNum(p, pr, "edge",     "edge_threshold",  p.edge_threshold);
     loadNum(p, pr, "base",     "base_dist",       p.base_dist);
 
-    // Calib raw fields (no SET key) – take if finite
-    float cnraw = pr.getFloat("cnraw", NAN);
-    if (isfinite(cnraw)) p.calib.near_raw = cnraw;
-    float cfraw = pr.getFloat("cfraw", NAN);
-    if (isfinite(cfraw)) p.calib.far_raw = cfraw;
-
-    // Calib ref fields via loadNum
-    loadNum(p, pr, "cnref",  "calib_near_ref",  p.calib.near_ref);
-    loadNum(p, pr, "cfref",  "calib_far_ref",   p.calib.far_ref);
+    // Calibration: ver 5 uses craw1..craw6 + cref1..cref6; ver 4 keys are ignored.
+    if (ver == 5) {
+        // Craw keys (no SET key) – take if finite
+        char key[8];
+        for (int i = 0; i < 6; ++i) {
+            snprintf(key, sizeof(key), "craw%d", i + 1);
+            float v = pr.getFloat(key, NAN);
+            if (isfinite(v)) p.calib.raw[i] = v;
+        }
+        // Cref keys via paramSet
+        for (int i = 0; i < 6; ++i) {
+            snprintf(key, sizeof(key), "cref%d", i + 1);
+            SafetyFlags flags;
+            bool persist;
+            float v = pr.getFloat(key, NAN);
+            char refKey[16];
+            snprintf(refKey, sizeof(refKey), "calib_ref_%d", i + 1);
+            paramSet(p, flags, refKey, ValueType::NUMBER, (double)v, false, "", &persist);
+        }
+    }
 
     // estnc
     p.estop_nc = pr.getBool("estnc", false);
@@ -57,7 +70,7 @@ void nvsLoadParams(Params& p) {
     }
 
     // Invalid calibration -> reset whole calib
-    if (!calibValid(p.calib)) p.calib = CalibPoints{};
+    if (!calibValid(p.calib)) p.calib = CalibTable{};
 
     pr.end();
 }
@@ -68,8 +81,8 @@ bool nvsSaveParams(const Params& p) {
 
     bool ok = true;
 
-    // "ver" = 4
-    if (pr.putUChar("ver", 4) == 0) ok = false;
+    // "ver" = 5
+    if (pr.putUChar("ver", 5) == 0) ok = false;
 
     // Float fields
     if (ok && pr.putFloat("mpos",     p.measure_pos)     == 0) ok = false;
@@ -81,11 +94,18 @@ bool nvsSaveParams(const Params& p) {
     if (ok && pr.putFloat("edge",     p.edge_threshold)  == 0) ok = false;
     if (ok && pr.putFloat("base",     p.base_dist)       == 0) ok = false;
 
-    // Calib fields
-    if (ok && pr.putFloat("cnraw", p.calib.near_raw)  == 0) ok = false;
-    if (ok && pr.putFloat("cnref", p.calib.near_ref)  == 0) ok = false;
-    if (ok && pr.putFloat("cfraw", p.calib.far_raw)   == 0) ok = false;
-    if (ok && pr.putFloat("cfref", p.calib.far_ref)   == 0) ok = false;
+    // Calib raw fields (no SET key) – craw1..craw6
+    char key[8];
+    for (int i = 0; i < 6; ++i) {
+        snprintf(key, sizeof(key), "craw%d", i + 1);
+        if (ok && pr.putFloat(key, p.calib.raw[i]) == 0) ok = false;
+    }
+
+    // Calib ref fields – cref1..cref6
+    for (int i = 0; i < 6; ++i) {
+        snprintf(key, sizeof(key), "cref%d", i + 1);
+        if (ok && pr.putFloat(key, p.calib.ref[i]) == 0) ok = false;
+    }
 
     // estnc
     if (ok && pr.putBool("estnc", p.estop_nc) == 0) ok = false;
