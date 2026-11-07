@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.6.0 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-07
+**Version:** 1.6.1 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-07
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.13
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -169,6 +169,13 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 1 | `test_hardware` crashed in `test_nvs_roundtrip` (Guru Meditation "Cache disabled but cached memory region accessed", PC in `StepperQueue::fill_i2s_buffer`). Cause in FastAccelStepper 96459ed: the I2S TX-done interrupt runs permanently with I2S_MUX and is IRAM-safe, but `fill_i2s_buffer()` and `I2sManager::i2sMuxSetBit()` were in flash; every flash operation (NVS write, SPIFFS read, OTA) crashed the board, also with the motor idle. Fix: both functions `IRAM_ATTR` (fork `norbert-walter/FastAccelStepper`, commit a64ceff on 96459ed; pull request to gin66 pending). Checked with nm/objdump: every function reachable from the interrupt is in IRAM, no literals into flash | `platformio.ini` |
 | 2 | Post-build check `scripts/check_iram.py` (all ESP32 environments): the build fails if one of the I2S interrupt functions is linked into flash (protects against library updates). Verified: fails with 96459ed, passes with a64ceff | `platformio.ini`, `scripts/` |
 | 3 | The nine native H1 tests could not see this (no flash cache on the host); the first five on-device tests were green (inputs, sensor, outputs, E-stop polarity change) | – |
+
+**Correction 1.6.1 (driver exchange, 2026-11-07, decision Norbert Walter):**
+
+| # | Change | Where |
+|---|---|---|
+| 1 | `DIR_POSITIVE_HIGH` = **true**. The real TMC2209 is now fitted; smoketest 0a ran with a driver of unknown type that turns the other way (`false`, §1.2 → 1.3 row 4). Positive mm still = away from the park side | `config.h` |
+| 2 | `test_motion_drv` takes the expected direction level from `config.h` instead of a fixed 0 | `test_motion_drv` |
 
 **Changes 1.5.28 → 1.6.0 (calibration table with 6 points, Sprint K1, 2026-11-07, decision Norbert Walter):**
 
