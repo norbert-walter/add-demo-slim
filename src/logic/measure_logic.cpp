@@ -63,23 +63,88 @@ void iirReset(Iir& f) {
 }
 
 // ---------------------------------------------------------------------------
-// 2-point linear calibration
+// 6-point calibration table (V1.6.0, Sprint K1)
 // ---------------------------------------------------------------------------
 
-bool calibValid(const CalibPoints& p) {
-    const float raw_span  = fabsf(p.far_raw  - p.near_raw);
-    const float ref_span  = fabsf(p.far_ref  - p.near_ref);
-    return (raw_span >= 5.0f && ref_span >= 5.0f
-            && p.near_ref >= 40.0f && p.near_ref <= 300.0f
-            && p.far_ref  >= 40.0f && p.far_ref  <= 300.0f);
+/// Insertion-sort indices so that t.ref[idx[i]] is ascending.
+static void sort_idx_by_ref(const CalibTable& t, int* idx) {
+    for (int i = 0; i < CALIB_POINTS; ++i) idx[i] = i;
+    for (int i = 1; i < CALIB_POINTS; ++i) {
+        const int key = idx[i];
+        const float kref = t.ref[key];
+        int j = i - 1;
+        while (j >= 0 && t.ref[idx[j]] > kref) {
+            idx[j + 1] = idx[j];
+            --j;
+        }
+        idx[j + 1] = key;
+    }
 }
 
-float calibApply(float raw_mm, const CalibPoints& p) {
-    if (!calibValid(p)) {
-        return raw_mm;
+/// Insertion-sort indices so that t.raw[idx[i]] is ascending.
+static void sort_idx_by_raw(const CalibTable& t, int* idx) {
+    for (int i = 0; i < CALIB_POINTS; ++i) idx[i] = i;
+    for (int i = 1; i < CALIB_POINTS; ++i) {
+        const int key = idx[i];
+        const float kraw = t.raw[key];
+        int j = i - 1;
+        while (j >= 0 && t.raw[idx[j]] > kraw) {
+            idx[j + 1] = idx[j];
+            --j;
+        }
+        idx[j + 1] = key;
     }
-    const float slope = (p.far_ref - p.near_ref) / (p.far_raw - p.near_raw);
-    return p.near_ref + slope * (raw_mm - p.near_raw);
+}
+
+bool calibValid(const CalibTable& t) {
+    int idx[CALIB_POINTS];
+
+    // All values finite, refs in [40..300]
+    for (int i = 0; i < CALIB_POINTS; ++i) {
+        if (!std::isfinite(t.raw[i]) || !std::isfinite(t.ref[i])) return false;
+        if (t.ref[i] < 40.0f || t.ref[i] > 300.0f) return false;
+    }
+
+    // Sort by ref ascending and check neighbours
+    sort_idx_by_ref(t, idx);
+    for (int i = 1; i < CALIB_POINTS; ++i) {
+        const int prev = idx[i - 1];
+        const int curr = idx[i];
+        if (t.ref[curr] <= t.ref[prev]) return false;          // refs must be strictly increasing
+        if ((t.ref[curr] - t.ref[prev]) < CALIB_MIN_STEP_MM)  return false;
+        if ((t.raw[curr] - t.raw[prev]) < CALIB_MIN_STEP_MM)  return false;
+    }
+    return true;
+}
+
+float calibApply(float raw_mm, const CalibTable& t) {
+    int idx[CALIB_POINTS];
+    sort_idx_by_raw(t, idx);
+
+    if (!calibValid(t)) return raw_mm;          // invalid → pass through
+
+    // --- below first point: extrapolate with first segment ----------------
+    if (raw_mm <= t.raw[idx[0]]) {
+        const float r0 = t.raw[idx[0]], r1 = t.raw[idx[1]];
+        const float d0 = t.ref[idx[0]], d1 = t.ref[idx[1]];
+        return d0 + (d1 - d0) * (raw_mm - r0) / (r1 - r0);
+    }
+
+    // --- between points: find segment and interpolate ---------------------
+    for (int i = 0; i < CALIB_POINTS - 1; ++i) {
+        const int prev = idx[i];
+        const int curr = idx[i + 1];
+        const float rp = t.raw[prev], rc = t.raw[curr];
+        if (raw_mm <= rc) {
+            const float dp = t.ref[prev], dc = t.ref[curr];
+            return dp + (dc - dp) * (raw_mm - rp) / (rc - rp);
+        }
+    }
+
+    // --- above last point: extrapolate with last segment ------------------
+    const int prev = idx[CALIB_POINTS - 2];
+    const int curr = idx[CALIB_POINTS - 1];
+    return t.ref[curr] + (t.ref[curr] - t.ref[prev]) * (raw_mm - t.raw[curr]) / (t.raw[curr] - t.raw[prev]);
 }
 
 // ---------------------------------------------------------------------------

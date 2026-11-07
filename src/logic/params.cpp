@@ -23,10 +23,7 @@ void paramsDefaults(Params& p) {
     p.shutter_hold    = 3.0f;
     p.edge_threshold  = 3.0f;
     p.base_dist       = 70.0f;
-    p.calib.near_raw  = 40.0f;
-    p.calib.near_ref  = 40.0f;
-    p.calib.far_raw   = 65.0f;
-    p.calib.far_ref   = 65.0f;
+    p.calib           = CalibTable{};
     p.estop_nc        = false;
     p.wifi_ssid[0]    = '\0';
     p.wifi_pass[0]    = '\0';
@@ -67,8 +64,12 @@ void NumEntry::apply(Params& p, float v) const {
     else if (strcmp(key, "shutter_hold") == 0)    p.shutter_hold     = v;
     else if (strcmp(key, "edge_threshold") == 0)  p.edge_threshold   = v;
     else if (strcmp(key, "base_dist") == 0)       p.base_dist        = v;
-    else if (strcmp(key, "calib_near_ref") == 0)  p.calib.near_ref   = v;
-    else if (strcmp(key, "calib_far_ref") == 0)   p.calib.far_ref    = v;
+    else if (strcmp(key, "calib_ref_1") == 0)     p.calib.ref[0]     = v;
+    else if (strcmp(key, "calib_ref_2") == 0)     p.calib.ref[1]     = v;
+    else if (strcmp(key, "calib_ref_3") == 0)     p.calib.ref[2]     = v;
+    else if (strcmp(key, "calib_ref_4") == 0)     p.calib.ref[3]     = v;
+    else if (strcmp(key, "calib_ref_5") == 0)     p.calib.ref[4]     = v;
+    else if (strcmp(key, "calib_ref_6") == 0)     p.calib.ref[5]     = v;
 }
 
 ApiError paramSet(Params& p, SafetyFlags& f, const char* key,
@@ -123,8 +124,12 @@ ApiError paramSet(Params& p, SafetyFlags& f, const char* key,
         {"shutter_hold",      0.0f,  10.0f},
         {"edge_threshold",    0.5f, 100.0f},
         {"base_dist",        40.0f, 300.0f},
-        {"calib_near_ref",   40.0f, 300.0f},
-        {"calib_far_ref",    40.0f, 300.0f},
+        {"calib_ref_1",      40.0f, 300.0f},
+        {"calib_ref_2",      40.0f, 300.0f},
+        {"calib_ref_3",      40.0f, 300.0f},
+        {"calib_ref_4",      40.0f, 300.0f},
+        {"calib_ref_5",      40.0f, 300.0f},
+        {"calib_ref_6",      40.0f, 300.0f},
     };
 
     for (const auto& e : numTable) {
@@ -169,8 +174,10 @@ int paramsToJsonMember(const Params& p, const SafetyFlags& f, char* buf, size_t 
     int len = snprintf(buf, cap,
         "\"config\":{\"measure_pos\":%.1f,\"maint_pos\":%.1f,\"traverse_start\":%.1f,"
         "\"traverse_end\":%.1f,\"traverse_speed\":%.1f,\"shutter_hold\":%.1f,\"edge_threshold\":%.1f,\"base_dist\":%.1f,"
-        "\"calib_near_raw\":%.1f,\"calib_near_ref\":%.1f,\"calib_far_raw\":%.1f,"
-        "\"calib_far_ref\":%.1f,\"calib_valid\":%s,\"interlock\":%s,"
+        "\"calib_raw_1\":%.1f,\"calib_ref_1\":%.1f,\"calib_raw_2\":%.1f,\"calib_ref_2\":%.1f,"
+        "\"calib_raw_3\":%.1f,\"calib_ref_3\":%.1f,\"calib_raw_4\":%.1f,\"calib_ref_4\":%.1f,"
+        "\"calib_raw_5\":%.1f,\"calib_ref_5\":%.1f,\"calib_raw_6\":%.1f,\"calib_ref_6\":%.1f,"
+        "\"calib_valid\":%s,\"interlock\":%s,"
         "\"cooling_flow\":%s,\"temp\":%.1f,\"estop_nc\":%s,\"wifi_ssid\":\"%s\",\"wifi_pass_set\":%s}",
         static_cast<double>(p.measure_pos),
         static_cast<double>(p.maint_pos),
@@ -180,10 +187,18 @@ int paramsToJsonMember(const Params& p, const SafetyFlags& f, char* buf, size_t 
         static_cast<double>(p.shutter_hold),
         static_cast<double>(p.edge_threshold),
         static_cast<double>(p.base_dist),
-        static_cast<double>(p.calib.near_raw),
-        static_cast<double>(p.calib.near_ref),
-        static_cast<double>(p.calib.far_raw),
-        static_cast<double>(p.calib.far_ref),
+        static_cast<double>(p.calib.raw[0]),
+        static_cast<double>(p.calib.ref[0]),
+        static_cast<double>(p.calib.raw[1]),
+        static_cast<double>(p.calib.ref[1]),
+        static_cast<double>(p.calib.raw[2]),
+        static_cast<double>(p.calib.ref[2]),
+        static_cast<double>(p.calib.raw[3]),
+        static_cast<double>(p.calib.ref[3]),
+        static_cast<double>(p.calib.raw[4]),
+        static_cast<double>(p.calib.ref[4]),
+        static_cast<double>(p.calib.raw[5]),
+        static_cast<double>(p.calib.ref[5]),
         calibValid(p.calib) ? "true" : "false",
         f.interlock   ? "true"  : "false",
         f.cooling_flow ? "true"  : "false",
