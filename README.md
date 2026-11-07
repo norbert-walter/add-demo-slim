@@ -49,7 +49,7 @@ pio device monitor -e smoketest           # "help"
 
 ## Status der Module
 
-**Stand: 08.11.2026 · Contract V1.6.2 · Pflichtenheft V1.7.13**
+**Stand: 08.11.2026 · Contract V1.6.3 · Pflichtenheft V1.7.14**
 Diese Tabelle wird **nach jedem Sprint** aktualisiert (Implementierung **und** Tests) –
 Teil der Definition of Done in `.clinerules`.
 
@@ -70,6 +70,7 @@ Teil der Definition of Done in `.clinerules`.
 | IMS-UI | `data/www/index.html` (ersetzt die W1-Seiten), `settings.html` → `/#settings` | ✅ fertig (Claude, Entwurf Norbert Walter) | `test_app` + `test_pages` 35/35 · Browserprüfung Gerätemodus und lokale Datei ✅ · Gerät offen | Contract V1.5.28 (Hilfe-Symbol) |
 | A1 | Abnahme | 🔄 vorbereitet (`docs/sprints/A1.md`) | Pflichtenheft Kapitel 10; Skript gegen `sim_device.py` 26/26 + T21 Hand | – |
 | K1 | Kalibriertabelle mit 6 Stufen: `logic/types`, `measure_logic`, `api_parse`, `params`, `app_logic`, `system/nvs_config`, `data/www/app.js`, `index.html` | ✅ fertig (Qwen; 1 Korrektur Claude) | native 496/496 · JS 41/41 · Differenztest und Browserprüfung ✅ · Gerät offen | ✅ 08.11.2026, Review_K1 |
+| K2 | Kalibrierung unter Messbedingungen: `logic/app_logic.cpp` (eine Bedingung); Seite und Abnahme T18K von Claude | 🔄 vorbereitet (`docs/sprints/K2.md`) | Referenz 499/499 nativ, JS 41/41 | Contract V1.6.3 |
 | D1 | `data/add.json`, Demo-Skripte | ⬜ offen | KI-Validierung | – |
 
 Reihenfolge und Begründung: `docs/Sprint_Prompts_Demoanlage_ADD_Slim_V2.md`, Abschnitt

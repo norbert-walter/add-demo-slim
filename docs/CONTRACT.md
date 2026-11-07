@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.6.2 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-07
+**Version:** 1.6.3 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-07
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.13
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -169,6 +169,20 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 1 | `test_hardware` crashed in `test_nvs_roundtrip` (Guru Meditation "Cache disabled but cached memory region accessed", PC in `StepperQueue::fill_i2s_buffer`). Cause in FastAccelStepper 96459ed: the I2S TX-done interrupt runs permanently with I2S_MUX and is IRAM-safe, but `fill_i2s_buffer()` and `I2sManager::i2sMuxSetBit()` were in flash; every flash operation (NVS write, SPIFFS read, OTA) crashed the board, also with the motor idle. Fix: both functions `IRAM_ATTR` (fork `norbert-walter/FastAccelStepper`, commit a64ceff on 96459ed; pull request to gin66 pending). Checked with nm/objdump: every function reachable from the interrupt is in IRAM, no literals into flash | `platformio.ini` |
 | 2 | Post-build check `scripts/check_iram.py` (all ESP32 environments): the build fails if one of the I2S interrupt functions is linked into flash (protects against library updates). Verified: fails with 96459ed, passes with a64ceff | `platformio.ini`, `scripts/` |
 | 3 | The nine native H1 tests could not see this (no flash cache on the host); the first five on-device tests were green (inputs, sensor, outputs, E-stop polarity change) | – |
+
+**Changes 1.6.2 → 1.6.3 (calibration under measuring conditions, Sprint K2, 2026-11-08, decision Norbert Walter):**
+
+The first A1 run after K1 failed T18/T20 by up to 2.4 mm: on the demo the open shutter (on the
+MKS DLC32 the spindle output) shifts the sensor signal by about 25 … 60 mV; the table had been taken with
+HV off and closed shutter. Cause in the electronics still open (Norbert). The calibration is therefore
+taken under the same conditions as the measurement.
+
+| # | Change | Where |
+|---|---|---|
+| 1 | `CALIB` is also accepted in `MEAS_HOLD` (stationary measurement: axis stands, HV on, shutter open); the measurement goes on (phase, mode, shutter unchanged). Still `BUSY` in every other phase ≠ IDLE (homing, moves, approach, traverse) | §7.3, `app_logic.h` |
+| 2 | Web UI, page Kalibrierung: „Alle 6 Stufen automatisch“ switches HV on if needed, takes each point during `START_MEASURE` on the step (shutter open), `STOP` after each point, `CALIB save`, HV off again if it was off; the row button is „Messen“ (`START_MEASURE`, needs HV on) | §5.5, `index.html` |
+| 3 | `acceptance_a1.py`: new **T18K** before T18 – fresh calibration under measuring conditions (6 points, save); ⛔ with a firmware before 1.6.3 (`BUSY`) | `scripts/` |
+| 4 | Tests: `test_app_logic` +3 (point/base/save/reset during MEAS_HOLD, measurement continues; BUSY during the approach and the traverse); `test_pages` (measuring conditions, HV on/off). Reference: 22 suites **499/499**, JS 41/41; browser and simulator check of the page and of T18K–T20 | `test/` |
 
 **Correction 1.6.2 (review of Sprint K1, 2026-11-08):**
 
@@ -893,14 +907,16 @@ last segment is extended. The storage order of the points does not matter.
 
 | Action | Precondition | Effect |
 |---|---|---|
-| `point` + `index` 1 … 6 | axis idle, signal stable 500 ms (±0.5 mm) | `raw[index−1]` = current **uncalibrated** value; not persisted. The true distances are set with `SET calib_ref_<index>` |
+| `point` + `index` 1 … 6 | axis idle **or stationary measurement running** (V1.6.3), signal stable 500 ms (±0.5 mm) | `raw[index−1]` = current **uncalibrated** value; not persisted. The true distances are set with `SET calib_ref_<index>` |
 | `base` | idle, in range, stable | `base_dist` = current calibrated distance |
 | `save` | table valid | persist all parameters |
 | `reset` | idle | identity table (raw = ref = 65 … 40 mm), not persisted until `save` |
 
-Procedure on the demo (web UI „Alle 6 Stufen automatisch“ does exactly this): for *i* = 1 … 6:
-`MOVE 95 + 20·i` → wait until the axis stands at the target → 1 s → `CALIB point index=i`
-(`NOT_STABLE`: retry); then `CALIB save`. With the default references no `SET` is needed. (Step centres
+Procedure on the demo (V1.6.3, under measuring conditions; web UI „Alle 6 Stufen automatisch“ does
+exactly this): `HV_ON`; for *i* = 1 … 6: `START_MEASURE pos=95+20·i` → wait until the axis stands
+there with the shutter open → 1 s → `CALIB point index=i` (`NOT_STABLE`: retry) → `STOP`; then
+`CALIB save`, `HV_OFF`. The open shutter shifts the sensor signal on the demo, so a table taken with
+the shutter closed does not fit the measurement. With the default references no `SET` is needed. (Step centres
 since V1.4.2; 105 and 225 are the edges of the stair body.)
 
 ---

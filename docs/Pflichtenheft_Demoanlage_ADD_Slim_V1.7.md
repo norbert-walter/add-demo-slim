@@ -2,12 +2,21 @@
 
 **Stand:** 2026-11-07
 **Autor:** Norbert Walter
-**Version:** 1.7.13 (Kalibriertabelle mit 6 Stufen)
+**Version:** 1.7.14 (Kalibrierung unter Messbedingungen)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.7.13 → V1.7.14 (Contract V1.6.3, 08.11.2026, Entscheidung Norbert Walter, Sprint K2)
+- **Kalibrierung unter Messbedingungen.** Der offene Shutter (am Board der Spindelausgang) verschiebt
+  das Signal des Abstandssensors um etwa 25 … 60 mV; die Ursache in der Elektronik wird noch gesucht.
+  Mit geschlossenem Shutter kalibriert, wich die Messung danach um bis zu 2,4 mm ab (A1 nach K1).
+- `CALIB` ist deshalb auch während der stehenden Messung erlaubt (Achse steht, HV an, Shutter offen).
+- Weboberfläche: „Alle 6 Stufen automatisch“ schaltet die HV ein, misst jede Stufe mit offenem Shutter,
+  übernimmt den Rohwert, speichert und schaltet die HV wieder wie vorher; die Zeilentaste heißt „Messen“.
+- Abnahme: neue Prüfung **T18K** – frische Kalibrierung unmittelbar vor der Messung der Dicke (T18–T20).
 
 ### V1.7.12 → V1.7.13 (Contract V1.6.0, 07.11.2026, Entscheidung Norbert Walter, Sprint K1)
 - **Kalibriertabelle mit 6 Stufen statt Zweipunkt-Kalibrierung (Nah/Fern).** Grund: Die Sensorkurve
@@ -1002,7 +1011,7 @@ Die Zeiten der 🤖-Sprints sind Rechenzeit von Qwen lokal (ca. 18 Token/s), nic
 **8. Betriebsmodi**
 - [ ] Stehende Messung: Mittelwert auf Treppenstufe ±0,5 mm
 - [ ] Profilfahrt: Kanten der Treppenstufen erkannt, Statistik plausibel
-- [ ] Kalibrierung (6 Stufen, auch automatisch) gespeichert und wirksam
+- [ ] Kalibrierung (6 Stufen, unter Messbedingungen, auch automatisch) gespeichert und wirksam
 
 **9. ADD + KI**
 - [ ] `/add` valide nach ADD Spec v1.0 (sieben Blöcke)

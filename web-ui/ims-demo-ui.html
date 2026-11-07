@@ -1188,12 +1188,12 @@ html { height: 100%; }
                 <table class="calib-table">
                   <thead><tr><th>Punkt</th><th>Position (mm)</th><th>Referenz (mm)</th><th>Rohwert (mm)</th><th>Aktion</th><th>Status</th></tr></thead>
                   <tbody>
-                    <tr><td>1</td><td>115</td><td><input type="number" id="f_calib_ref_1" step="0.1"></td><td id="calRaw1">–</td><td class="cal-act"><button class="btn btn-small" id="btnCalMove1">Fahren</button> <button class="btn btn-small" id="btnCalPoint1">Übernehmen</button></td><td id="calSt1">–</td></tr>
-                    <tr><td>2</td><td>135</td><td><input type="number" id="f_calib_ref_2" step="0.1"></td><td id="calRaw2">–</td><td class="cal-act"><button class="btn btn-small" id="btnCalMove2">Fahren</button> <button class="btn btn-small" id="btnCalPoint2">Übernehmen</button></td><td id="calSt2">–</td></tr>
-                    <tr><td>3</td><td>155</td><td><input type="number" id="f_calib_ref_3" step="0.1"></td><td id="calRaw3">–</td><td class="cal-act"><button class="btn btn-small" id="btnCalMove3">Fahren</button> <button class="btn btn-small" id="btnCalPoint3">Übernehmen</button></td><td id="calSt3">–</td></tr>
-                    <tr><td>4</td><td>175</td><td><input type="number" id="f_calib_ref_4" step="0.1"></td><td id="calRaw4">–</td><td class="cal-act"><button class="btn btn-small" id="btnCalMove4">Fahren</button> <button class="btn btn-small" id="btnCalPoint4">Übernehmen</button></td><td id="calSt4">–</td></tr>
-                    <tr><td>5</td><td>195</td><td><input type="number" id="f_calib_ref_5" step="0.1"></td><td id="calRaw5">–</td><td class="cal-act"><button class="btn btn-small" id="btnCalMove5">Fahren</button> <button class="btn btn-small" id="btnCalPoint5">Übernehmen</button></td><td id="calSt5">–</td></tr>
-                    <tr><td>6</td><td>215</td><td><input type="number" id="f_calib_ref_6" step="0.1"></td><td id="calRaw6">–</td><td class="cal-act"><button class="btn btn-small" id="btnCalMove6">Fahren</button> <button class="btn btn-small" id="btnCalPoint6">Übernehmen</button></td><td id="calSt6">–</td></tr>
+                    <tr><td>1</td><td>115</td><td><input type="number" id="f_calib_ref_1" step="0.1"></td><td id="calRaw1">–</td><td class="cal-act"><button class="btn btn-small" id="btnCalMove1">Messen</button> <button class="btn btn-small" id="btnCalPoint1">Übernehmen</button></td><td id="calSt1">–</td></tr>
+                    <tr><td>2</td><td>135</td><td><input type="number" id="f_calib_ref_2" step="0.1"></td><td id="calRaw2">–</td><td class="cal-act"><button class="btn btn-small" id="btnCalMove2">Messen</button> <button class="btn btn-small" id="btnCalPoint2">Übernehmen</button></td><td id="calSt2">–</td></tr>
+                    <tr><td>3</td><td>155</td><td><input type="number" id="f_calib_ref_3" step="0.1"></td><td id="calRaw3">–</td><td class="cal-act"><button class="btn btn-small" id="btnCalMove3">Messen</button> <button class="btn btn-small" id="btnCalPoint3">Übernehmen</button></td><td id="calSt3">–</td></tr>
+                    <tr><td>4</td><td>175</td><td><input type="number" id="f_calib_ref_4" step="0.1"></td><td id="calRaw4">–</td><td class="cal-act"><button class="btn btn-small" id="btnCalMove4">Messen</button> <button class="btn btn-small" id="btnCalPoint4">Übernehmen</button></td><td id="calSt4">–</td></tr>
+                    <tr><td>5</td><td>195</td><td><input type="number" id="f_calib_ref_5" step="0.1"></td><td id="calRaw5">–</td><td class="cal-act"><button class="btn btn-small" id="btnCalMove5">Messen</button> <button class="btn btn-small" id="btnCalPoint5">Übernehmen</button></td><td id="calSt5">–</td></tr>
+                    <tr><td>6</td><td>215</td><td><input type="number" id="f_calib_ref_6" step="0.1"></td><td id="calRaw6">–</td><td class="cal-act"><button class="btn btn-small" id="btnCalMove6">Messen</button> <button class="btn btn-small" id="btnCalPoint6">Übernehmen</button></td><td id="calSt6">–</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -1220,10 +1220,10 @@ html { height: 100%; }
               <div class="panel-header">Kalibrierablauf</div>
               <div class="panel-body">
                 <div class="steps-panel">
-                  <div class="step-item"><div class="step-nr">1</div><div class="step-text">Referenzfahrt (INIT), HV aus, Stufenkörper fest. Referenzwerte der sechs Stufen prüfen (links, Werkswerte 65 … 40 mm)</div></div>
-                  <div class="step-item"><div class="step-nr">2</div><div class="step-text">Automatisch: jede Stufe anfahren, Rohwert übernehmen, am Ende speichern<br><span class="step-status dim" id="calAutoSt"></span></div>
+                  <div class="step-item"><div class="step-nr">1</div><div class="step-text">Referenzfahrt (INIT), Stufenkörper fest. Kalibriert wird unter Messbedingungen: HV EIN, Shutter offen (der Shutter beeinflusst das Sensorsignal). Referenzwerte prüfen (links, Werkswerte 65 … 40 mm)</div></div>
+                  <div class="step-item"><div class="step-nr">2</div><div class="step-text">Automatisch: HV EIN, jede Stufe messen (Shutter offen), Rohwert übernehmen, am Ende speichern und HV wie vorher<br><span class="step-status dim" id="calAutoSt"></span></div>
                     <button class="btn" id="btnCalAuto">Alle 6 Stufen automatisch</button><button class="btn btn-stop" id="btnCalStop">■ STOP</button></div>
-                  <div class="step-item"><div class="step-nr">3</div><div class="step-text">Oder von Hand: je Zeile „Fahren“, warten bis die Achse steht, „Übernehmen“</div></div>
+                  <div class="step-item"><div class="step-nr">3</div><div class="step-text">Oder von Hand: HV EIN, je Zeile „Messen“ (fährt hin, Shutter öffnet), warten bis der Abstand ruhig ist, „Übernehmen“</div></div>
                   <div class="step-item"><div class="step-nr">4</div><div class="step-text">Tabelle prüfen (gültig, Kennlinie) und dauerhaft speichern</div>
                     <span class="step-status dim" id="calStSave"></span><button class="btn" id="btnCalSave">Speichern</button></div>
                 </div>
@@ -1777,7 +1777,7 @@ const CONFIRM = {
   ACK: ['Fehler quittieren?', 'Die Ursache muss behoben sein. Die Anlage geht danach in READY bzw. SAFE_START.'],
   REBOOT: ['Gerät neu starten?', 'Die Anlage startet neu, die Verbindung ist einige Sekunden unterbrochen. Die HV muss aus sein.'],
   CALIB_RESET: ['Kalibrierung zurücksetzen?', 'Die Tabelle wird auf die Werkswerte gesetzt (Rohwert = Referenz, 65 … 40 mm). Gespeichert wird erst mit „Speichern“.'],
-  CALIB_AUTO: ['Alle 6 Stufen kalibrieren?', 'Die Achse fährt nacheinander 115, 135, 155, 175, 195 und 215 mm an (HV aus). Danach wird die Tabelle gespeichert. STOP bricht ab.'],
+  CALIB_AUTO: ['Alle 6 Stufen kalibrieren?', 'Die HV wird eingeschaltet. Die Achse misst nacheinander auf 115, 135, 155, 175, 195 und 215 mm mit offenem Shutter. Danach wird die Tabelle gespeichert und die HV wieder wie vorher geschaltet. STOP bricht ab.'],
   ESTOP_NC: ['Not-Aus-Verdrahtung ändern?', 'Passt die Einstellung nicht zur Verdrahtung, zeigt die Anlage Dauer-Not-Aus.'],
 };
 function confirmThen(key, action) {
@@ -1926,8 +1926,11 @@ function render(p) {
   const moveOk = !!p && !p.local && (p.state === 'READY' || p.state === 'RUNNING') && p.motion.homed && p.motion.state === 'idle';
   $('btnPark').disabled = !moveOk;
   $('btnService').disabled = !moveOk;
-  for (let i = 1; i <= A.CALIB_POINTS; i++) { $('btnCalMove' + i).disabled = !moveOk || calAutoRun; $('btnCalPoint' + i).disabled = calAutoRun; }
-  $('btnCalAuto').disabled = calAutoRun || !moveOk || !!(p && p.safety.hv_on);
+  // V1.6.3: calibration under measuring conditions; also allowed while a stationary measurement runs
+  const calOk = !!p && !p.local && (p.state === 'READY' || p.state === 'RUNNING') && p.motion.homed &&
+    (p.motion.state === 'idle' || p.motion.mode === 'measure');
+  for (let i = 1; i <= A.CALIB_POINTS; i++) { $('btnCalMove' + i).disabled = !calOk || calAutoRun || p.state !== 'RUNNING'; $('btnCalPoint' + i).disabled = calAutoRun; }
+  $('btnCalAuto').disabled = calAutoRun || !calOk || (p.state === 'READY' && !p.safety.hv_ok);
   $('ctrlHint').textContent = !p ? '' : p.local ? 'Bedienung am Display hat Vorrang' :
     (p.state === 'SAFE_START' ? 'Zuerst INIT (Referenzfahrt)' : p.state === 'READY' && !p.safety.hv_ok ? 'HV gesperrt: Sicherheitskreis, Kühlung, Temperatur oder Not-Aus' :
      p.state === 'READY' ? 'Für MESSEN/TRAVERSE zuerst HV EIN' : p.state === 'WAIT_ACK' ? 'Fehler: Ursache beheben, dann ACK' : '');
@@ -2189,38 +2192,57 @@ async function setRefs() {
   for (const s of d.sets) await api('SET', { key: s.key, value: s.value });
   await loadConfig(true);
 }
-/** Waits until the axis stands at target. Throws when the axis stops elsewhere (STOP, fault), the state
- *  is not READY/RUNNING, the display has priority, the connection is lost or after 30 s. */
-async function waitAt(target) {
+/** Waits until the stationary measurement stands at target with the shutter open (V1.6.3: calibration
+ *  under measuring conditions). Throws when the measurement ends (STOP, fault), the state is not
+ *  RUNNING, the display has priority, the connection is lost or after 30 s. */
+async function waitMeasuring(target) {
   const t0 = Date.now();
-  let seenMoving = false;
+  let started = false;
   for (;;) {
     await sleep(POLL_MS);
     const p = last;
     if (!p) throw new Error('keine Verbindung');
     if (p.local) throw new Error('Bedienung am Display');
-    if (p.state !== 'READY' && p.state !== 'RUNNING') throw new Error('Zustand ' + p.state);
-    const still = p.motion.state === 'idle' && p.motion.mode === 'none';
-    if (!still) seenMoving = true;
-    else if (Math.abs(p.motion.pos - target) <= 0.5) return;
-    else if (seenMoving) throw new Error('Achse steht nicht am Ziel (STOP?)');
+    if (p.state !== 'RUNNING') throw new Error('Zustand ' + p.state);
+    if (p.motion.mode === 'measure') started = true;
+    else if (started) throw new Error('Messung beendet (STOP?)');
+    if (started && Math.abs(p.motion.pos - target) <= 0.5 && Math.abs(p.motion.vel) < 0.05 && p.safety.shutter === 'open') return;
     if (Date.now() - t0 > 30000) throw new Error('Zeitüberschreitung');
   }
 }
-/** "Alle 6 Stufen automatisch": for points 1..6 MOVE to CALIB_POS -> wait -> 1 s -> CALIB point
- *  (NOT_STABLE: up to 5 retries 0.5 s apart), then CALIB save. Any other error or STOP aborts;
- *  nothing is saved then (the points taken so far stay in RAM, "Zurücksetzen" restores the defaults). */
+/** Ends a running measurement (STOP) and waits until the axis stands. */
+async function stopMeasuring() {
+  if (last && last.motion.mode !== 'none') {
+    await api('STOP', {}, true);
+    for (let k = 0; k < 20 && last && last.motion.mode !== 'none'; k++) await sleep(POLL_MS);
+  }
+}
+/** „Messen“ of a table row: stationary measurement on the step (HV must be on). */
+async function measureStep(pos) {
+  await stopMeasuring();
+  await api('START_MEASURE', { pos });
+}
+/** "Alle 6 Stufen automatisch" (V1.6.3, under measuring conditions): HV on if it was off; for points
+ *  1..6 START_MEASURE on CALIB_POS -> wait (shutter open) -> 1 s -> CALIB point (NOT_STABLE: up to 5
+ *  retries 0.5 s apart) -> STOP; then CALIB save; HV off again if it was off before. Any other error
+ *  or STOP aborts; nothing is saved then (STOP and HV as before are still sent). */
 async function calibAuto() {
-  if (calAutoRun) return;
+  if (calAutoRun || !last) return;
   calAutoRun = true; clearRowStatus(); render(last);
+  const hvBefore = last.safety.hv_on;
   try {
+    if (!hvBefore) {
+      stepStatus('calAutoSt', 'HV einschalten', null);
+      const r = await api('HV_ON', {}, true);
+      if (!r || r.err !== 0) throw new Error('HV_ON ' + (r ? A.errName(r.err) : 'keine Antwort'));
+    }
+    await stopMeasuring();
     for (let i = 1; i <= A.CALIB_POINTS; i++) {
       const pos = A.CALIB_POS[i - 1];
-      stepStatus('calAutoSt', `Stufe ${i}/6: fahren auf ${pos} mm`, null);
-      let r = await api('MOVE', { pos }, true);
-      if (!r || r.err !== 0) throw new Error(`Stufe ${i}: MOVE ` + (r ? A.errName(r.err) : 'keine Antwort'));
-      await waitAt(pos);
-      stepStatus('calAutoSt', `Stufe ${i}/6: messen`, null);
+      stepStatus('calAutoSt', `Stufe ${i}/6: messen auf ${pos} mm`, null);
+      let r = await api('START_MEASURE', { pos }, true);
+      if (!r || r.err !== 0) throw new Error(`Stufe ${i}: START_MEASURE ` + (r ? A.errName(r.err) : 'keine Antwort'));
+      await waitMeasuring(pos);
       await sleep(1000);
       for (let k = 0; ; k++) {
         r = await api('CALIB', { action: 'point', index: i }, true);
@@ -2230,18 +2252,21 @@ async function calibAuto() {
         throw new Error(`Stufe ${i}: ` + (r ? A.errName(r.err) : 'keine Antwort'));
       }
       rowStatus(i, r);
+      await stopMeasuring();
       await loadConfig(true);
     }
     stepStatus('calAutoSt', 'speichern', null);
     const r = await api('CALIB', { action: 'save' }, true);
     if (!r || r.err !== 0) throw new Error('Speichern: ' + (r ? A.errName(r.err) : 'keine Antwort'));
     stepStatus('calAutoSt', 'fertig: 6 Stufen übernommen und gespeichert', true);
-    addLog('ok', 'Kalibrierung: 6 Stufen übernommen und gespeichert');
+    addLog('ok', 'Kalibrierung: 6 Stufen unter Messbedingungen übernommen und gespeichert');
   } catch (e) {
     stepStatus('calAutoSt', 'abgebrochen: ' + e.message, false);
     addLog('error', 'Kalibrierung abgebrochen: ' + e.message);
     toast('Kalibrierung abgebrochen: ' + e.message, true);
   } finally {
+    await stopMeasuring();
+    if (!hvBefore) await api('HV_OFF', {}, true);               // HV as before (HV_OFF is always allowed)
     calAutoRun = false;
     await loadConfig(true);
     render(last);
@@ -2298,7 +2323,7 @@ function DemoDevice() {
       case 'INIT': if (!['SAFE_START', 'READY'].includes(st.state)) return R(cmd, -5); if (!idle) return R(cmd, -7); st.pos = Math.max(st.pos, 30); move(0, 20, 'homing'); return R(cmd, 0);
       case 'HV_ON': if (!['READY', 'RUNNING'].includes(st.state)) return R(cmd, -5); if (!(st.interlock && st.cooling && st.temp <= 30)) return R(cmd, -6); st.hv = true; st.state = 'RUNNING'; return R(cmd, 0);
       case 'HV_OFF': st.hv = false; st.shutter = 'closed'; if (st.state === 'RUNNING') st.state = 'READY'; return R(cmd, 0);
-      case 'START_MEASURE': if (st.state !== 'RUNNING') return R(cmd, -5); if (!idle) return R(cmd, -7); st.n = 0; st.sum = 0; move(st.cfg.measure_pos, 10, 'measure'); return R(cmd, 0);
+      case 'START_MEASURE': if (st.state !== 'RUNNING') return R(cmd, -5); if (!idle || st.mode !== 'none') return R(cmd, -7); st.n = 0; st.sum = 0; move(p.pos !== undefined ? +p.pos : st.cfg.measure_pos, 10, 'measure'); return R(cmd, 0);
       case 'START_TRAVERSE': if (st.state !== 'RUNNING') return R(cmd, -5); if (!idle) return R(cmd, -7); st.n = 0; st.sum = 0; st.pos = st.cfg.traverse_start; move(st.cfg.traverse_end, st.cfg.traverse_speed, 'traverse'); return R(cmd, 0);
       case 'PARK': case 'SERVICE': case 'MOVE':
         if (!['READY', 'RUNNING'].includes(st.state)) return R(cmd, -5); if (!st.homed) return R(cmd, -6); if (!idle) return R(cmd, -7);
@@ -2312,7 +2337,7 @@ function DemoDevice() {
         else if (p.key !== 'wifi_pass') return R(cmd, -4);
         return R(cmd, 0);
       case 'CALIB':
-        if (!idle) return R(cmd, -7);
+        if (!idle) return R(cmd, -7);                     // V1.6.3: also while measuring (axis stands)
         if (p.action === 'point') {                       // demo: the sensor bow of the real axis plus noise
           if (!(Number.isInteger(p.index) && p.index >= 1 && p.index <= 6)) return R(cmd, -4);
           const bow = [0.3, 0.2, -0.2, -0.4, -0.3, 0.5][p.index - 1];
@@ -2404,7 +2429,7 @@ function init() {
   $('btnReboot').onclick = () => confirmThen('REBOOT', () => api('REBOOT'));
   // calibration
   for (let i = 1; i <= A.CALIB_POINTS; i++) {
-    $('btnCalMove' + i).onclick = () => api('MOVE', { pos: A.CALIB_POS[i - 1] });
+    $('btnCalMove' + i).onclick = () => measureStep(A.CALIB_POS[i - 1]);
     $('btnCalPoint' + i).onclick = () => calibPoint(i);
   }
   $('btnCalAuto').onclick = () => confirmThen('CALIB_AUTO', calibAuto);

@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5.10, CALIB point V1.6.0 / Sprint K1) – speeds in mm/s – Sprint L4 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.10, CALIB point V1.6.0 / Sprint K1, CALIB while measuring V1.6.3 / K2) – speeds in mm/s – Sprint L4 must make these pass. Do not modify.
 // Covers: src/logic/app_logic.cpp (CONTRACT §10) – complete scenarios with a
 // simulated axis (fake_axis.h) and a simulated distance sensor.
 #include <unity.h>
@@ -1255,6 +1255,57 @@ void test_v1510_stats_only_in_trav_run_or_meas_hold() {
     TEST_ASSERT_EQUAL_UINT32(1, S.stats.n);
 }
 
+// ---- V1.6.3: calibration under measuring conditions (shutter open) ----
+static void measureAt(float pos) {
+    Command m = mk(CmdId::START_MEASURE); m.has_pos = true; m.pos = pos;
+    API(ApiError::OK, send(m));
+    run(20000);
+    TEST_ASSERT_TRUE(S.seq.phase == SeqPhase::MEAS_HOLD);
+    TEST_ASSERT_TRUE(S.safety.shutter_open);
+}
+void test_v163_calib_point_during_stationary_measurement() {
+    running();
+    measureAt(155);
+    run(700);
+    API(ApiError::OK, calib(CalibAction::POINT, 3));
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 55.0f, S.params.calib.raw[2]);
+    TEST_ASSERT_TRUE(S.seq.phase == SeqPhase::MEAS_HOLD);           // measurement goes on
+    TEST_ASSERT_TRUE(proc().motion.mode == OpMode::MEASURE);
+    TEST_ASSERT_TRUE(S.safety.shutter_open);
+    TEST_ASSERT_TRUE(S.safety.hv_on);
+    API(ApiError::OK, calib(CalibAction::BASE));
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 55.0f, S.params.base_dist);
+    API(ApiError::OK, setNum("base_dist", 70));
+}
+void test_v163_calib_save_and_reset_during_measurement() {
+    running();
+    measureAt(175);
+    run(700);
+    API(ApiError::OK, calib(CalibAction::POINT, 4));
+    int p = persists;
+    API(ApiError::OK, calib(CalibAction::SAVE));
+    TEST_ASSERT_EQUAL_INT(p + 1, persists);                          // saving itself is deferred (net task)
+    API(ApiError::OK, calib(CalibAction::RESET));
+    TEST_ASSERT_EQUAL_FLOAT(50.0f, S.params.calib.raw[3]);
+    TEST_ASSERT_TRUE(S.seq.phase == SeqPhase::MEAS_HOLD);
+}
+void test_v163_calib_busy_while_approaching_or_traversing() {
+    running();
+    Command m = mk(CmdId::START_MEASURE); m.has_pos = true; m.pos = 215;
+    API(ApiError::OK, send(m));
+    run(500);
+    TEST_ASSERT_TRUE(S.seq.phase == SeqPhase::MEAS_APPROACH);
+    API(ApiError::BUSY, calib(CalibAction::POINT, 6));
+    API(ApiError::BUSY, calib(CalibAction::SAVE));
+    API(ApiError::OK, send(CmdId::STOP));
+    run(200);
+    API(ApiError::OK, traverse(80, 240, 2));
+    run(20000);
+    TEST_ASSERT_TRUE(S.seq.phase == SeqPhase::TRAV_RUN);
+    API(ApiError::BUSY, calib(CalibAction::POINT, 2));
+    API(ApiError::BUSY, calib(CalibAction::RESET));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_boot_state);
@@ -1343,6 +1394,9 @@ int main(int, char**) {
     RUN_TEST(test_v159_safety_position_uses_motion_config);
     RUN_TEST(test_v159_comm_timeout_uses_config);
     RUN_TEST(test_v1510_in_range_uses_unfiltered_mm_not_calibrated_dist);
+    RUN_TEST(test_v163_calib_point_during_stationary_measurement);
+    RUN_TEST(test_v163_calib_save_and_reset_during_measurement);
+    RUN_TEST(test_v163_calib_busy_while_approaching_or_traversing);
     RUN_TEST(test_v1510_out_of_range_raw_and_dist_are_mm);
     RUN_TEST(test_v1510_out_of_range_keeps_stability_settings);
     RUN_TEST(test_v1510_stats_only_in_trav_run_or_meas_hold);

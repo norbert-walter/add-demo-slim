@@ -1,6 +1,6 @@
 # REST-API – Kurzübersicht
 
-**Demoanlage ADD (Slim)** · Version 1.1 · Stand 2026-11-08 · Contract V1.6.2
+**Demoanlage ADD (Slim)** · Version 1.1 · Stand 2026-11-08 · Contract V1.6.3
 Ausführlich: `docs/Software_Dokumentation_V1_0.md` Kapitel 9–11, verbindlich: `docs/CONTRACT.md` §4–§5
 
 ---
@@ -111,7 +111,7 @@ Kalibriertabelle mit 6 Punkten; Punkt i liegt auf der Stufe bei **95 + 20·i mm*
 
 | `action` | Voraussetzung | Wirkung | mögliche Fehler |
 |---|---|---|---|
-| `point` + `index` 1 … 6 | Achse steht, Rohabstand 500 ms innerhalb ±0,5 mm stabil | aktuellen unkalibrierten Abstand als Punkt `index` übernehmen (`calib_raw_<index>`); nicht gespeichert | `BAD_PARAM`, `BUSY`, `NOT_STABLE` |
+| `point` + `index` 1 … 6 | Achse steht oder stehende Messung läuft (Shutter offen, seit V1.6.3), Rohabstand 500 ms innerhalb ±0,5 mm stabil | aktuellen unkalibrierten Abstand als Punkt `index` übernehmen (`calib_raw_<index>`); nicht gespeichert | `BAD_PARAM`, `BUSY`, `NOT_STABLE` |
 | `base` | Achse steht, Sensor im Bereich, stabil | `base_dist` = aktueller kalibrierter Abstand | `BUSY`, `PRECONDITION`, `NOT_STABLE` |
 | `save` | Achse steht; Tabelle gültig: Referenzen 40 … 300 mm, nach Referenz sortiert steigen Referenzen und Rohwerte um je ≥ 1 mm | alle Parameter speichern | `BUSY`, `CALIB_INVALID` |
 | `reset` | Achse steht | Werkstabelle (Rohwert = Referenz = 65 … 40 mm), erst mit `save` dauerhaft | `BUSY` |
@@ -120,9 +120,10 @@ Die wahren Abstände stehen in `calib_ref_1` … `calib_ref_6` (`SET`). Zwischen
 linear interpoliert, außerhalb mit dem ersten bzw. letzten Abschnitt verlängert. `near`/`far`
 (bis Contract V1.5) gibt es nicht mehr (`BAD_PARAM`).
 
-Ablauf an der Demoanlage: für i = 1 … 6 `MOVE pos=95+20·i` → `CALIB action=point index=i`, dann
-`CALIB action=save` (jeweils erst, wenn die Fahrt beendet ist: `motion.state = idle`). Die
-Weboberfläche macht das mit „Alle 6 Stufen automatisch“.
+Ablauf an der Demoanlage, unter Messbedingungen (der offene Shutter verschiebt das Sensorsignal):
+`HV_ON`; für i = 1 … 6 `START_MEASURE pos=95+20·i` → (Achse steht, Shutter offen) →
+`CALIB action=point index=i` → `STOP`; dann `CALIB action=save` und `HV_OFF`. Die Weboberfläche macht
+das mit „Alle 6 Stufen automatisch“.
 
 ---
 

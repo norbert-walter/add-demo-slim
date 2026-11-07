@@ -1,4 +1,4 @@
-// Tests of the web pages (Contract V1.5.26, §5.5; calibration page V1.6.0 / Sprint K1) – the IMS operator UI.
+// Tests of the web pages (Contract V1.5.26, §5.5; calibration page V1.6.0 / K1, measuring conditions V1.6.3 / K2) – the IMS operator UI.
 //   node --test test/js/test_pages.js
 // data/www/index.html is ONE file for two uses: served by the device at "/" and opened as a local
 // file (connection dialog). It embeds a byte-identical copy of data/www/app.js (ADDAPP).
@@ -110,7 +110,8 @@ test('calibration page: 6-point table (V1.6.0, Sprint K1)', () => {
   assert.ok(!/calib_(near|far)_(raw|ref)/.test(page), 'no 2-point keys in the page script');
   assert.ok(!/action: '(near|far)'/.test(page), 'no 2-point CALIB actions');
   assert.match(page, /api\('CALIB', \{ action: 'point', index: i \}/, 'CALIB point with index');
-  assert.match(page, /api\('MOVE', \{ pos: A\.CALIB_POS\[i - 1\] \}\)/, 'Fahren uses the fixed step positions');
+  assert.match(page, /\$\('btnCalMove' \+ i\)\.onclick = \(\) => measureStep\(A\.CALIB_POS\[i - 1\]\);/, 'Messen uses the fixed step positions');
+  assert.match(page, /api\('START_MEASURE', \{ pos \}\)/, 'V1.6.3: a row measures (shutter open), it does not only move');
   assert.match(page, /\$\('btnCalAuto'\)\.onclick = \(\) => confirmThen\('CALIB_AUTO', calibAuto\);/, 'automatic run only after confirmation');
   assert.match(page, /\$\('btnCalStop'\)\.onclick = \(\) => api\('STOP'\);/, 'STOP on the calibration page, without dialog');
   assert.match(page, /async function calibAuto\(\)/);
@@ -119,6 +120,11 @@ test('calibration page: 6-point table (V1.6.0, Sprint K1)', () => {
   assert.match(auto, /NOT_STABLE/, 'NOT_STABLE is retried');
   assert.match(auto, /k < 5/, 'at most 5 retries');
   assert.match(auto, /action: 'save'/, 'saved at the end');
+  // V1.6.3: under measuring conditions – HV on, stationary measurement with open shutter, HV as before
+  assert.match(auto, /api\('START_MEASURE', \{ pos \}, true\)/, 'each point under a stationary measurement');
+  assert.match(auto, /api\('HV_ON', \{\}, true\)/, 'HV switched on if it was off');
+  assert.match(auto, /if \(!hvBefore\) await api\('HV_OFF', \{\}, true\);/, 'HV off again afterwards');
+  assert.ok(!/api\('MOVE'/.test(auto), 'no plain MOVE (shutter would stay closed)');
   assert.ok(auto.indexOf("action: 'save'") > auto.indexOf("action: 'point'"), 'save after the points');
   for (const f of ['A.calibRows(', 'A.calibValid(', 'A.calibApply(']) assert.ok(page.includes(f), 'page script must use ' + f);
 });

@@ -196,7 +196,10 @@ HwOutputs appTick(AppState& s, const HwInputs& hw, const AppConfig& cfg);
  *          -> safetyStep(SHUTTER_CLOSE) immediately (STOP ends the measuring programme).
  *  - SET: paramSet; persist -> out.persist.
  *    V1.3: key "estop_nc" only if seq.phase == IDLE && !safety.hv_on, else PRECONDITION.
- *  - CALIB: seq.phase != IDLE -> BUSY.
+ *  - CALIB: seq.phase not IDLE and not MEAS_HOLD -> BUSY. V1.6.3: allowed during the stationary
+ *          measurement (MEAS_HOLD: axis stands, shutter open, HV on) so that the table is taken
+ *          under measuring conditions (the open shutter shifts the sensor signal on the demo);
+ *          the measurement goes on (phase, mode and shutter unchanged).
  *      POINT (V1.6.0): calib_index outside 1..CALIB_POINTS -> BAD_PARAM;
  *                !stabilityIsStable -> NOT_STABLE; calib.raw[calib_index - 1] = raw_mm (uncalibrated), OK,
  *                no persist (CALIB save persists).

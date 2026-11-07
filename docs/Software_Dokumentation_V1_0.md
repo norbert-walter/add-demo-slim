@@ -1333,21 +1333,27 @@ neuer Schema-Version oder wenn die Messwerte abweichen.
 | Position (Stufenmitte, 95 + 20·i) | 115 | 135 | 155 | 175 | 195 | 215 mm |
 | Referenz ab Werk (`calib_ref_i`) | 65 | 60 | 55 | 50 | 45 | 40 mm |
 
+**Unter Messbedingungen (seit Contract V1.6.3):** Der offene Shutter verschiebt an der Demoanlage
+das Sensorsignal. Kalibriert wird deshalb so, wie gemessen wird: HV an, stehende Messung auf der Stufe,
+Shutter offen. `CALIB` ist dafür auch während der stehenden Messung erlaubt.
+
 **Mit der Weboberfläche (Seite „Kalibrierung“), automatisch:**
 
-1. Voraussetzung: Referenzfahrt erfolgt (INIT), Zustand READY, **HV aus**, Stufenkörper fixiert.
+1. Voraussetzung: Referenzfahrt erfolgt (INIT), Zustand READY oder RUNNING, HV einschaltbar
+   (Sicherheitskreis, Kühlung, Temperatur), Stufenkörper fixiert.
 2. Referenzwerte in der Tabelle prüfen (Werkswerte 65 … 40 mm). Bei einem anderen Messobjekt die
    wahren Abstände eintragen → „Referenzen setzen“ (`SET calib_ref_1` … `calib_ref_6`).
-3. **„Alle 6 Stufen automatisch“** → bestätigen. Die Seite fährt jede Stufe an, wartet 1 s, übernimmt
-   den Rohwert (`CALIB point`) und speichert am Ende (`CALIB save`). Meldet die Firmware
-   `NOT_STABLE`, wiederholt die Seite bis zu fünfmal im Abstand von 0,5 s. Dauer etwa 40 s.
+3. **„Alle 6 Stufen automatisch“** → bestätigen. Die Seite schaltet die HV ein (falls aus), startet auf
+   jeder Stufe eine stehende Messung (`START_MEASURE`, Shutter öffnet), wartet 1 s, übernimmt den
+   Rohwert (`CALIB point`), beendet die Messung (`STOP`) und speichert am Ende (`CALIB save`). Danach
+   ist die HV wieder wie vorher. `NOT_STABLE` wiederholt die Seite bis zu fünfmal. Dauer etwa 40 s.
 4. Jede Zeile zeigt „OK“, unten „fertig: 6 Stufen übernommen und gespeichert“, Tabelle „gültig“.
 5. **STOP** (auf derselben Seite) oder ein Fehler bricht ab; dann wird **nicht** gespeichert.
    Bereits übernommene Punkte stehen nur im RAM – „Zurücksetzen“ oder ein neuer Lauf.
 
-**Von Hand, Zeile für Zeile:** „Fahren“ (MOVE auf die Stufenmitte) → warten, bis die Achse steht
-und „Abstand jetzt“ ruhig ist → „Übernehmen“ (`CALIB point index=i`). Die Firmware übernimmt den Wert
-nur, wenn er 500 ms innerhalb ±0,5 mm stabil ist; sonst `NOT_STABLE`. Nach allen gewünschten Zeilen
+**Von Hand, Zeile für Zeile:** HV EIN; „Messen“ (stehende Messung auf der Stufe, Shutter öffnet) →
+warten, bis „Abstand jetzt“ ruhig ist → „Übernehmen“ (`CALIB point index=i`). Die Firmware übernimmt
+den Wert nur, wenn er 500 ms innerhalb ±0,5 mm stabil ist; sonst `NOT_STABLE`. Nach allen Zeilen
 **„Speichern“** (`CALIB save`).
 
 **Gültigkeit** (geprüft bei „Speichern“, sonst `CALIB_INVALID`): alle Werte endlich, Referenzen
@@ -1365,22 +1371,23 @@ sechs Punkte; auf der Messposition (155 mm) zeigt die Anlage 55 mm Abstand bzw. 
   (Nullabgleich auf einer Fläche ohne Messgut). An der Demoanlage wird `base_dist` normalerweise
   auf 70 mm gesetzt (Kante des Messguts, Einstellungsseite).
 
-**Mit der API** (je Stufe i = 1 … 6 erst fahren, dann übernehmen; Beispiel Stufe 1):
+**Mit der API** (am einfachsten in `add_client.py shell`, das den Heartbeat sendet; Beispiel Stufe 1):
 
 ```
-python3 scripts/add_client.py --host 192.168.4.1 cmd MOVE pos=115
+HV_ON
 ```
 ```
-python3 scripts/add_client.py --host 192.168.4.1 cmd CALIB action=point index=1
+START_MEASURE pos=115
+```
+```
+CALIB action=point index=1
+```
+```
+STOP
 ```
 
-… ebenso `pos=135 index=2` bis `pos=215 index=6`, zum Schluss:
-
-```
-python3 scripts/add_client.py --host 192.168.4.1 cmd CALIB action=save
-```
-
-(Den nächsten Befehl erst senden, wenn die Fahrt beendet ist – `motion.state = idle` in `/proc`.)
+… ebenso `pos=135 index=2` bis `pos=215 index=6`, zum Schluss `CALIB action=save` und `HV_OFF`.
+(`CALIB point` erst senden, wenn die Achse auf der Stufe steht und der Shutter offen ist.)
 
 ---
 
@@ -1617,7 +1624,7 @@ Bibliotheksfunktionen gibt es Nachbildungen in `test/native/freertos_shim/` (u. 
 | `test_motion_seq` | 38 | Referenzfahrt, Fahrten, Profil, Endschalter, Not-Halt |
 | `test_sound_logic` | 9 | Muster, Prioritäten |
 | `test_wifi_logic` | 15 | Wiederverbindungsstrategie |
-| `test_app_logic` | 89 | vollständige Abläufe mit simulierter Achse (`fake_axis.h`) |
+| `test_app_logic` | 92 | vollständige Abläufe mit simulierter Achse (`fake_axis.h`) |
 | `test_proc_json` | 20 | `/proc`, Antworten, Größe ≤ 512 Byte |
 | `test_api_parse` | 27 | Parser, Typen, unsinnige Eingaben (NaN, ±Inf) |
 | `test_display_logic` | 12 | Bildschirmmodus, ACK-Halten |
@@ -1864,4 +1871,4 @@ Anmerkungen:
 | Version | Datum | Änderung |
 |---|---|---|
 | 1.0 | 2026-11-07 | Erste Ausgabe (Contract V1.5.27, Pflichtenheft V1.7.10); ADD-Kapitel vorläufig bis Sprint D1. Ergänzt: Bedienwege (1.1), WLAN-Einbuchen per Konsole (10.7, 11.1), Umfang (16.4) |
-| 1.1 | 2026-11-08 | Kalibriertabelle mit 6 Stufen (Contract V1.6.2, Sprint K1): Messkette 3.4, Befehle, Parameter, `GET_CONFIG`, NVS Version 5, Kapitel 12.3 neu, Testzahlen |
+| 1.1 | 2026-11-08 | Kalibriertabelle mit 6 Stufen, unter Messbedingungen (Contract V1.6.3, Sprints K1/K2): Messkette 3.4, Befehle, Parameter, `GET_CONFIG`, NVS Version 5, Kapitel 12.3 neu, Testzahlen |

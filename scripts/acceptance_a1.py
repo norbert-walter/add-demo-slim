@@ -980,6 +980,42 @@ def measure_steps(c):
     return res
 
 
+@test("T18K", 2, "8", "Kalibrierung unter Messbedingungen vor der Messung: 6 Stufen mit HV an und offenem Shutter, gespeichert")
+def t18k(c):
+    """Fresh calibration right before T18/T20 (decision 08.11.2026: the open shutter shifts the sensor
+    signal, so the table is taken while measuring). Needs Contract V1.6.3 (CALIB during MEAS_HOLD)."""
+    d = c.d
+    before = d.config()
+    if "calib_raw_1" not in before:
+        raise Problem("Firmware ohne Kalibriertabelle (vor Contract V1.6.0) – erst K1 flashen")
+    d.ready(hv=True)
+    for i, (pos, dist, thick) in enumerate(STEPS, start=1):
+        d.ok("START_MEASURE", pos=pos)
+        d.wait(lambda q: q["motion"]["mode"] == "measure" and abs(q["motion"]["pos"] - pos) <= 0.1
+               and q["motion"]["vel"] == 0 and q["safety"]["shutter"] == "open", 40, "Messung bei %d mm" % pos)
+        time.sleep(1.0)
+        for k in range(6):
+            e = d.api("CALIB", action="point", index=i)
+            if e != -8 or k == 5:                                   # NOT_STABLE: retry
+                break
+            time.sleep(0.5)
+        if e == -7:
+            d.ok("STOP")
+            raise Problem("CALIB während der Messung abgelehnt (BUSY): Firmware vor Contract V1.6.3 (Sprint K2)")
+        d.ok("STOP")
+        check(e == 0, "Stufe %d mm: CALIB point -> %s" % (pos, ERR.get(e, e)))
+    d.ok("CALIB", action="save")
+    after = d.config()
+    for i, (pos, dist, thick) in enumerate(STEPS, start=1):
+        c.val("Punkt %d (%d mm): Rohwert" % (i, pos), after["calib_raw_%d" % i], "mm")
+        c.val("Punkt %d (%d mm): Änderung gegenüber der alten Tabelle" % (i, pos),
+              round(after["calib_raw_%d" % i] - before["calib_raw_%d" % i], 2), "mm")
+    c.val("calib_valid", after["calib_valid"], eq=True)
+    check(after["calib_valid"], "Tabelle nach der Kalibrierung ungültig")
+    c.cache["calibrated"] = True
+    return "6 Punkte mit offenem Shutter übernommen und gespeichert"
+
+
 @test("T18", 2, "2, 8", "Stehende Messung je Stufe: Dicke und Abstand ±0,5 mm (Mittelwert, Sigma)")
 def t18(c):
     res = measure_steps(c)
@@ -1047,9 +1083,9 @@ def t20(c):
     check(cfg["calib_valid"], "calib_valid = false")
     if "calib_raw_1" not in cfg:
         raise Problem("Firmware ohne Kalibriertabelle (vor Contract V1.6.0) – erst K1 flashen")
-    if all(abs(cfg["calib_raw_%d" % i] - cfg["calib_ref_%d" % i]) < 0.01 for i in range(1, 7)):
-        raise Problem("Werkstabelle (Rohwert = Referenz): erst kalibrieren – Seite Kalibrierung, "
-                      "„Alle 6 Stufen automatisch“")
+    if not c.cache.get("calibrated") and all(abs(cfg["calib_raw_%d" % i] - cfg["calib_ref_%d" % i]) < 0.01
+                                             for i in range(1, 7)):
+        raise Problem("Werkstabelle (Rohwert = Referenz): T18K (Kalibrierung) lief nicht oder scheiterte")
     res = measure_steps(c)
     bad = []
     for pos, dist, thick in STEPS:
