@@ -29,7 +29,7 @@ static std::vector<std::string> initPrefix() {
 static std::vector<std::string> fullInit() {
     std::vector<std::string> v = initPrefix();
     v.push_back("fas connect 65 3");                                    // step slot 1 | PIN_I2S_FLAG, I2S_MUX
-    v.push_back("st dir 66 0 0");                                       // dir slot 2 | flag, DIR_POSITIVE_HIGH
+    v.push_back("st dir 66 " + std::to_string((int)DIR_POSITIVE_HIGH) + " 0");   // dir slot 2 | flag, DIR_POSITIVE_HIGH (V1.6.1: from config.h)
     v.push_back("st en 64 1");                                          // enable slot 0 | flag, active low
     v.push_back("st autoEnable 1");
     v.push_back("st accel " + std::to_string((long)(int32_t)(ACCEL_MM_S2 * STEPS_PER_MM)));

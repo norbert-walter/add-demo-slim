@@ -58,7 +58,8 @@
 //   (n)  (31 - (n))  ((n) + 8)  ((n) + 16)  ((n) + 24)
 #define I2SO_TO_SLOT(n)      (n)
 
-#define DIR_POSITIVE_HIGH    false  // verified 0a (2026-10-11): DIR level for movement towards +mm
+#define DIR_POSITIVE_HIGH    true   // V1.6.1 (2026-11-07): real TMC2209 fitted (0a used a driver of unknown type with
+                                    // the opposite direction, false); DIR level for movement towards +mm
 
 // =========================================================================
 // Stepper drive (TMC2209, microstep jumper 1/16, rack 40.77 mm per revolution, measured 0a)

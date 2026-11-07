@@ -516,7 +516,7 @@ Der ESP32 erzeugt die Signale STEP, DIR und ENABLE nicht direkt an GPIOs, sonder
 |---|---|---|
 | ENABLE (alle Treiber) | i2so.0 | aktiv LOW; nach dem Boot gesperrt |
 | STEP X | i2so.1 | ein Puls = ein Mikroschritt |
-| DIR X | i2so.2 | `DIR_POSITIVE_HIGH` = false: LOW = Richtung vorn (+mm) |
+| DIR X | i2so.2 | `DIR_POSITIVE_HIGH` = true: HIGH = Richtung vorn (+mm) (mit TMC2209, seit 07.11.2026) |
 
 Die Bibliothek FastAccelStepper erzeugt die Schrittfolge mit Rampen. Die Verdrahtung zwischen
 Schieberegister und Treiber-Steckplatz liegt auf dem Board – es sind keine Kabel nötig.
@@ -549,6 +549,9 @@ Der Motor wird am **Motorstecker X** des Boards angeschlossen (4-polig).
   Spule gehören die Paare mit **≈ 9,3 Ω**; zwischen verschiedenen Spulen ist kein Durchgang.
 - Dreht der Motor falsch herum, entweder die Leitungen **einer** Spule tauschen oder
   `DIR_POSITIVE_HIGH` in `config.h` ändern (Standard der Anlage: Firmware-Einstellung).
+- **Treiber anderer Bauart können die Drehrichtung umkehren.** Beim Smoketest steckte ein Treiber
+  unbekannter Herkunft (`DIR_POSITIVE_HIGH` = false); mit dem echten TMC2209 gilt true. Nach jedem
+  Treiberwechsel die Richtung prüfen (Abschnitt Inbetriebnahme).
 - Ist ein Spulenpaar falsch kombiniert, brummt oder zittert der Motor, dreht aber nicht.
 - **Motor nur im spannungslosen Zustand stecken oder ziehen.** Wird der Stecker im Betrieb gezogen,
   zerstört die Induktionsspannung den Treiber.

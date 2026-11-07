@@ -25,6 +25,8 @@
   automatisch“** (mit Bestätigung, fährt jede Stufe an, übernimmt den Rohwert und speichert am Ende;
   STOP bricht ab), STOP-Taste auf der Seite, Kennlinie durch alle Punkte.
 - Die Messgenauigkeit (Abnahme 8, T18/T19) wird nach K1 erneut abgenommen.
+- **Drehrichtung:** `DIR_POSITIVE_HIGH` = **true** (Contract V1.6.1). Jetzt steckt der echte TMC2209; beim
+  Smoketest war es ein Treiber unbekannter Bauart mit umgekehrter Drehrichtung (damals false).
 
 ### V1.7.11 → V1.7.12 (Contract V1.5.28, 07.11.2026, Entscheidung Norbert Walter)
 - **Hilfe-Symbol** (Fragezeichen) in der Navigationsleiste der Weboberfläche vor „Log“: öffnet
@@ -1024,7 +1026,7 @@ Die Zeiten der 🤖-Sprints sind Rechenzeit von Qwen lokal (ca. 18 Token/s), nic
 | Bedienvorrang Display, Haltezeit | LOCAL, `LOCAL_HOLD_MS` in `config.h`, Standard 0 = aus (V1.7.8) | ✅ |
 | Quittierung am Display | eine ACK-Fläche, 1 s halten | ✅ |
 | i2so → Slot-Zuordnung (Buzzer, Enable, Step, Dir) | Smoketest `scan`: Slot = i2so-Nummer (Enable 0, Step 1, Dir 2, Buzzer 7) | ✅ (0a) |
-| Weg pro Umdrehung, Drehrichtung, Verfahrweg | Smoketest 4: 40,77 mm/U, `DIR_POSITIVE_HIGH` = false, Achse 0 … 242 mm | ✅ (0a, Contract V1.4) |
+| Weg pro Umdrehung, Drehrichtung, Verfahrweg | Smoketest 4: 40,77 mm/U, Achse 0 … 242 mm; `DIR_POSITIVE_HIGH` = false mit dem damaligen Treiber, **true mit dem TMC2209** (07.11.2026) | ✅ (0a, Contract V1.4 / V1.6.1) |
 | **Not-Aus wirkt nur über die Software** | Vorfall 11.10.2026: Fahrt lief unüberwacht, Not-Aus und Endschalter ohne Wirkung, Stopp nur durch Ziehen des Netzsteckers (Ursache im Smoketest behoben, 0a.1). Not-Aus zusätzlich **hart verdrahten** (Motorspannung oder Treiber-Enable direkt unterbrechen) | **Offen – vor dem Demo-Einsatz** |
 | Resonanz des Antriebs | deutlich hörbar bei 5 mm/s (= Referenzfahrt-Geschwindigkeit); Geschwindigkeits-Sweep 3 … 12 mm/s, ggf. Referenzfahrt-Geschwindigkeit verschieben | Offen |
 | Materialzone / Messposition | Prüfkörper 105 … 225 mm, Messposition 155 mm, Kurve neu angepasst (Smoketest 5) | ✅ (V1.7.2) |

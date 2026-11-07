@@ -66,7 +66,7 @@ Ergebnis jeder Prüfung eintragen. Werte mit **→ config.h** werden danach in
 |---|---|---|---|
 | 4.1 | `stepper` | `stepper: true` | ✅ |
 | 4.2 | `move 10 5` (10 mm mit 5 mm/s) – Weg mit Messschieber messen | 10,0 mm (±0,2) | 10 mm ✅ · Langstrecke: mit 42 mm/U ergaben Soll 130 mm nur 126,2 mm → **`MM_PER_REV` = 40,77** (78,49 Schritte/mm, Contract V1.4); Kontrolle danach 130,25 mm (< 0,2 %) ✅ |
-| 4.3 | Richtung: positive mm = weg vom hinteren Endschalter? | ja | ❌ zunächst falsch herum → **`DIR_POSITIVE_HIGH` = false**; danach ✅ (positiv = Richtung Messgut/vorn) |
+| 4.3 | Richtung: positive mm = weg vom hinteren Endschalter? | ja | ❌ zunächst falsch herum → **`DIR_POSITIVE_HIGH` = false**; danach ✅ (positiv = Richtung Messgut/vorn). **Nachtrag 07.11.2026:** gilt nur für den damaligen Treiber unbekannter Bauart; mit dem echten TMC2209 **true** |
 | 4.4 | `move 50 20`, `move -50 20` (Maximalgeschwindigkeit 20 mm/s) | läuft ruhig, kein Schrittverlust (Position danach wie vorher) | ✅ |
 | 4.4a | `move 20 1`, `move -20 1` (Minimalgeschwindigkeit 1 mm/s) | gleichmäßig, kein Rattern | ✅ · 1 … 20 mm/s ohne Schrittverlust; **Resonanz bei 5 mm/s** (= Homing-Geschwindigkeit) – offener Punkt, Resonanztest folgt |
 | 4.5 | Beschleunigung: ggf. `ACCEL_MM_S2` anpassen | kein Ruckeln | **→ `ACCEL_MM_S2` = 500** (unverändert) ✅ |
