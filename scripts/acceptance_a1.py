@@ -47,6 +47,31 @@ class Skip(Exception):
     pass
 
 
+class Problem(Exception):
+    """A precondition or boundary condition is not met: the check cannot be completed meaningfully."""
+    pass
+
+
+SYMBOL = {"ok": "✅", "warn": "✅ ⚠️", "fail": "❌", "skip": "⏭", "problem": "⛔", "info": "–"}
+LEGEND = """| Symbol | Bedeutung |
+|---|---|
+| ✅ | bestanden |
+| ❌ | nicht bestanden |
+| ⏭ | übersprungen / nicht geprüft |
+| ⛔ | Problem: eine Voraussetzung oder Randbedingung stimmt nicht, die Prüfung konnte nicht sinnvoll zu Ende geführt werden |
+| ⚠️ | Achtung: Messwert nah am Grenzwert (mehr als 80 % der Toleranz ausgenutzt bzw. im äußeren Zehntel eines Bereichs); kann zusammen mit ✅ auftreten |
+| – | Information, kein Sollwert |
+"""
+
+
+def num(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def fmt(v):
+    return ("%g" % v) if num(v) else str(v)
+
+
 def check(cond, msg):
     if not cond:
         raise Fail(msg)
@@ -190,7 +215,10 @@ class Device:
     def ready(self, hv=False):
         """READY (or RUNNING with hv=True), axis homed and idle, shutter closed, signals at their defaults."""
         p = self.proc()
-        check(p["state"] not in ("FAULT", "WAIT_ACK"), "Anlage im Fehler %s" % SYS_ERR[p["err"]])
+        if p["safety"]["estop"]:
+            raise Problem("Voraussetzung: Not-Aus ist gedrückt")
+        if p["state"] in ("FAULT", "WAIT_ACK"):
+            raise Problem("Voraussetzung: Anlage im Fehler %s (nicht quittierbar)" % SYS_ERR[p["err"]])
         if not self.still(p):
             self.ok("STOP")
             p = self.idle(30, "STOP")
@@ -205,7 +233,10 @@ class Device:
         if not p["motion"]["homed"] or p["state"] == "SAFE_START":
             say("  Referenzfahrt (INIT) läuft – bitte warten, nichts drücken ...")
             self.ok("INIT")
-            self.wait(lambda q: q["state"] == "READY" and q["motion"]["homed"] and self.still(q), 120, "INIT")
+            try:
+                self.wait(lambda q: q["state"] == "READY" and q["motion"]["homed"] and self.still(q), 120, "INIT")
+            except Fail as e:
+                raise Problem("Voraussetzung: Referenzfahrt gescheitert – %s" % e)
         if hv and not self.proc()["safety"]["hv_on"]:
             self.ok("HV_ON")
         return self.proc()
@@ -218,16 +249,45 @@ class Ctx:
         self.notes = []
         self.values = []          # (id, name, value, unit, target)
         self.raw_out = []         # (title, text) for the appendix
+        self.cache = {}           # shared data between checks (e.g. step measurements for T18 and T20)
         self.tid = ""
 
     @property
     def interactive(self):
         return not (self.args.no_manual or self.args.sim)
 
-    def val(self, name, value, unit="", target=""):
+    def val(self, name, value, unit="", eq=None, nom=None, tol=None, lo=None, hi=None, mx=None, mn=None,
+            target=None, warn=True, status=None):
+        """Records a measured value and evaluates it against its target:
+        eq (equal) · nom ± tol · lo … hi · ≤ mx · ≥ mn. Achtung (warn): > 80 % of the tolerance used,
+        within the outer tenth of a range, > 80 % of a maximum or < 120 % of a minimum."""
+        st, tgt = "info", ""
+        if status:
+            st = status
+        elif eq is not None:
+            tgt, st = fmt(eq), ("ok" if value == eq else "fail")
+        elif num(value) and nom is not None and tol is not None:
+            dev = abs(value - nom)
+            tgt = "%s ± %s" % (fmt(nom), fmt(tol))
+            st = "fail" if dev > tol + 1e-9 else ("warn" if warn and dev > 0.8 * tol else "ok")
+        elif num(value) and lo is not None and hi is not None:
+            tgt = "%s … %s" % (fmt(lo), fmt(hi))
+            edge = min(value - lo, hi - value)
+            st = "fail" if edge < -1e-9 else ("warn" if warn and edge < 0.1 * (hi - lo) else "ok")
+        elif num(value) and mx is not None:
+            tgt = "≤ %s" % fmt(mx)
+            st = "fail" if value > mx + 1e-9 else ("warn" if warn and value > 0.8 * mx else "ok")
+        elif num(value) and mn is not None:
+            tgt = "≥ %s" % fmt(mn)
+            st = "fail" if value < mn - 1e-9 else ("warn" if warn and mn > 0 and value < 1.2 * mn else "ok")
+        elif any(x is not None for x in (eq, nom, lo, mx, mn)):
+            st = "fail"                                   # no numeric value where one was expected
+        if target is not None:
+            tgt = target
         if isinstance(value, float):
             value = round(value, 3)
-        self.values.append((self.tid, name, value, unit, target))
+        self.values.append((self.tid, st, name, value, unit, tgt))
+        return st
 
     def ask(self, question):
         """Yes/no question. -> True / False / None (not checked). Recorded in the protocol."""
@@ -235,11 +295,11 @@ class Ctx:
             while True:
                 a = input("\n  ??? %s [j/n/ü] " % question).strip().lower()
                 if a in ("j", "ja", "y"):
-                    self.notes.append("%s: ja" % question.rstrip("?")); return True
+                    self.val(question, "ja", target="ja", status="ok"); return True
                 if a in ("n", "nein"):
-                    self.notes.append("%s: **nein**" % question.rstrip("?")); return False
+                    self.val(question, "nein", target="ja", status="fail"); return False
                 if a in ("ü", "u", "s"): break
-        self.notes.append("%s: nicht geprüft" % question.rstrip("?"))
+        self.val(question, "nicht geprüft", target="ja", status="skip")
         return None
 
     def asks(self, questions):
@@ -284,7 +344,7 @@ def m01(c):
     p = d.proc()
     check(p["state"] == "SAFE_START", "nach Neustart %s" % p["state"])
     check(d.count("boot: ready") >= 1, "keine Zeile 'boot: ready' im Log")
-    c.val("Zustand nach Neustart", p["state"])
+    c.val("Zustand nach Neustart", p["state"], eq="SAFE_START")
     c.asks(["Vor dem Neustart Summer lang–kurz?", "Nach dem Neustart Summer kurz–lang?",
             "Display zeigt SAFE_START?", "Blaue LED blinkt gleichmäßig 1 s an / 1 s aus (10 Perioden ≈ 20 s)?"])
     return "SAFE_START, boot: ready im Log"
@@ -298,7 +358,7 @@ def m02(c):
     d.ready()
     p = d.proc()
     c.val("Dauer INIT", time.time() - t0, "s")
-    c.val("Position nach INIT", p["motion"]["pos"], "mm", "0,0")
+    c.val("Position nach INIT", p["motion"]["pos"], "mm", nom=0.0, tol=0.05, warn=False)
     c.asks(["Hat der Summer am Ende der Referenzfahrt einmal kurz gepiept?"])
     return "READY, pos %.1f" % p["motion"]["pos"]
 
@@ -320,7 +380,7 @@ def m03(c):
             say("  erkannt – jetzt loslassen")
         p = d.wait(lambda q: not q["motion"][key], 30, "%s Endschalter losgelassen" % name)
         check(p["state"] not in ("FAULT", "WAIT_ACK"), "Endschalter bei stehender Achse löst Fehler aus")
-        c.val("%s gedrückt / losgelassen erkannt" % key, "ja")
+        c.val("%s gedrückt / losgelassen erkannt" % key, "ja", eq="ja")
     return "beide Endschalter erkannt, kein Fehler"
 
 
@@ -347,7 +407,7 @@ def m05(c):
     c.prompt("Gleich wird Übertemperatur simuliert. Auf den Summer achten")
     d.ok("SET", key="temp", value=35.0)
     p = d.wait(lambda q: q["state"] == "WAIT_ACK", 3, "TEMP_HIGH", allow_fault=True)
-    c.val("Fehler", SYS_ERR[p["err"]], "", "TEMP_HIGH")
+    c.val("Fehler", SYS_ERR[p["err"]], eq="TEMP_HIGH")
     c.asks(["Hat der Summer 3-mal gepiept?", "Zeigt das Display den Fehler TEMP_HIGH mit ACK-Fläche?"])
     d.ok("SET", key="temp", value=18.0)
     d.ok("ACK")
@@ -370,7 +430,7 @@ def m06(c):
     ruler = c.number("Achse bei 242 mm. Abstand Sensorfenster – unterer Ausleger mit dem Zollstock", "mm")
     dev = (dist - ruler) / ruler * 100
     c.val("Abstand Zollstock", ruler, "mm")
-    c.val("Abweichung", dev, "%", "±5")
+    c.val("Abweichung", dev, "%", nom=0.0, tol=5.0)
     check(abs(dev) <= 5.0, "Abweichung %.1f %%" % dev)
     return "Anlage %.1f mm, Zollstock %.1f mm (%.1f %%)" % (dist, ruler, dev)
 
@@ -391,7 +451,7 @@ def m07(c):
     d.move(50)
     b = c.number("Wieder bei 50 mm. Gleichen Abstand erneut messen", "mm")
     c.val("Messschieber vorher", a, "mm"); c.val("Messschieber nachher", b, "mm")
-    c.val("Differenz", abs(a - b), "mm", "≤ 0,1")
+    c.val("Differenz", abs(a - b), "mm", mx=0.1)
     c.val("Fahrten (Ziel mm @ mm/s)", " ".join(targets))
     check(abs(a - b) <= 0.1, "Abweichung %.2f mm nach 10 Fahrten" % abs(a - b))
     return "Differenz %.2f mm" % abs(a - b)
@@ -411,7 +471,7 @@ def m08(c):
     else:
         now_banner("VORDEREN Endschalter kurz drücken")
     p = d.wait(lambda q: q["state"] in ("FAULT", "WAIT_ACK"), 40, "MOTOR_FAULT", allow_fault=True)
-    c.val("Fehler", SYS_ERR[p["err"]], "", "MOTOR_FAULT")
+    c.val("Fehler", SYS_ERR[p["err"]], eq="MOTOR_FAULT")
     c.val("Halteposition", p["motion"]["pos"], "mm")
     check(p["err"] == 4, "Fehler %s (erwartet MOTOR_FAULT)" % SYS_ERR[p["err"]])
     stopped = p["motion"]["pos"]
@@ -436,13 +496,13 @@ def m09(c):
     else:
         now_banner("NOT-AUS drücken und gedrückt halten")
     p = d.wait(lambda q: q["state"] in ("FAULT", "WAIT_ACK"), 60, "Not-Aus", allow_fault=True)
-    c.val("Fehler", SYS_ERR[p["err"]], "", "ESTOP")
+    c.val("Fehler", SYS_ERR[p["err"]], eq="ESTOP")
     c.val("Halteposition", p["motion"]["pos"], "mm")
     check(p["err"] == 1 and p["safety"]["estop"], "Fehler %s (erwartet ESTOP)" % SYS_ERR[p["err"]])
     check(not p["safety"]["hv_on"] and p["safety"]["shutter"] == "closed", "HV/Shutter nicht aus")
     d.ok("SET", key="cooling_flow", value=False)
     p2 = d.proc()
-    c.val("Fehler mit cooling_flow = false", SYS_ERR[p2["err"]], "", "ESTOP")
+    c.val("Fehler mit cooling_flow = false", SYS_ERR[p2["err"]], eq="ESTOP")
     check(p2["err"] == 1, "mit cooling_flow false: Fehler %s" % SYS_ERR[p2["err"]])
     d.expect(-6, "ACK")
     d.ok("SET", key="cooling_flow", value=True)
@@ -460,9 +520,9 @@ def m09(c):
         now_banner("ACK-Fläche auf dem Display drücken und 1 s halten")
         t0 = time.time()
         d.wait(lambda q: q["state"] != "WAIT_ACK", 60, "Quittierung am Display", allow_fault=True)
-        c.val("Zeit bis Quittierung am Display", time.time() - t0, "s", "≥ 1")
+        c.val("Zeit bis Quittierung am Display", time.time() - t0, "s", mn=1.0, warn=False)
     p = d.wait(lambda q: q["state"] in ("SAFE_START", "READY"), 3, "nach ACK")
-    c.val("Zustand nach ACK", p["state"], "", "SAFE_START")
+    c.val("Zustand nach ACK", p["state"], eq="SAFE_START")
     check(p["state"] == "SAFE_START" and not p["motion"]["homed"], "nach Not-Aus in Fahrt %s, homed %s" % (
         p["state"], p["motion"]["homed"]))
     return "ESTOP in Fahrt; mit cooling_flow false weiter ESTOP; ACK bei gedrücktem Not-Aus -> PRECONDITION; danach INIT nötig"
@@ -494,7 +554,7 @@ def m10(c):
         now_banner("Display-Taste %s drücken" % key)
         t0 = time.time()
         d.wait(cond, timeout, "Taste %s: %s" % (key, what))
-        c.val("Taste %s -> %s" % (key, what), "%.1f s" % (time.time() - t0))
+        c.val("Taste %s -> %s" % (key, what), round(time.time() - t0, 1), "s", status="ok", target="Wirkung in /proc")
         done.append(key)
         if key == "TRAV":
             c.asks(["Läuft der Positionsbalken synchron mit der Achse?"])
@@ -536,7 +596,7 @@ def m12(c):
     now_banner("NOT-AUS drücken")
     d.wait(lambda q: q["state"] in ("FAULT", "WAIT_ACK"), 30, "Not-Aus", allow_fault=True)
     ms = c.number("Zeit von der Flanke (Kanal 1) bis zum letzten Schrittpuls (Kanal 2)", "ms")
-    c.val("Not-Aus -> letzter Schritt", ms, "ms", "≤ 2")
+    c.val("Not-Aus -> letzter Schritt", ms, "ms", mx=2.0)
     c.prompt("Bildschirmfoto als docs/reviews/A1_estop_oszi.png speichern. Not-Aus LÖSEN")
     d.wait(lambda q: not q["safety"]["estop"], 60, "Not-Aus gelöst", allow_fault=True)
     d.ok("ACK")
@@ -552,13 +612,13 @@ def t01(c):
              "/font-u700.woff2", "/font-m400.woff2", "/font-m700.woff2", "/add"]
     for path in paths:
         t0 = time.perf_counter(); code, _ = d.raw(path, timeout=5); dt = time.perf_counter() - t0
-        c.val("GET %s (HTTP %d)" % (path, code), dt * 1000, "ms", "< 1000")
+        c.val("GET %s (HTTP %d)" % (path, code), dt * 1000, "ms", mx=1000)
         if path == "/add" and code == 404:
             continue                          # until Sprint D1
         check(code == 200, "%s -> HTTP %d" % (path, code))
         if dt >= 1.0: slow.append(path)
     t0 = time.perf_counter(); d.ok("GET_STATE")
-    c.val("POST /api GET_STATE", (time.perf_counter() - t0) * 1000, "ms", "< 1000")
+    c.val("POST /api GET_STATE", (time.perf_counter() - t0) * 1000, "ms", mx=1000)
     check(not slow, "langsamer als 1 s: %s" % slow)
     return "alle < 1 s (/add 404 bis Sprint D1)"
 
@@ -568,7 +628,7 @@ def t02(c):
     code, txt = c.d.raw("/proc")
     check(code == 200 and verify(txt), "CRC ungültig")
     n = len(txt.encode())
-    c.val("Länge /proc", n, "Byte", "≤ 512")
+    c.val("Länge /proc", n, "Byte", mx=512, warn=False)
     check(n <= 512, "länger als 512 Byte (%d)" % n)
     p = json.loads(txt)
     check(set(p) - {"crc"} == PROC_KEYS, "Felder: %s" % sorted(p))
@@ -586,11 +646,11 @@ def t03(c):
         hc, txt = d.raw("/api", body)
         check(verify(txt), "Antwort ohne CRC bei %s" % ERR[err])
         r = json.loads(txt)
-        c.val("Antwort auf %s-Fall" % ERR[err], "HTTP %d, err %d" % (hc, r["err"]), "", "HTTP %d, err %d" % (code, err))
+        c.val("Antwort auf %s-Fall" % ERR[err], "HTTP %d, err %d" % (hc, r["err"]), eq="HTTP %d, err %d" % (code, err))
         check(hc == code and r["err"] == err, "%s: HTTP %d err %s" % (ERR[err], hc, r["err"]))
     if d.proc()["state"] != "WAIT_ACK":
         d.expect(-5, "ACK")
-        c.val("ACK außerhalb WAIT_ACK", "err -5", "", "err -5")
+        c.val("ACK außerhalb WAIT_ACK", "err -5", eq="err -5")
     return "alle Fehlerantworten wie erwartet"
 
 
@@ -605,9 +665,9 @@ def t04(c):
     time.sleep(1.0)
     d.reboot()
     cfg = d.config(); p = d.proc()
-    c.val("measure_pos nach Neustart", cfg["measure_pos"], "mm", new)
+    c.val("measure_pos nach Neustart", cfg["measure_pos"], "mm", nom=new, tol=0.05, warn=False)
     c.val("interlock / cooling_flow / temp nach Neustart", "%s / %s / %s" % (cfg["interlock"], cfg["cooling_flow"], cfg["temp"]),
-          "", "True / True / 18.0")
+          eq="True / True / 18.0")
     try:
         check(abs(cfg["measure_pos"] - new) < 0.05, "measure_pos nach Neustart %s" % cfg["measure_pos"])
         check(cfg["interlock"] is True and cfg["cooling_flow"] is True and cfg["temp"] == 18.0, "Sicherheitsflags nicht zurückgesetzt")
@@ -629,7 +689,7 @@ def t05(c):
     t0 = time.time()
     p = d.wait(lambda q: q["state"] == "READY" and q["motion"]["homed"] and Device.still(q), 90, "INIT")
     c.val("Dauer INIT", time.time() - t0, "s")
-    c.val("Position nach INIT", p["motion"]["pos"], "mm", "0,0")
+    c.val("Position nach INIT", p["motion"]["pos"], "mm", nom=0.0, tol=0.05, warn=False)
     check(abs(p["motion"]["pos"]) <= 0.05, "Position nach INIT %.2f" % p["motion"]["pos"])
     check(not p["motion"]["limit_bwd"], "hinterer Endschalter nach INIT noch betätigt (kein Rückzug)")
     return "READY, Endschalter frei"
@@ -643,12 +703,12 @@ def t07(c):
         d.ok("SET", key=key, value=bad)
         check(not d.proc()["safety"]["hv_ok"], "hv_ok trotz %s=%s" % (key, bad))
         e = d.api("HV_ON")
-        c.val("HV_ON mit %s = %s" % (key, bad), ERR.get(e, e), "", "PRECONDITION")
+        c.val("HV_ON mit %s = %s" % (key, bad), ERR.get(e, e), eq="PRECONDITION")
         check(e == -6 and not d.proc()["safety"]["hv_on"], "HV_ON mit %s=%s -> %s" % (key, bad, ERR.get(e, e)))
         d.ok("SET", key=key, value=good)
     d.ok("HV_ON")
     st = d.proc()["state"]
-    c.val("HV_ON mit allen Bedingungen", st, "", "RUNNING")
+    c.val("HV_ON mit allen Bedingungen", st, eq="RUNNING")
     check(st == "RUNNING", "-> %s" % st)
     d.ok("HV_OFF")
     return "jede fehlende Bedingung -> PRECONDITION (Not-Aus: M09)"
@@ -660,21 +720,21 @@ def t09(c):
     d.ready(hv=True)
     d.ok("SET", key="temp", value=31.0)
     p = d.wait(lambda q: not q["safety"]["hv_on"], 2, "HV aus bei 31 °C")
-    c.val("31 °C: Zustand / Fehler", "%s / %s" % (p["state"], SYS_ERR[p["err"]]), "", "READY / NONE")
+    c.val("31 °C: Zustand / Fehler", "%s / %s" % (p["state"], SYS_ERR[p["err"]]), eq="READY / NONE")
     check(p["state"] == "READY" and p["err"] == 0, "31 °C: %s %s" % (p["state"], SYS_ERR[p["err"]]))
     d.ok("SET", key="temp", value=18.0)
     d.ok("HV_ON")
     d.ok("SET", key="temp", value=35.0)
     p = d.wait(lambda q: q["state"] == "WAIT_ACK", 2, "TEMP_HIGH", allow_fault=True)
-    c.val("35 °C: Fehler", SYS_ERR[p["err"]], "", "TEMP_HIGH")
+    c.val("35 °C: Fehler", SYS_ERR[p["err"]], eq="TEMP_HIGH")
     check(p["err"] == 2 and not p["safety"]["hv_on"], "35 °C: %s" % SYS_ERR[p["err"]])
     e = d.api("ACK")
-    c.val("ACK bei 35 °C", ERR.get(e, e), "", "PRECONDITION")
+    c.val("ACK bei 35 °C", ERR.get(e, e), eq="PRECONDITION")
     check(e == -6, "ACK bei 35 °C -> %s" % ERR.get(e, e))
     d.ok("SET", key="temp", value=25.0)
     d.ok("ACK")
     p = d.wait(lambda q: q["state"] == "READY", 2, "READY nach ACK")
-    c.val("nach ACK bei 25 °C: HV", p["safety"]["hv_on"], "", "False")
+    c.val("nach ACK bei 25 °C: HV", p["safety"]["hv_on"], eq=False)
     check(not p["safety"]["hv_on"], "HV nach ACK wieder an")
     d.ok("SET", key="temp", value=18.0)
     return "wie erwartet"
@@ -686,8 +746,8 @@ def t10(c):
     d.ready(hv=True)
     d.move(10)
     e1 = d.api("SHUTTER_OPEN"); e2 = d.api("START_MEASURE", pos=10)
-    c.val("SHUTTER_OPEN bei 10 mm", ERR.get(e1, e1), "", "PRECONDITION")
-    c.val("START_MEASURE bei 10 mm", ERR.get(e2, e2), "", "BAD_PARAM")
+    c.val("SHUTTER_OPEN bei 10 mm", ERR.get(e1, e1), eq="PRECONDITION")
+    c.val("START_MEASURE bei 10 mm", ERR.get(e2, e2), eq="BAD_PARAM")
     check(e1 == -6 and e2 == -4, "SHUTTER_OPEN %s, START_MEASURE %s" % (ERR.get(e1), ERR.get(e2)))
     d.move(40)
     d.ok("SHUTTER_OPEN")
@@ -699,7 +759,8 @@ def t10(c):
         if closed_at is None and p["safety"]["shutter"] == "closed": closed_at = p["motion"]["pos"]
         if Device.still(p): break
         time.sleep(0.03)
-    c.val("manueller Shutter schließt bei", closed_at if closed_at is not None else "–", "mm", "> 20,0 (Einfahrt Parkzone)")
+    c.val("manueller Shutter schließt bei", closed_at if closed_at is not None else "–", "mm", target="Info: erste Abfrage mit Shutter zu (Abtastung ≈ 0,5 mm)")
+    c.val("Abfragen mit offenem Shutter in der Parkzone", len(bad), eq=0)
     check(not bad, "Shutter offen bei pos %s" % bad[:3])
     return "Parkzone immer zu"
 
@@ -710,12 +771,12 @@ def t11(c):
     d.ready(hv=True)
     d.move(40)
     e = d.api("SHUTTER_OPEN")
-    c.val("SHUTTER_OPEN bei 40 mm", ERR.get(e, e), "", "OK")
+    c.val("SHUTTER_OPEN bei 40 mm", ERR.get(e, e), eq="OK")
     check(e == 0 and d.proc()["safety"]["shutter"] == "open", "Shutter bei 40 mm nicht offen")
     d.ok("SHUTTER_CLOSE")
     d.move(145)
     e = d.api("SHUTTER_OPEN")
-    c.val("SHUTTER_OPEN bei 145 mm", ERR.get(e, e), "", "PRECONDITION")
+    c.val("SHUTTER_OPEN bei 145 mm", ERR.get(e, e), eq="PRECONDITION")
     check(e == -6, "145 mm -> %s" % ERR.get(e, e))
     return "wie erwartet"
 
@@ -727,7 +788,7 @@ def t12(c):
     for cmd, kw in (("START_MEASURE", dict(pos=40)), ("START_MEASURE", dict(pos=60)),
                     ("START_TRAVERSE", dict(start=60, end=100, speed=10))):
         e = d.api(cmd, **kw)
-        c.val("%s %s" % (cmd, kw), ERR.get(e, e), "", "BAD_PARAM")
+        c.val("%s %s" % (cmd, kw), ERR.get(e, e), eq="BAD_PARAM")
         check(e == -4, "%s %s -> %s" % (cmd, kw, ERR.get(e, e)))
     d.ok("START_TRAVERSE", start=100, end=70, speed=10)
     bad, opened = [], False
@@ -749,7 +810,8 @@ def t12(c):
         if closed_at is None and p["safety"]["shutter"] == "closed": closed_at = p["motion"]["pos"]
         if Device.still(p): break
         time.sleep(0.03)
-    c.val("automatischer Shutter schließt bei", closed_at if closed_at is not None else "–", "mm", "> 60,0")
+    c.val("automatischer Shutter schließt bei", closed_at if closed_at is not None else "–", "mm", target="Info: erste Abfrage mit Shutter zu (Abtastung ≈ 0,5 mm)")
+    c.val("Abfragen mit offenem Shutter in der Servicezone", len(bad), eq=0)
     check(not bad, "Shutter offen bei pos %s" % bad[:3])
     return "Servicezone immer zu"
 
@@ -763,7 +825,7 @@ def t13(c):
     d.wait(lambda q: q["motion"]["mode"] == "none", 30, "Ende Hinfahrt")
     t_gap = time.time()
     d.ok("START_TRAVERSE", start=200, end=100, speed=10)
-    c.val("Zeit bis zum Folgebefehl", time.time() - t_gap, "s", "< 3")
+    c.val("Zeit bis zum Folgebefehl", time.time() - t_gap, "s", mx=3.0)
     closed_at = []
     d.wait(lambda q: q["motion"]["mode"] == "traverse", 3, "Rückfahrt startet")
     while True:
@@ -775,13 +837,13 @@ def t13(c):
     t_end = time.time()
     d.wait(lambda q: q["safety"]["shutter"] == "closed", 6, "Shutter schließt nach der Nachlaufzeit")
     dt = time.time() - t_end
-    c.val("Shutter zu nach Laufende", dt, "s", "3 (2,5 … 4,0)")
+    c.val("Shutter zu nach Laufende", dt, "s", lo=2.5, hi=4.0, target="3 (2,5 … 4,0)")
     check(2.5 <= dt <= 4.0, "Shutter nach %.1f s zu" % dt)
     d.ok("START_MEASURE", pos=155)
     d.wait(lambda q: q["motion"]["mode"] == "measure" and q["safety"]["shutter"] == "open", 30, "Messung, Shutter offen")
     d.ok("STOP")
     sh = d.proc()["safety"]["shutter"]
-    c.val("Shutter direkt nach STOP", sh, "", "closed")
+    c.val("Shutter direkt nach STOP", sh, eq="closed")
     check(sh == "closed", "Shutter nach STOP noch offen")
     return "wie erwartet"
 
@@ -791,8 +853,8 @@ def t14(c):
     d = c.d
     d.ready()
     p = d.move(242)
-    c.val("Position", p["motion"]["pos"], "mm", "242,0")
-    c.val("vorderer Endschalter", p["motion"]["limit_fwd"], "", "False")
+    c.val("Position", p["motion"]["pos"], "mm", nom=242.0, tol=0.1, warn=False)
+    c.val("vorderer Endschalter", p["motion"]["limit_fwd"], eq=False)
     check(not p["motion"]["limit_fwd"] and p["state"] == "READY", "Endschalter %s, %s" % (p["motion"]["limit_fwd"], p["state"]))
     return "Endschalter frei"
 
@@ -808,8 +870,8 @@ def t15(c):
     d.ok("SET", key="cooling_flow", value=False)
     p = d.wait(lambda q: not q["safety"]["hv_on"] and q["safety"]["shutter"] == "closed" and q["motion"]["mode"] == "none",
                1.0, "HV aus, Shutter zu, Programm beendet")
-    c.val("HV aus / Shutter zu nach", (time.time() - t0) * 1000, "ms", "< 1000")
-    c.val("Zustand / Fehler", "%s / %s" % (p["state"], SYS_ERR[p["err"]]), "", "READY / NONE")
+    c.val("HV aus / Shutter zu nach", (time.time() - t0) * 1000, "ms", mx=1000)
+    c.val("Zustand / Fehler", "%s / %s" % (p["state"], SYS_ERR[p["err"]]), eq="READY / NONE")
     check(p["state"] == "READY" and p["err"] == 0, "Zustand %s, Fehler %s" % (p["state"], SYS_ERR[p["err"]]))
     p = d.idle(2, "Achse steht")
     c.val("Halteposition", p["motion"]["pos"], "mm")
@@ -836,8 +898,8 @@ def t16(c):
         dt = time.time() - t_last
     finally:
         d.hb = True
-    c.val("Fehler", SYS_ERR[p["err"]], "", "COMM_TIMEOUT")
-    c.val("Zeit seit dem letzten /api-Paket", dt, "s", "5 (4,8 … 6,5)")
+    c.val("Fehler", SYS_ERR[p["err"]], eq="COMM_TIMEOUT")
+    c.val("Zeit seit dem letzten /api-Paket", dt, "s", lo=4.8, hi=6.5, target="5 (4,8 … 6,5)")
     check(p["err"] == 3, "Fehler %s" % SYS_ERR[p["err"]])
     check(4.8 <= dt <= 6.5, "Fehler nach %.1f s" % dt)
     check(not p["safety"]["hv_on"] and p["safety"]["shutter"] == "closed", "HV/Shutter nach Fehler nicht aus")
@@ -845,7 +907,7 @@ def t16(c):
     time.sleep(2.0)
     p = d.proc()
     c.val("nach ACK: Zustand / homed / HV", "%s / %s / %s" % (p["state"], p["motion"]["homed"], p["safety"]["hv_on"]),
-          "", "SAFE_START / False / False")
+          eq="SAFE_START / False / False")
     check(not p["safety"]["hv_on"] and Device.still(p), "Wiederanlauf nach ACK")
     check(p["state"] == "SAFE_START" and not p["motion"]["homed"], "nach Fehler in Fahrt: %s" % p["state"])
     d.expect(-5, "HV_ON")
@@ -865,13 +927,13 @@ def t17(c):
     deferred0, saved0 = d.count("save deferred"), d.count("nvs: saved")
     d.ok("SET", key="maint_pos", value=new)
     time.sleep(1.0)
-    c.val("'save deferred' während der Fahrt", d.count("save deferred") > deferred0, "", "True")
-    c.val("'nvs: saved' während der Fahrt", d.count("nvs: saved") > saved0, "", "False")
+    c.val("'save deferred' während der Fahrt", d.count("save deferred") > deferred0, eq=True)
+    c.val("'nvs: saved' während der Fahrt", d.count("nvs: saved") > saved0, eq=False)
     check(d.count("save deferred") > deferred0, "keine neue Zeile 'nvs: save deferred' im Log")
     check(d.count("nvs: saved") == saved0, "während der Fahrt gespeichert")
     d.idle(40)
     time.sleep(1.0)
-    c.val("'nvs: saved' nach dem Stillstand", d.count("nvs: saved") > saved0, "", "True")
+    c.val("'nvs: saved' nach dem Stillstand", d.count("nvs: saved") > saved0, eq=True)
     check(d.count("nvs: saved") > saved0, "nach dem Stillstand nicht gespeichert")
     check(d.config()["maint_pos"] == new, "maint_pos nicht übernommen")
     d.ok("SET", key="maint_pos", value=orig)
@@ -879,26 +941,64 @@ def t17(c):
     return "Speichern erst im Stillstand"
 
 
-@test("T18", 2, "2, 8", "Stehende Messung je Stufe: Dicke ±0,5 mm, Abstand ±1 mm")
-def t18(c):
+def stats(v):
+    """-> (mean, sigma (sample standard deviation), min, max, n)"""
+    n = len(v)
+    if not n:
+        return float("nan"), float("nan"), float("nan"), float("nan"), 0
+    m = sum(v) / n
+    sd = (sum((x - m) ** 2 for x in v) / (n - 1)) ** 0.5 if n > 1 else 0.0
+    return m, sd, min(v), max(v), n
+
+
+def measure_steps(c):
+    """Stationary measurement at every step centre: 2 s settling, then 40 samples from /proc (every 50 ms).
+    Cached for T18 and T20. -> {pos: {"dist": [...], "thick": [...], "avg": device mean, "n": device n}}"""
+    if "steps" in c.cache:
+        return c.cache["steps"]
     d = c.d
     d.ready(hv=True)
-    bad = []
+    res = {}
     for pos, dist, thick in STEPS:
         d.ok("START_MEASURE", pos=pos)
         d.wait(lambda q: q["motion"]["mode"] == "measure" and abs(q["motion"]["pos"] - pos) <= 0.1
                and q["motion"]["vel"] == 0 and q["safety"]["shutter"] == "open", 40, "Messung bei %d mm" % pos)
         time.sleep(2.0)
+        ds, ts = [], []
+        for _ in range(40):
+            q = d.proc()
+            if q["measure"]["valid"] and q["measure"]["in_range"]:
+                ds.append(q["measure"]["dist"]); ts.append(q["measure"]["thick"])
+            time.sleep(0.05)
         m = d.proc()["measure"]
         d.ok("STOP")
-        c.val("%d mm: Abstand" % pos, m["dist"], "mm", "%.1f ± 1" % dist)
-        c.val("%d mm: Dicke Mittel" % pos, m["avg"], "mm", "%.1f ± 0,5" % thick)
-        c.val("%d mm: Anzahl Messwerte" % pos, m["n"], "", "≥ 10")
-        c.val("%d mm: Abweichung Dicke" % pos, m["avg"] - thick, "mm", "± 0,5")
-        if abs(m["avg"] - thick) > 0.5 or abs(m["dist"] - dist) > 1.0 or m["n"] < 10:
+        res[pos] = {"dist": ds, "thick": ts, "avg": m["avg"], "n": m["n"]}
+        c.raw_out.append(("%s – Einzelwerte Stufe %d mm (Soll Abstand %.1f, Dicke %.1f)" % (c.tid, pos, dist, thick),
+                          "Abstand [mm]: " + " ".join("%.1f" % x for x in ds) +
+                          "\nDicke [mm]:   " + " ".join("%.1f" % x for x in ts)))
+    c.cache["steps"] = res
+    return res
+
+
+@test("T18", 2, "2, 8", "Stehende Messung je Stufe: Dicke ±0,5 mm, Abstand ±1 mm (Mittelwert, Sigma)")
+def t18(c):
+    res = measure_steps(c)
+    bad = []
+    for pos, dist, thick in STEPS:
+        r = res[pos]
+        dm, dsd, dmin, dmax, n = stats(r["dist"])
+        tm, tsd, tmin, tmax, _ = stats(r["thick"])
+        sts = [c.val("%d mm: Abstand Mittelwert" % pos, dm, "mm", nom=dist, tol=1.0),
+               c.val("%d mm: Dicke Mittelwert" % pos, tm, "mm", nom=thick, tol=0.5),
+               c.val("%d mm: Dicke Mittelwert der Anlage (avg)" % pos, r["avg"], "mm", nom=thick, tol=0.5),
+               c.val("%d mm: Dicke Sigma" % pos, tsd, "mm", mx=0.17, target="≤ 0,17 (3σ ≤ 0,5)"),
+               c.val("%d mm: Anzahl Einzelwerte" % pos, n, mn=30, warn=False)]
+        c.val("%d mm: Dicke Min / Max" % pos, "%.1f / %.1f" % (tmin, tmax), "mm")
+        c.val("%d mm: Abstand Sigma" % pos, dsd, "mm")
+        if "fail" in sts:
             bad.append("%d mm" % pos)
     check(not bad, "außerhalb der Toleranz: %s" % ", ".join(bad))
-    return "alle Stufen in Toleranz"
+    return "alle Stufen in Toleranz (Einzelwerte im Anhang)"
 
 
 @test("T19", 2, "8", "Profilfahrt: Kanten der Stufen erkannt, Statistik plausibel")
@@ -916,35 +1016,45 @@ def t19(c):
             samples.append((p["motion"]["pos"], m["thick"], m["on_material"]))
         time.sleep(0.05)
     avg, n = p["measure"]["avg"], p["measure"]["n"]
-    c.val("Messwerte im Lauf", len(samples), "", "> 200")
+    c.val("Messwerte im Lauf", len(samples), mn=201)
     check(len(samples) > 200, "zu wenige Messwerte (%d)" % len(samples))
     on = [s[0] for s in samples if s[2]]
     check(on, "kein Messgut erkannt")
     first, last = min(on), max(on)
-    c.val("steigende Kante (Messgut ab)", first, "mm", "105 ± 3")
-    c.val("fallende Kante (Messgut bis)", last, "mm", "225 ± 3")
+    c.val("steigende Kante (Messgut ab)", first, "mm", nom=105.0, tol=3.0)
+    c.val("fallende Kante (Messgut bis)", last, "mm", nom=225.0, tol=3.0)
     bad = []
     for pos, _, thick in STEPS:
         v = sorted(s[1] for s in samples if abs(s[0] - pos) <= 5.0)
         med = v[len(v) // 2] if v else float("nan")
-        c.val("Stufe %d mm: Dicke (Median)" % pos, med, "mm", "%.1f ± 1" % thick)
+        c.val("Stufe %d mm: Dicke (Median)" % pos, med, "mm", nom=thick, tol=1.0)
         c.val("Stufe %d mm: Anzahl Werte" % pos, len(v))
         if not v or abs(med - thick) > 1.0: bad.append(pos)
-    c.val("Mittelwert der Anlage", avg, "mm", "5 … 30")
-    c.val("Anzahl Werte der Anlage", n, "", "> 50")
+    c.val("Mittelwert der Anlage", avg, "mm", lo=5.0, hi=30.0, warn=False)
+    c.val("Anzahl Werte der Anlage", n, mn=51)
     check(abs(first - 105) <= 3 and abs(last - 225) <= 3, "Kanten bei %.1f / %.1f mm" % (first, last))
     check(not bad, "Stufen außerhalb ±1 mm: %s" % bad)
     check(5.0 <= avg <= 30.0 and n > 50, "Statistik: Mittel %.2f, n %d" % (avg, n))
     return "Kanten und Stufen in Toleranz"
 
 
-@test("T20", 2, "8", "Kalibrierung gespeichert und wirksam")
+@test("T20", 2, "8", "Kalibrierung gespeichert und wirksam (Abweichung je Stufe mit Mittelwert und Sigma)")
 def t20(c):
     cfg = c.d.config()
-    for k in sorted(k for k in cfg if k.startswith("calib_")):
-        c.val(k, cfg[k])
+    for k in sorted(k for k in cfg if k.startswith("calib_") and k != "calib_valid"):
+        c.val("Parameter %s" % k, cfg[k], "mm")
+    c.val("calib_valid", cfg["calib_valid"], eq=True)
     check(cfg["calib_valid"], "calib_valid = false")
-    return "calib_valid (wirksam: T18)"
+    res = measure_steps(c)
+    bad = []
+    for pos, dist, thick in STEPS:
+        dm, dsd, _, _, n = stats(res[pos]["dist"])
+        st = c.val("Stufe %d mm: Abweichung Abstand (Mittelwert – %.0f mm)" % (pos, dist), dm - dist, "mm", nom=0.0, tol=1.0)
+        c.val("Stufe %d mm: Sigma Abstand" % pos, dsd, "mm")
+        if st == "fail":
+            bad.append("%d mm" % pos)
+    check(not bad, "Kalibrierung nicht wirksam an: %s" % ", ".join(bad))
+    return "calib_valid, Abweichung je Stufe ≤ 1 mm"
 
 
 def stress(c, name, *extra, timeout=900):
@@ -1081,15 +1191,30 @@ def main():
             except Skip as e:
                 status, detail = "SKIP", str(e)
                 recover(d)
+            except Problem as e:
+                status, detail = "PROBLEM", str(e)
+                recover(d)
+            except (urllib.error.URLError, ConnectionError, TimeoutError, OSError) as e:
+                status, detail = "PROBLEM", "Anlage nicht erreichbar: %s" % e
+                recover(d)
             except Fail as e:
                 status, detail = "FAIL", str(e)
                 recover(d)
             except Exception as e:
                 status, detail = "FAIL", "%s: %s" % (type(e).__name__, e)
                 recover(d)
+            mine = [v for v in c.values if v[0] == tid]
+            if status == "PASS" and any(v[1] == "fail" for v in mine):
+                status = "FAIL"
+                detail = "Messwert außerhalb Soll: " + ", ".join(v[2] for v in mine if v[1] == "fail")
+            if status == "PASS" and any(v[1] in ("warn", "skip") for v in mine):
+                if any(v[1] == "warn" for v in mine):
+                    status = "WARN"
+                    detail += " – Achtung nah am Grenzwert: " + ", ".join(v[2] for v in mine if v[1] == "warn")
             if c.notes:
                 detail += " [" + "; ".join(c.notes) + "]"
-            say("  -> %s  %s  (%.0f s)" % (status, detail, time.time() - t0))
+            say("  -> %s  %s  (%.0f s)" % ({"PASS": "✅", "WARN": "✅ ⚠️", "FAIL": "❌", "SKIP": "⏭", "PROBLEM": "⛔"}[status],
+                                         detail, time.time() - t0))
             results.append((tid, part, block, title, status, detail, time.time() - t0))
     except KeyboardInterrupt:
         say("\nabgebrochen – sende STOP und HV_OFF")
@@ -1103,7 +1228,7 @@ def main():
             pass
     c.tid = "T28"
     run_min = (datetime.datetime.now() - start).seconds / 60
-    c.val("Laufzeit", run_min, "min"); c.val("unerwartete Neustarts", d.resets, "", "0")
+    c.val("Laufzeit", run_min, "min"); c.val("unerwartete Neustarts", d.resets, eq=0)
     results.append(("T28", 2, "1", "Kein unerwarteter Neustart während der Abnahme", "PASS" if d.resets == 0 else "FAIL",
                     "Laufzeit %.0f min" % run_min, 0))
     c.tid = "T29"
@@ -1112,9 +1237,11 @@ def main():
         d.ok("GET_STATE")
         state = dict(d.last_reply)
         for k in ("cycle_max_us", "period_max_us", "prio_lat_max_us"):
-            c.val(k, state[k], "µs", "≤ 3000")
+            c.val(k, state[k], "µs", mx=3000)
         c.val("overruns (Info)", state["overruns"])
         st = "PASS" if all(state[k] <= 3000 for k in ("cycle_max_us", "period_max_us", "prio_lat_max_us")) else "FAIL"
+        if st == "PASS" and any(v[1] == "warn" for v in c.values if v[0] == "T29"):
+            st = "WARN"
         detail = "seit dem letzten Neustart" + (" – Simulator: Zeitwerte nicht simuliert" if args.sim else "")
     except Exception as e:
         detail = "GET_STATE: %s" % e
@@ -1125,12 +1252,15 @@ def main():
         cfg_end, log_end = {}, []
     d.run = False
 
-    n = {s: sum(1 for r in results if r[4] == s) for s in ("PASS", "FAIL", "SKIP")}
+    n = {s: sum(1 for r in results if r[4] == s) for s in ("PASS", "WARN", "FAIL", "SKIP", "PROBLEM")}
     out_dir = args.out_dir or ("docs/reviews" if os.path.isdir("docs/reviews") else ".")
     os.makedirs(out_dir, exist_ok=True)
     name = "Abnahme_A1_%s%s.md" % (start.strftime("%Y-%m-%d_%H%M"), "_" + args.tag if args.tag else "")
     out = os.path.join(out_dir, name)
-    mark = {"PASS": "✅ bestanden", "FAIL": "❌ **nicht bestanden**", "SKIP": "⏭ nicht geprüft"}
+    mark = {"PASS": "✅ bestanden", "WARN": "✅ ⚠️ bestanden, Achtung", "FAIL": "❌ **nicht bestanden**",
+            "SKIP": "⏭ übersprungen", "PROBLEM": "⛔ **Problem**"}
+    total = "%d ✅ bestanden (davon %d mit ⚠️ Achtung) · %d ❌ nicht bestanden · %d ⛔ Problem · %d ⏭ übersprungen" % (
+        n["PASS"] + n["WARN"], n["WARN"], n["FAIL"], n["PROBLEM"], n["SKIP"])
     with open(out, "w", encoding="utf-8") as fh:
         fh.write("# Abnahme A1 – Prüfprotokoll\n\n| | |\n|---|---|\n")
         fh.write("| Prüfer | %s |\n" % md(pruefer))
@@ -1138,7 +1268,8 @@ def main():
         fh.write("| Gerät | http://%s/%s |\n" % (args.host, " (Simulator)" if args.sim else ""))
         fh.write("| Firmware | %s |\n| Repository | %s |\n" % (md(boot[-1] if boot else "–"), md(git_rev())))
         fh.write("| Aufruf | `%s` |\n" % md(" ".join(sys.argv[1:])))
-        fh.write("| Ergebnis | **%d bestanden, %d nicht bestanden, %d nicht geprüft** |\n\n" % (n["PASS"], n["FAIL"], n["SKIP"]))
+        fh.write("| Ergebnis | **%s** |\n\n" % total)
+        fh.write("### Symbole\n\n" + LEGEND + "\n")
         for part, head in ((1, "Teil 1 – Handprüfungen"), (2, "Teil 2 – automatische Prüfungen")):
             rows = [r for r in results if r[1] == part]
             if not rows: continue
@@ -1147,10 +1278,10 @@ def main():
                 fh.write("| %s | %s | %s | %s | %s | %s |\n" % (tid, block, md(title), mark[status], md(detail),
                                                               "%.0f s" % secs if secs else "–"))
             fh.write("\n")
-        fh.write("## Messwerte\n\nAlle erhobenen Werte – zum Vergleich zweier Abnahmen.\n\n"
-                 "| ID | Größe | Wert | Einheit | Soll |\n|---|---|---|---|---|\n")
-        for tid, k, v, unit, target in c.values:
-            fh.write("| %s | %s | %s | %s | %s |\n" % (tid, md(k), md(v), md(unit), md(target)))
+        fh.write("## Messwerte\n\nAlle erhobenen Werte und Antworten – zum Vergleich zweier Abnahmen.\n\n"
+                 "| | ID | Größe | Wert | Einheit | Soll |\n|---|---|---|---|---|---|\n")
+        for tid, st, k, v, unit, target in c.values:
+            fh.write("| %s | %s | %s | %s | %s | %s |\n" % (SYMBOL[st], tid, md(k), md(v), md(unit), md(target)))
         fh.write("\n## Anhang\n\n### Konfiguration zu Beginn (GET_CONFIG)\n\n```json\n%s\n```\n\n"
                  % json.dumps(cfg_start, ensure_ascii=False, indent=1))
         fh.write("### Konfiguration am Ende\n\n```json\n%s\n```\n\n" % json.dumps(cfg_end, ensure_ascii=False, indent=1))
@@ -1158,8 +1289,8 @@ def main():
         fh.write("### /log am Ende\n\n```\n%s\n```\n\n" % "\n".join(log_end))
         for title, text in c.raw_out:
             fh.write("### %s\n\n```\n%s\n```\n\n" % (title, text))
-    say("\n%d bestanden, %d nicht bestanden, %d nicht geprüft – Protokoll: %s" % (n["PASS"], n["FAIL"], n["SKIP"], out))
-    sys.exit(1 if n["FAIL"] else 0)
+    say("\n%s\nProtokoll: %s" % (total, out))
+    sys.exit(1 if n["FAIL"] or n["PROBLEM"] else 0)
 
 
 if __name__ == "__main__":
