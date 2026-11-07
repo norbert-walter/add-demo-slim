@@ -38,11 +38,22 @@ Dickenmessers. Sie läuft vollständig auf einem ESP32 (Board MKS DLC32 V2.1) un
 - liest den Abstandssensor, rechnet den Abstand in eine Dicke um und bildet Statistiken,
 - bildet die Sicherheitslogik eines radiometrischen Messgeräts nach (Hochspannung, Shutter,
   Not-Aus, Freigaben, Quittierung, Kommunikations-Watchdog),
-- bietet drei Bedienwege: **Touch-Display** an der Anlage, **Weboberfläche** im Browser und
-  **REST-API** für Skripte und KI-Agenten,
+- bietet mehrere Bedienwege (Tabelle unten),
 - stellt ein **ADD-Dokument** (AI Device Description) bereit, mit dem sich die Anlage einer KI
   selbst beschreibt,
 - betreibt WLAN als eigenen Access Point und optional zusätzlich im Heimnetz.
+
+**Wie die Anlage gesteuert werden kann:**
+
+| Weg | Verbindung | Was möglich ist | Kapitel |
+|---|---|---|---|
+| **Touch-Display** an der Anlage | lokal, ohne Netz | alle Grundfunktionen: INIT, HV, Messen, Profilfahrt, Park, Service, STOP, ACK (1 s halten); Anzeige von Zustand, Position, Messwert, IP-Adressen | 12.2 |
+| **Weboberfläche** im Browser (Tablet, PC, Handy) | WLAN; die Seite nutzt die REST-API | alle Befehle, Einstellungen, Kalibrierung, Log, ADD-Validierung; vom Gerät geladen (`http://192.168.4.1/`) oder als lokale Datei | 12.1 |
+| **Python-Skripte und KI-Agenten** | WLAN, REST-API (`/proc`, `/api`) | alle Befehle und Parameter, Messprogramme, Auswertung; Werkzeuge `add_client.py`, `stress_api.py` | 9, 13, 14.4 |
+| **Python-Werkzeuge über USB** | serielle Verbindung über das USB-Kabel (CH340C, virtuelle COM-Schnittstelle, 115200 Bd) | Diagnose und Einrichtung: Version, Zustand, IP-Adressen, Router-WLAN einrichten, Neustart; Log mitlesen. **Keine Fahrbefehle.** Werkzeug `serial_cmd.py` oder `pio device monitor` | 11 |
+
+Ethernet (LAN-Kabel) hat das Board nicht; Netzwerkzugriff gibt es nur über WLAN – entweder über
+den eigenen Access Point der Anlage oder über ein Router-WLAN, in das sich die Anlage einbucht.
 
 ### 1.2 Grundsätzliche Aufteilung und warum
 
@@ -1165,6 +1176,11 @@ print(p["state"], p["motion"]["pos"], p["measure"]["thick"])
 | Wiederverbindung | 3 Versuche à 10 s, dann 2 min Pause, dann wieder 3 Versuche – ohne Ende |
 | Anzeige | Log und Display (Zeile mit AP- und Router-IP) |
 
+> **Anlage in ein anderes WLAN einbuchen** (z. B. Firmennetz, Messe-WLAN): Das geht ohne
+> Netzwerkverbindung am einfachsten über die serielle Konsole mit dem Befehl `wifi` –
+> Beispiel in **Kapitel 11.1**. Alternativ über die Weboberfläche (Seite „Einstellungen“,
+> Router-Zugang) oder über die API (`SET wifi_ssid`, `SET wifi_pass`, `REBOOT`).
+
 ---
 
 ## 11. Serielle Konsole
@@ -1194,6 +1210,54 @@ python3 scripts/serial_cmd.py "status"
 
 Hinweis: Das Öffnen der Schnittstelle startet das Board bei den meisten USB-Adaptern neu;
 `serial_cmd.py` wartet deshalb auf `boot: ready`.
+
+### 11.1 Beispiel: Anlage in ein fremdes WLAN einbuchen
+
+Die Anlage soll sich zusätzlich zum eigenen Access Point in ein vorhandenes WLAN einbuchen,
+z. B. das Messe-WLAN mit der SSID `Messe-Gast` und dem Passwort `Willkommen2026`.
+
+1. Anlage per USB-Kabel mit dem PC verbinden, Achse steht, HV aus.
+2. Befehl senden – mit dem Python-Werkzeug:
+   ```
+   python3 scripts/serial_cmd.py "wifi Messe-Gast Willkommen2026"
+   ```
+   oder in der interaktiven Konsole (`pio device monitor`) eintippen:
+   ```
+   wifi Messe-Gast Willkommen2026
+   ```
+3. Antwort:
+   ```
+   {"wifi":"saved","ssid":"Messe-Gast","reboot":true}
+   ```
+   Die Anlage speichert SSID und Passwort im Flash und startet neu.
+4. Nach dem Neustart die vergebene IP-Adresse abfragen:
+   ```
+   python3 scripts/serial_cmd.py "status"
+   ```
+   ```
+   {"state":"SAFE_START","err":0,"local":false,"ap":"192.168.4.1","sta":"connected","sta_ip":"10.20.30.41","ssid":"Messe-Gast","pass_set":true}
+   ```
+   Die Anlage ist jetzt unter `http://10.20.30.41/` (bzw. `http://add-demo.local/`, falls das Netz
+   mDNS erlaubt) und weiterhin über den eigenen Access Point `192.168.4.1` erreichbar. Die IP steht
+   auch auf dem Display.
+
+Regeln:
+
+- SSID = erstes Wort, Passwort = alles nach dem Leerzeichen (darf Leerzeichen enthalten).
+- SSID mit Leerzeichen in Anführungszeichen: `wifi "Messe Gast" Willkommen2026`
+- Passwort 8 … 63 Zeichen, SSID höchstens 32 Zeichen; ein ungültiger Wert wird mit einer
+  Fehlermeldung abgelehnt und nichts gespeichert.
+- Der Neustart ist nur bei stehender Achse und ohne HV möglich (Zustand SAFE_START, READY oder
+  WAIT_ACK). Sonst antwortet die Anlage mit `"reboot":false` – die Daten sind trotzdem gespeichert
+  und gelten nach dem nächsten Einschalten.
+- Kommt keine Verbindung zustande (`"sta":"backoff"`), versucht die Anlage es alle 2 min erneut;
+  `/log` bzw. die Konsole zeigen `sta: attempt …`.
+- Router-Zugang wieder löschen (z. B. vor der Rückgabe der Anlage):
+  ```
+  python3 scripts/serial_cmd.py "wifi off"
+  ```
+- Sicherheitshinweis: Im fremden Netz kann jeder Teilnehmer die REST-API ohne Anmeldung benutzen
+  (Hardware-Dokumentation, Abschnitt 2.3).
 
 ---
 
@@ -1724,8 +1788,34 @@ Der Flash hat 8 MB; genutzt werden 4 MB.
 | Sprint-Datei | `docs/sprints/<Sprint>.md`, Aufgaben für den Agenten |
 | Watchdog (Kommunikation) | stoppt die Anlage nach 5 s ohne API-Paket, wenn ferngesteuert |
 
-### 16.4 Änderungshistorie
+### 16.4 Überblick über den Umfang
+
+Stand 2026-11-07 (Commit `13f1936`). Gezählt sind Zeilen; „ohne Leerzeilen“ schließt Kommentare
+ein.
+
+| Bereich | Dateien | Zeilen | ohne Leerzeilen |
+|---|---:|---:|---:|
+| **Firmware C/C++** (`src/` ohne Smoketest) | 52 | 7 223 | 6 482 |
+| davon reine Logik `src/logic/` | 24 | 3 946 | 3 520 |
+| Smoketest C++ (`src/smoketest/`) | 1 | 855 | 786 |
+| **Tests C/C++** (native, Gerätetest, Nachbildungen) | 44 | 7 694 | 7 469 |
+| **Weboberfläche HTML/JS** (`data/www/`) | 3 | 2 650 | 2 490 |
+| Tests der Weboberfläche JS (`test/js/`) | 2 | 414 | 402 |
+| **Python-Werkzeuge** (`scripts/`) | 5 | 1 024 | 898 |
+| **Projektdokumentation** (`docs/`, `README.md`) | 28 | 9 665 | 7 890 |
+| davon Sprint-Dateien und Review-Protokolle | 20 | 3 185 | 2 643 |
+| ADD-Referenzdokumente (`docs/reference/`, Spezifikation, Developer Guide, Style Guide v1.0) | 4 | 9 025 | 6 697 |
+
+Anmerkungen:
+
+- Auf jede Zeile Firmware kommt etwas mehr als eine Zeile Testcode.
+- `index.html` (2 266 Zeilen) enthält CSS, Seitenaufbau, Seitenlogik und eine eingebettete Kopie von
+  `app.js` (371 Zeilen).
+- Die Zahlen ändern sich mit jedem Sprint; neu zählen mit
+  `git ls-files 'src/*.cpp' 'src/*.h' | xargs wc -l` (entsprechend für die anderen Bereiche).
+
+### 16.5 Änderungshistorie
 
 | Version | Datum | Änderung |
 |---|---|---|
-| 1.0 | 2026-11-07 | Erste Ausgabe (Contract V1.5.26, Pflichtenheft V1.7.10); ADD-Kapitel vorläufig bis Sprint D1 |
+| 1.0 | 2026-11-07 | Erste Ausgabe (Contract V1.5.26, Pflichtenheft V1.7.10); ADD-Kapitel vorläufig bis Sprint D1. Ergänzt: Bedienwege (1.1), WLAN-Einbuchen per Konsole (10.7, 11.1), Umfang (16.4) |
