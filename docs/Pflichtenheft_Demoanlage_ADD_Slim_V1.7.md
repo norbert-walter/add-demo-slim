@@ -2,12 +2,26 @@
 
 **Stand:** 2026-11-07
 **Autor:** Norbert Walter
-**Version:** 1.7.11 (/doc als HTML-Seite mit Dokumentationslinks)
+**Version:** 1.7.12 (Hilfe-Symbol, Abgleich mit den Dokumentationen)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.7.11 → V1.7.12 (Contract V1.5.28, 07.11.2026, Entscheidung Norbert Walter)
+- **Hilfe-Symbol** (Fragezeichen) in der Navigationsleiste der Weboberfläche vor „Log“: öffnet
+  `/doc` in einem neuen Tab, damit die Bedienoberfläche (und ihr Heartbeat) weiterläuft. Als lokale
+  Datei ohne Verbindung erscheint ein Hinweis.
+- Abgleich mit Hardware- und Software-Dokumentation:
+  - Endpunkt-Tabelle (§5.5): `/` ist die IMS-Bedienoberfläche, `/settings` eine Weiterleitung.
+  - Repository-Struktur: Dokumente in `docs/` und alle Python-Werkzeuge ergänzt.
+  - Hardware: Reset-Taster ergänzt.
+  - Abnahme: Bedienvorrang nur mit `LOCAL_HOLD_MS > 0` prüfbar; `/doc` und Hilfe-Symbol ergänzt.
+  - Offene Punkte: Bedienvorrang (Standard aus), Sprint-Namen S6 → D1, Ideen „Offline-Doku“ und
+    „Dokumentation per KI“ teilweise umgesetzt, Gerätetest bewegt die Achse.
+- Die Quelldateien der Weboberfläche gibt es nicht mehr getrennt; `data/www/index.html` ist ab jetzt
+  selbst die Quelle und wird direkt bearbeitet (Prüfung: `test/js/test_pages.js`, Browserprüfung).
 
 ### V1.7.10 → V1.7.11 (Contract V1.5.27, 07.11.2026, Entscheidung Norbert Walter)
 - `/doc` liefert eine **HTML-Seite** (`data/doc.html`, deutsch) statt Markdown: Kurzbeschreibung der
@@ -333,6 +347,7 @@ Sensorfleck wieder vollständig auf einer Fläche liegt. 70 mm entspricht etwa d
 | LED Rot | Shutter offen, GPIO 32, HIGH aktiv, 20 mA |
 | Buzzer | i2so.7, **aktiver Summer** (feste Tonhöhe, nur Ein/Aus) – Signale unterscheiden sich im Rhythmus (§5.11) |
 | LED Blau | Herzschlag, **GPIO 2** (Board-LED), HIGH aktiv, 0,5 Hz |
+| Reset-Taster | Neustart des ESP32 (Hardware-Reset, kein Not-Aus); danach `SAFE_START`, HV und Shutter aus |
 | Not-Aus | GPIO 22 (PROBE), Pull-up auf dem Board. Verdrahtung per Parameter `estop_nc` (§6): Standard **einfacher Schalter gegen GND, LOW-aktiv, ohne Drahtbrucherkennung** (für die ersten Tests); später Öffner gegen GND, HIGH-aktiv, **mit** Drahtbrucherkennung |
 
 > **Hinweis Sensor:** Im Arbeitsbereich (40–65 mm) liefert der ADC 2,78–1,97 V (ESP-Werte,
@@ -431,7 +446,12 @@ src/
 test/native/<suite>/         eingefrorene Host-Tests
 test/embedded/test_hardware/ On-Target-Tests                              H1/A1
 data/                        www/ (W1), doc.html, add.json (D1)          W1/D1
-scripts/                     serial_cmd.py, add_client.py
+scripts/                     add_client.py, stress_api.py, fake_device.py, serial_cmd.py,
+                             check_iram.py, verify_reference.sh
+docs/                        CONTRACT.md, Pflichtenheft, Hardware_Dokumentation_V1_0.md,
+                             Software_Dokumentation_V1_0.md, REST_API_V1_0.md,
+                             Endpoints_V1_0.md, Smoketest_Protokoll.md, sprints/, reviews/,
+                             reference/ (ADD Spec, Developer Guide, Style Guide v1.0 und IMS)
 ```
 
 ### 5.3 Betriebsmodi
@@ -501,8 +521,9 @@ sind gesperrt (§6 Bedienvorrang).
 | `/api` | POST | Befehlskanal (JSON + CRC) |
 | `/doc` | GET | Dokumentationsseite (HTML) mit Links (V1.7.11) |
 | `/log` | GET | letzte 20 Logzeilen |
-| `/` | GET | Prozessansicht |
-| `/settings` | GET | Einstellungen |
+| `/` | GET | IMS-Bedienoberfläche (eine Seite: Prozess, Status, Einstellungen, Kalibrierung, Log) |
+| `/settings` | GET | Weiterleitung auf `/#settings` |
+| `/app.js`, `/font-*.woff2` | GET | Skript und Schriften der Weboberfläche |
 
 ### 5.6 /proc
 
@@ -534,6 +555,9 @@ SSID/Passwort (wirksam nach Reboot), Reboot-Taste. Ungültige Felder werden mark
 **Kalibrierung:** Nah/Fern anfahren und erfassen, Basis erfassen, speichern, zurücksetzen, Referenzwerte
 
 **Log:** Geräte-Log (`/log`) und Ereignistabelle der Seite
+
+**Hilfe (V1.7.12):** Fragezeichen-Symbol in der Navigationsleiste vor „Log“, öffnet `/doc` in einem
+neuen Tab (die Bedienoberfläche läuft weiter)
 
 **Kommunikation:** `/proc`-Polling alle 500 ms mit CRC-Prüfung (Fehler → „CRC-Fehler“, nur STOP
 bedienbar); **Heartbeat** `GET_STATE` jede Sekunde, solange `safety.comm_armed`; bei `BUSY` keine
@@ -770,7 +794,7 @@ Warnung. Für den Demo-Einsatz wird der Öffner mit Drahtbrucherkennung empfohle
 
 ---
 
-## 7. ADD-Integration (Sprint 6)
+## 7. ADD-Integration (Sprint D1)
 
 Das ADD-Dokument folgt **streng der ADD Specification v1.0** (sieben Blöcke
 `autonomy, device, security, interfaces, actions, rules, validation` plus Header
@@ -780,7 +804,7 @@ des Style Guides. **Kein** eigener Top-Level-Block `live_data` – `/proc` wird 
 über /proc“ steht in `rules`.
 
 - Ablage: SPIFFS `/add.json`, Endpunkte `/add`, `/add.html`, `/llms.txt`
-- `autonomy`: Einstufung über die drei Scores (bewusste Entscheidung, siehe Sprint 6).
+- `autonomy`: Einstufung über die drei Scores (bewusste Entscheidung, siehe Sprint D1).
   Konzeptionell **Level 2**: Die Demo selbst ist harmlos, modelliert aber eine
   Strahlenquelle – die KI soll sich so verhalten, wie sie es an der echten Anlage müsste.
   Eine Unterdeklaration ist nicht zulässig.
@@ -832,6 +856,7 @@ Bedienvorrang).
 
 ### On-Target – `pio test -e esp32-test` (nur nach Freigabe)
 `test/embedded/test_hardware`: CRC, Eingänge, Sensor, Ausgänge, NVS, 2-mm-Fahrt.
+**Achtung:** Der Test flasht das Board, schaltet Ausgänge und **bewegt die Achse** (2 mm hin und zurück).
 
 ---
 
@@ -936,12 +961,14 @@ Die Zeiten der 🤖-Sprints sind Rechenzeit von Qwen lokal (ca. 18 Token/s), nic
 - [ ] Alle 7 Tasten wirken (lokal, ohne WLAN); PARK → 2 mm, SERV → `maint_pos`
 - [ ] Fehlerfall: alle Tasten ausgeblendet, nur ACK-Fläche; grau solange Not-Aus gedrückt
 - [ ] ACK erst nach 1 s Halten; Finger, der beim Fehler schon auf STOP lag, quittiert nicht
-- [ ] Bedienvorrang: nach Display-Befehl API `HV_ON` → `−10`, API `STOP` → OK;
-      30 s nach letztem Display-Befehl (Achse steht, HV aus) wieder frei (`stress_api.py local`)
+- [ ] Bedienvorrang (nur mit `LOCAL_HOLD_MS > 0`, Standard 0 = aus): nach Display-Befehl API
+      `HV_ON` → `−10`, API `STOP` → OK; nach Ablauf der Haltezeit (Achse steht, HV aus) wieder frei
+      (`stress_api.py local`)
 
 **7. Weboberfläche**
 - [ ] Live-Daten ≤ 500 ms, Zeitreihe 100 Punkte
 - [ ] IMS-Bedienoberfläche unter `/`, funktioniert ohne Internet (AP-Modus); lokal geöffnet mit Verbindungsdialog
+- [ ] Hilfe-Symbol öffnet `/doc` in einem neuen Tab; `/doc` zeigt Kurzbeschreibung und Dokumentationslinks
 - [ ] Einstellungen laden/speichern, Kalibrierung, WLAN-Konfiguration
 - [ ] Tablet über WLAN (AP)
 - [ ] Router-Verbindung: SSID/Passwort per REST setzen, REBOOT → Gerät ist im Heimnetz erreichbar (`add-demo.local`), AP bleibt erreichbar
@@ -971,7 +998,7 @@ Die Zeiten der 🤖-Sprints sind Rechenzeit von Qwen lokal (ca. 18 Token/s), nic
 | /proc-Schema, API, CRC, Fehlercodes | CONTRACT V1.5 | ✅ |
 | Zonen, Shutter über das Messprogramm | drei getrennte Zonen, Nachlaufzeit `shutter_hold`, Messzone > 60 mm | ✅ (V1.7.5, Contract V1.5) |
 | Geschwindigkeiten, Signale, WLAN, Herzschlag | V1.7 | ✅ |
-| Bedienvorrang Display, Haltezeit | LOCAL, 30 s | ✅ |
+| Bedienvorrang Display, Haltezeit | LOCAL, `LOCAL_HOLD_MS` in `config.h`, Standard 0 = aus (V1.7.8) | ✅ |
 | Quittierung am Display | eine ACK-Fläche, 1 s halten | ✅ |
 | i2so → Slot-Zuordnung (Buzzer, Enable, Step, Dir) | Smoketest `scan`: Slot = i2so-Nummer (Enable 0, Step 1, Dir 2, Buzzer 7) | ✅ (0a) |
 | Weg pro Umdrehung, Drehrichtung, Verfahrweg | Smoketest 4: 40,77 mm/U, `DIR_POSITIVE_HIGH` = false, Achse 0 … 242 mm | ✅ (0a, Contract V1.4) |
@@ -986,12 +1013,14 @@ Die Zeiten der 🤖-Sprints sind Rechenzeit von Qwen lokal (ca. 18 Token/s), nic
 | Display-/Touch-Pins, Farbreihenfolge | Smoketest 6: Farben korrekt, Touch 180° gedreht → `offset_rotation` = 2, Kalibrierung X 130 … 3775, Y 200 … 3900 | ✅ (0a) |
 | ADC am Z--Eingang (Pull-up?) | R20 4k7 entfernt (Vortest), 11 kΩ Last + 47 µF am Sensor (Smoketest) | ✅ |
 | ADC-Versatz ESP ↔ DVM (+235 mV) | Bekannte Einschränkung (Smoketest 5.2), Kurve gegen ESP-Werte kalibriert. **Option:** Zweipunkt-Kalibrierung des ESP-ADC mit Referenzquelle oder parallel messendem DVM (z. B. als Service-Funktion mit zwei Korrekturparametern) | Option, später |
-| Autonomy-Level im ADD | konzeptionell Level 2, Scores in S6 | Offen (S6) |
-| Python-Demo-Skripte | S6 | Offen |
+| Autonomy-Level im ADD | konzeptionell Level 2, Scores in D1 | Offen (D1) |
+| Python-Demo-Skripte | D1 (Beispiel-Profilfahrt in der Software-Dokumentation 13.4) | Offen (D1) |
+| Hardware-Dokumentation | Fotos, Anschluss Reset-Taster und grüne LED, gemessener Vref-Wert (Hardware-Doku 10.4) | Offen |
+| Simulator `fake_device.py` | setzt `motion.mode` nach einer Profilfahrt nicht auf `none` zurück, kein `TEMP_HIGH` | Bekannt, bei Bedarf anpassen |
 
-### 11.1 Erweiterungen nach S6 (Ideen, V1.7.4 / V1.7.5)
+### 11.1 Erweiterungen nach D1 (Ideen, V1.7.4 / V1.7.5)
 
-Nicht Teil des Sprintplans und nicht im Contract. Aufnahme erst nach S6, jeweils mit eigener
+Nicht Teil des Sprintplans und nicht im Contract. Aufnahme erst nach D1, jeweils mit eigener
 Contract-Version.
 
 | Idee | Umsetzung (Vorschlag) | Nutzen / Hinweis |
@@ -999,7 +1028,7 @@ Contract-Version.
 | **Dynamischer QR-Code auf dem Display** | LovyanGFX `qrcode()`: (1) WLAN-Zugang `WIFI:S:ADD-Demo;T:WPA;P:…;;`, (2) aktuelle URL (AP- oder STA-IP), (3) Einstieg KI-Service-Anfrage (Seite mit Geräteidentität, Link zur ADD-Datei, fertigem Prompt) | Handy/Tablet ohne Tippen verbinden; zeigt im Gegensatz zu einem Aufkleber die aktuelle IP und den Zustand |
 | **NFC-Tag am Gerät** | NDEF-URL-Eintrag: Gerätetyp, Seriennummer, Links zu Repo und Doku | Dauerhafte Identität. Tags/Aufkleber sind austauschbar → die KI prüft die geladene ADD-Datei gegen das Gerät (z. B. Hash der ADD-Beschreibung in `/proc`) |
 | **GitHub als einzige Informationsquelle** | Repo, Releases mit Prüfsummen, GitHub Pages für die HTML-Doku; Handbuch, Befehlssatz und ADD-Datei aus denselben Quelldaten erzeugt | Keine auseinanderlaufenden Dokumente; jede KI findet alles an einer Stelle |
-| **Offline-Doku auf der Anlage** | Kompakte HTML-Fassung im SPIFFS (≈ 1 MB frei), ausgeliefert vom eingebauten Webserver im AP-Modus | Messen haben oft kein verlässliches Internet |
-| **Dokumentation per KI** | Softwareschnittstelle und Befehlssatz aus `CONTRACT.md` und Headern, technische Beschreibung aus Pflichtenheft und Smoketest-Protokoll, Bedienhandbuch mit menschlichem Input (Abläufe, Fotos) | Sicherheitshinweise und Not-Aus: KI entwirft, Mensch prüft und gibt frei |
+| **Offline-Doku auf der Anlage** | Kompakte HTML-Fassung im SPIFFS (≈ 1 MB frei), ausgeliefert vom eingebauten Webserver im AP-Modus | Messen haben oft kein verlässliches Internet. **Teilweise umgesetzt (V1.7.11):** `/doc` beschreibt die Anlage und verlinkt die Dokumente auf GitHub (online) |
+| **Dokumentation per KI** | Softwareschnittstelle und Befehlssatz aus `CONTRACT.md` und Headern, technische Beschreibung aus Pflichtenheft und Smoketest-Protokoll, Bedienhandbuch mit menschlichem Input (Abläufe, Fotos) | Sicherheitshinweise und Not-Aus: KI entwirft, Mensch prüft und gibt frei. **Umgesetzt (07.11.2026):** Hardware- und Software-Dokumentation, Kurzübersichten API und Endpunkte, Style Guide IMS – Prüfung durch Norbert offen |
 | **KI-gestützte Serientests (Präsentationsthema)** | Grundsatz: Sicherheit hängt nicht von der KI ab – deterministische Schicht (Verriegelungen, Zäune bei HV/Shutter, Not-Aus, Grenzwerte in der Firmware), die KI arbeitet nur innerhalb dieses Rahmens. Eingefrorene Kette (Modell, Quantisierung, Inferenz-Software, Prompt, Testvorgaben; Temperatur 0), Änderung = Requalifizierung. Erste Läufe menschlich begleitet mit vorher festgelegtem Endkriterium. Stufenweise: erst Sensorik, dann gefährliche Aktionen; Stufenübergänge per fester Regel, nicht per KI-Urteil. Langsame Bewegungen, Plausibilisierung mit weiteren Größen (Strom, Kühlwasserfluss, Brandmeldung). Watchdog → sicherer Zustand, lückenloses Protokoll, Ergebnis vom Menschen freigegeben. Eigenes Sicherheitskonzept (Rahmen IEC 61508 / ISO 13849, KI als nicht sicherheitsgerichteter Teil) | Die Demoanlage zeigt das Prinzip im Kleinen: Argumentprüfung, richtungsabhängige Endschalter, Freigaben in `.clinerules`, eingefrorene Contract-Tests |
 | **Anlagenkoordinaten (Ebene 2, V1.7.5)** | Zwei Ebenen: Die Zonen und alle Sicherheitsprüfungen bleiben in **Maschinenkoordinaten** (Ebene 1, Nullpunkt auf der Parkseite). Für mehrere Messeinrichtungen – z. B. zwei leicht versetzt gegenüberstehende Messbügel, die ortssynchron messen – rechnet jedes Gerät an der Schnittstelle um: `x_Anlage = coord_offset + coord_sign · x_Maschine` (Parameter `coord_offset` in mm, `coord_sign` ±1). Positionen in Befehlen werden zuerst in Maschinenkoordinaten umgerechnet und **danach** gegen die Zonen geprüft; `/proc` meldet die Position zusätzlich in Anlagenkoordinaten. Für die zeitliche Zuordnung eine gemeinsame Zeitbasis (SNTP oder Synchronimpuls) | Ein Leitsystem oder eine KI schickt allen Geräten dieselbe Anlagenposition. Ein falscher Versatz oder ein falsches Vorzeichen kann höchstens `BAD_PARAM` oder eine falsche Position bewirken, nie eine Zonenverletzung. Betrifft nur API und `/proc` (S3), nicht die Sicherheitslogik |

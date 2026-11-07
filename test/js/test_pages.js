@@ -35,6 +35,8 @@ const IDS = [
   'btnCalBase', 'btnCalReset', 'btnCalRefs', 'calibChart',
   // log
   'devLog', 'btnDevLog', 'logTableBody',
+  // help (V1.5.27)
+  'navHelp',
 ];
 
 test('index: embeds a byte-identical copy of app.js', () => {
@@ -91,6 +93,13 @@ test('index: element ids present and unique', () => {
   const page = scripts(h)[1];
   for (const m of page.matchAll(/\$\('([^']+)'\)/g)) assert.ok(ids.includes(m[1]), 'script uses unknown id ' + m[1]);
   assert.ok(h.length < 120000, 'page larger than 120 kB');
+});
+
+test('index: help link opens /doc in a new tab (V1.5.27)', () => {
+  const h = read('index.html');
+  assert.match(h, /<a class="nav-item" id="navHelp" href="\/doc" target="_blank" rel="noopener" data-tip="Hilfe">/);
+  const page = scripts(h)[1];
+  assert.match(page, /\$\('navHelp'\)\.href = baseUrl\(\) \+ '\/doc';/, 'own origin on the device, host when opened as a file');
 });
 
 test('settings: redirects to the settings page of the single-page UI', () => {

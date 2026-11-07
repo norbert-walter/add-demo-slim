@@ -1,7 +1,7 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.27 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-07
-**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.11
+**Version:** 1.5.28 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-07
+**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.12
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
 
@@ -169,6 +169,14 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 1 | `test_hardware` crashed in `test_nvs_roundtrip` (Guru Meditation "Cache disabled but cached memory region accessed", PC in `StepperQueue::fill_i2s_buffer`). Cause in FastAccelStepper 96459ed: the I2S TX-done interrupt runs permanently with I2S_MUX and is IRAM-safe, but `fill_i2s_buffer()` and `I2sManager::i2sMuxSetBit()` were in flash; every flash operation (NVS write, SPIFFS read, OTA) crashed the board, also with the motor idle. Fix: both functions `IRAM_ATTR` (fork `norbert-walter/FastAccelStepper`, commit a64ceff on 96459ed; pull request to gin66 pending). Checked with nm/objdump: every function reachable from the interrupt is in IRAM, no literals into flash | `platformio.ini` |
 | 2 | Post-build check `scripts/check_iram.py` (all ESP32 environments): the build fails if one of the I2S interrupt functions is linked into flash (protects against library updates). Verified: fails with 96459ed, passes with a64ceff | `platformio.ini`, `scripts/` |
 | 3 | The nine native H1 tests could not see this (no flash cache on the host); the first five on-device tests were green (inputs, sensor, outputs, E-stop polarity change) | – |
+
+**Changes 1.5.28 (help icon in the web UI, 2026-11-07, decision Norbert Walter):**
+
+| # | Change | Where |
+|---|---|---|
+| 1 | Navigation rail: help icon (question mark, `#navHelp`, label „Hilfe“) before „Log“; a link to `/doc` with `target="_blank"` so the UI and its heartbeat keep running. On click `href = baseUrl() + '/doc'` (own origin on the device, host when opened as a file); as a file without a host: toast, no navigation | §5.5, `data/www/index.html` |
+| 2 | `test_pages.js` +1 test (8): help link and its `href`. JS 35/35; browser check device mode, file with and without host | `test/js` |
+| 3 | The separate sources of `index.html` no longer exist; from now on `data/www/index.html` is edited directly | §5.5 |
 
 **Changes 1.5.27 (/doc as HTML page, 2026-11-07, decision Norbert Walter):**
 
@@ -604,12 +612,13 @@ V1.5.23: serial console on the USB port (115200 Bd) – commands and answers in 
 ### 5.5 Web UI (V1.5.26, IMS operator UI)
 
 Language German, IMS colour scheme (no themes), fonts Ubuntu / Ubuntu Mono from the device (no CDN –
-in AP mode there is no internet). Built from the sources in the reviewer's workspace; the file in
-`data/www` is the result and is not edited by hand.
+in AP mode there is no internet). Since V1.5.28 `data/www/index.html` itself is the source
+and is edited directly (the separate build sources no longer exist); `test_pages.js` and a browser
+check guard it.
 
 | File | Content |
 |---|---|
-| `index.html` | single page: left navigation, header (device id, page title, status boxes HV and shutter, alarm box, connection, clock), pages **Prozess** (state matrix, gauge, statistics max/avg/min/n, buttons INIT · HV EIN/AUS · MESSEN · TRAVERSE · PARK · SERVICE · ACK · STOP, trend and distance chart), **Status** (cycle timing, I/O, ADD validation from `/add`), **Einstellungen** (all `SET` parameters, simulated safety flags, router SSID/password, REBOOT), **Kalibrierung** (move to near/far, capture near/far/base, save, reset, references), **Log** (device log `/log`, event table) |
+| `index.html` | single page: left navigation (with help icon → `/doc` in a new tab, V1.5.28), header (device id, page title, status boxes HV and shutter, alarm box, connection, clock), pages **Prozess** (state matrix, gauge, statistics max/avg/min/n, buttons INIT · HV EIN/AUS · MESSEN · TRAVERSE · PARK · SERVICE · ACK · STOP, trend and distance chart), **Status** (cycle timing, I/O, ADD validation from `/add`), **Einstellungen** (all `SET` parameters, simulated safety flags, router SSID/password, REBOOT), **Kalibrierung** (move to near/far, capture near/far/base, save, reset, references), **Log** (device log `/log`, event table) |
 | `app.js` | ADDAPP (protocol and rules, unchanged from W1); a byte-identical copy is inlined in `index.html` |
 | `settings.html` | redirect to `/#settings` |
 | fonts | Ubuntu / Ubuntu Mono (woff2) |

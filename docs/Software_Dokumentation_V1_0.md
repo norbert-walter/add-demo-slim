@@ -1,7 +1,7 @@
 # Software-Dokumentation – Demoanlage ADD (Slim)
 
 **Version:** 1.0 · **Stand:** 2026-11-07 · **Autor:** Norbert Walter
-**Firmware:** `FW_VERSION` 1.0.0 · **Contract:** V1.5.27 · **Pflichtenheft:** V1.7.11
+**Firmware:** `FW_VERSION` 1.0.0 · **Contract:** V1.5.28 · **Pflichtenheft:** V1.7.12
 **Hardware:** siehe `docs/Hardware_Dokumentation_V1_0.md`
 
 ---
@@ -835,7 +835,7 @@ schaltet Ausgänge und bewegt die Achse – nur mit Freigabe.
 ```
 node --test test/js/test_app.js test/js/test_pages.js
 ```
-Tests der Weboberfläche (34 Tests; kein PlatformIO-Befehl, Node ≥ 18).
+Tests der Weboberfläche (35 Tests; kein PlatformIO-Befehl, Node ≥ 18).
 
 ### 8.6 Sonstiges
 
@@ -1285,6 +1285,7 @@ läuft
 | **Einstellungen** (`#settings`) | alle Parameter (Positionen, Profil, Messung), simulierte Sicherheitsflags, Not-Aus-Verdrahtung, Router-Zugang, Neustart |
 | **Kalibrierung** (`#calibration`) | Live-Abstand und Position, geführter Ablauf, Referenztabelle, Kennliniendiagramm |
 | **Log** (`#log`) | Geräte-Log (`/log`) und Ereignistabelle der Seite |
+| **Hilfe** (Fragezeichen) | öffnet `/doc` in einem neuen Tab – die Bedienoberfläche läuft weiter |
 
 Regeln:
 
@@ -1296,8 +1297,8 @@ Regeln:
 - Ungültige Eingaben in den Einstellungen werden rot markiert und nicht gesendet.
 - Das Router-Passwort wird nur gesendet, wenn eines eingetragen wurde (leer = behalten).
 
-Die Seite wird aus Quelldateien gebaut und eingebettet geprüft (`test/js/test_pages.js`); sie
-enthält eine bytegenaue Kopie von `app.js`. Gestaltungsregeln für eigene Seiten:
+`data/www/index.html` ist selbst die Quelle und wird direkt bearbeitet; `test/js/test_pages.js`
+prüft sie (u. a. bytegenaue Kopie von `app.js`). Gestaltungsregeln für eigene Seiten:
 `docs/reference/ADD_Style_Guide_IMS_V1_0.md`.
 
 ### 12.2 Display
@@ -1626,7 +1627,7 @@ Beim Review laufen alle Suiten zusätzlich mit AddressSanitizer und UndefinedBeh
 | Datei | Tests | Prüft |
 |---|---:|---|
 | `test_app.js` | 27 | ADDAPP: CRC, Rahmen, Tastenregeln, Parameterprüfung, Validierungsanzeige |
-| `test_pages.js` | 7 | `index.html`: bytegenaue Kopie von `app.js`, keine externen Ressourcen, Endpunkte, Regeln (STOP ohne Dialog, Heartbeat 1 s, Dicke 0 bei HV aus), IDs, Größe < 120 kB; Weiterleitung `settings.html` |
+| `test_pages.js` | 8 | `index.html`: bytegenaue Kopie von `app.js`, keine externen Ressourcen, Endpunkte, Regeln (STOP ohne Dialog, Heartbeat 1 s, Dicke 0 bei HV aus), IDs, Größe < 120 kB; Weiterleitung `settings.html` |
 
 Das Verhalten im Browser prüft der Reviewer zusätzlich mit Playwright gegen `fake_device.py`.
 

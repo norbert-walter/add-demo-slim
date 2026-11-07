@@ -62,7 +62,7 @@ Teil der Definition of Done in `.clinerules`.
 | H1 | `hal/hal_io.cpp`, `hal/motion_drv.cpp` | ✅ fertig (Qwen) | `test_hal_io` 16/16 · `test_motion_drv` 10/10 · firmware-partial ✅ · `test_hardware` am Gerät 8/8 | ✅ 16.10.2026, Tag `sprint-h1` |
 | I1 | `app/net_task.cpp`, `main.cpp`, `display/display.cpp`, Gesamt-Build | ✅ fertig (Qwen; Display-Gerüst und Korrekturen Claude) | `test_net_task` 10/10 · `test_display` 15/15 · `pio run -e firmware` ✅ · Prüfliste am Gerät 8/8 | ✅ 17.10.2026, Tag `sprint-i1` |
 | W1 | `data/www/app.js`, `index.html`, `settings.html` | ✅ fertig (Qwen; 2 Korrekturen Claude) | `test_app` 27/27 · `test_pages` 10/10 · Browser- und Offline-Prüfung ✅ · Gerät offen | ✅ 18.10.2026, Review_W1 |
-| IMS-UI | `data/www/index.html` (ersetzt die W1-Seiten), `settings.html` → `/#settings` | ✅ fertig (Claude, Entwurf Norbert Walter) | `test_app` + `test_pages` 34/34 · Browserprüfung Gerätemodus und lokale Datei ✅ · Gerät offen | Contract V1.5.26 |
+| IMS-UI | `data/www/index.html` (ersetzt die W1-Seiten), `settings.html` → `/#settings` | ✅ fertig (Claude, Entwurf Norbert Walter) | `test_app` + `test_pages` 35/35 · Browserprüfung Gerätemodus und lokale Datei ✅ · Gerät offen | Contract V1.5.28 (Hilfe-Symbol) |
 | A1 | Abnahme | ⬜ offen | Pflichtenheft Kapitel 10 | – |
 | D1 | `data/add.json`, Demo-Skripte | ⬜ offen | KI-Validierung | – |
 
