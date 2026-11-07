@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """fake_device.py – a simulated ADD Demo device for the web UI (Sprint W1, V1.5.22).
 
-Serves data/www exactly at the routes of the firmware (/, /settings, /app.js, /style.css, fonts,
+Serves data/www exactly at the routes of the firmware (/, /settings, /app.js, fonts,
 /add) and simulates /proc and /api with the CRC frame of CONTRACT §4. No hardware, no motor.
 
     python3 scripts/fake_device.py [port]          (default 8080) -> http://localhost:8080/
@@ -18,7 +18,7 @@ from urllib.parse import urlparse, parse_qs
 
 ROOT = os.environ.get('ADD_FAKE_ROOT') or os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
 ROUTES = {'/': ('www/index.html', 'text/html'), '/settings': ('www/settings.html', 'text/html'),
-          '/app.js': ('www/app.js', 'application/javascript'), '/style.css': ('www/style.css', 'text/css'),
+          '/app.js': ('www/app.js', 'application/javascript'),
           '/font-u400.woff2': ('www/font-u400.woff2', 'font/woff2'), '/font-u700.woff2': ('www/font-u700.woff2', 'font/woff2'),
           '/font-m400.woff2': ('www/font-m400.woff2', 'font/woff2'), '/font-m700.woff2': ('www/font-m700.woff2', 'font/woff2')}
 ERR_MSG = {-4: 'bad parameter', -5: 'not allowed in this state', -6: 'precondition not met', -7: 'busy',

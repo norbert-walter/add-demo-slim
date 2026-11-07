@@ -1,7 +1,7 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.25 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-10-17
-**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.9
+**Version:** 1.5.26 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-07
+**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.10
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
 
@@ -169,6 +169,19 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 1 | `test_hardware` crashed in `test_nvs_roundtrip` (Guru Meditation "Cache disabled but cached memory region accessed", PC in `StepperQueue::fill_i2s_buffer`). Cause in FastAccelStepper 96459ed: the I2S TX-done interrupt runs permanently with I2S_MUX and is IRAM-safe, but `fill_i2s_buffer()` and `I2sManager::i2sMuxSetBit()` were in flash; every flash operation (NVS write, SPIFFS read, OTA) crashed the board, also with the motor idle. Fix: both functions `IRAM_ATTR` (fork `norbert-walter/FastAccelStepper`, commit a64ceff on 96459ed; pull request to gin66 pending). Checked with nm/objdump: every function reachable from the interrupt is in IRAM, no literals into flash | `platformio.ini` |
 | 2 | Post-build check `scripts/check_iram.py` (all ESP32 environments): the build fails if one of the I2S interrupt functions is linked into flash (protects against library updates). Verified: fails with 96459ed, passes with a64ceff | `platformio.ini`, `scripts/` |
 | 3 | The nine native H1 tests could not see this (no flash cache on the host); the first five on-device tests were green (inputs, sensor, outputs, E-stop polarity change) | – |
+
+**Changes 1.5.26 (IMS operator UI replaces the W1 pages, 2026-11-07, decision Norbert Walter):**
+
+| # | Change | Where |
+|---|---|---|
+| 1 | **`/` serves the IMS operator UI** (German, one page with navigation Prozess · Status · Einstellungen · Kalibrierung · Log); it replaces the W1 pages `index.html` and `settings.html`. The same file also runs opened as a local file (connection dialog, demo mode) | §5.5, `data/www/index.html` |
+| 2 | `/settings` stays as a route; `settings.html` is a redirect to `/#settings` | `data/www/settings.html` |
+| 3 | `style.css` removed (the CSS is inside `index.html`). The firmware route `/style.css` stays and answers 404 – firmware unchanged | `data/www`, `fake_device.py`, `stress_api.py --web` |
+| 4 | `index.html` embeds a byte-identical copy of `app.js` (protocol and rules only from ADDAPP); `/app.js` is still served for other clients | §5.5, `test_pages` |
+| 5 | Heartbeat `GET_STATE` every **1 s** (was 2 s) while `comm_armed` | §5.5 |
+| 6 | **Thickness 0 while HV is off** (no radiation, no measured value); only in the web UI, `/proc` unchanged | §5.5 |
+| 7 | Themes dropped (one IMS colour scheme); fonts still from the device | §5.5 |
+| 8 | `test/js/test_pages.js` rewritten for the new page (7 tests); browser check against `fake_device.py` in device mode (same origin) and as a local file | `test_pages` |
 
 **Changes 1.5.25 (I1 device test part 2c, results 7–14, 2026-10-17, decision Norbert Walter):**
 
@@ -576,35 +589,41 @@ because of a full normal queue (§6.7).
 `/add.html` and `/llms.txt` (ADD spec §5.3/§5.4), `/doc` (Markdown), `/log`
 (last 20 log lines). All responses carry `Access-Control-Allow-Origin: *`.
 V1.5.22: `/app.js`, `/style.css` and the four font files of the web UI (§5.5).
+V1.5.26: `/style.css` answers 404 (file removed, the CSS is part of `index.html`).
 V1.5.23: serial console on the USB port (115200 Bd) – commands and answers in `net_task.h`.
 
-### 5.5 Web UI (V1.5.22, Sprint W1)
+### 5.5 Web UI (V1.5.26, IMS operator UI)
 
-Language English, ADD Dashboard Style Guide v1.0 (identical CSS variables, themes `theme-dark`,
-`theme-light`, `theme-night`, `theme-bw`, localStorage key `add-dashboard-theme`), fonts from the
-device (no CDN – in AP mode there is no internet).
+Language German, IMS colour scheme (no themes), fonts Ubuntu / Ubuntu Mono from the device (no CDN –
+in AP mode there is no internet). Built from the sources in the reviewer's workspace; the file in
+`data/www` is the result and is not edited by hand.
 
-| File | Content | Written by |
-|---|---|---|
-| `app.js` | protocol (`parseFramed`, `apiBody`, names, `fmt`, `replyText`), process-view rules (`view`, `flags`, `buttons`, `confirmText`, `heartbeatDue`, `seriesPush`, `pill`, `validationBadges`), settings rules (`PARAMS`, `checkParam`, `configDiff`) – exact behaviour in the comment of each function | Qwen (skeleton: constants and CRC given) |
-| `index.html` | process view: state, HV, shutter, mode, POS/SPEED/DIST/THICK/AVG, chart of the last 100 valid samples, flag chips with SIM, buttons INIT · HV ON/OFF · MEASURE · TRAVERSE · ACK · STOP, LOCAL badge and hint, validation strip from `/add` | Qwen (markup and helpers given) |
-| `settings.html` | positions, profile, shutter hold, edge threshold, base distance, calibration references and CALIB buttons, simulated safety flags (toggles send `SET` at once), `estop_nc` with warning, router SSID/password, REBOOT | Qwen (markup and helpers given) |
-| `style.css`, fonts | Style Guide components, themes, 44 px touch targets | reviewer |
+| File | Content |
+|---|---|
+| `index.html` | single page: left navigation, header (device id, page title, status boxes HV and shutter, alarm box, connection, clock), pages **Prozess** (state matrix, gauge, statistics max/avg/min/n, buttons INIT · HV EIN/AUS · MESSEN · TRAVERSE · PARK · SERVICE · ACK · STOP, trend and distance chart), **Status** (cycle timing, I/O, ADD validation from `/add`), **Einstellungen** (all `SET` parameters, simulated safety flags, router SSID/password, REBOOT), **Kalibrierung** (move to near/far, capture near/far/base, save, reset, references), **Log** (device log `/log`, event table) |
+| `app.js` | ADDAPP (protocol and rules, unchanged from W1); a byte-identical copy is inlined in `index.html` |
+| `settings.html` | redirect to `/#settings` |
+| fonts | Ubuntu / Ubuntu Mono (woff2) |
 
 Rules that are not obvious from the Pflichtenheft:
+- On the device (`http:`) the page talks to its own origin, no dialog. Opened as a local file it asks
+  for host and port (stored in localStorage) or runs in demo mode.
+- The page is selected by the URL hash (`/#process`, `#status`, `#settings`, `#calibration`, `#log`);
+  reload keeps the page.
 - `/proc` every 500 ms, the next request only after the previous one has finished; CRC or JSON
-  error → status pill "CRC error", no data shown as valid, only STOP enabled; network error → "Offline".
-- Commands are never repeated automatically (also not after `BUSY`); the next `/proc` decides.
-- Confirmation dialog for `HV_ON`, `ACK`, `REBOOT` and calibration reset; never for `STOP`.
-- Heartbeat `GET_STATE` every 2 s only while `safety.comm_armed`.
-- While `local`: INIT, HV ON, MEASURE, TRAVERSE and ACK disabled (they would get `LOCAL_CONTROL`),
-  STOP and HV OFF stay enabled; hint "Operator at display has priority".
-- THICK shows `---` also off the material (`!on_material`), DIST only while `!valid`.
+  error → "CRC-Fehler", no data shown as valid, only STOP enabled; network error → "Keine Verbindung".
+- Commands are sent as `text/plain` (simple CORS request, no preflight) and never repeated
+  automatically (also not after `BUSY`); the next `/proc` decides.
+- Confirmation dialog for `HV_ON`, `ACK`, `REBOOT` and `CALIB_RESET`; never for `STOP`.
+- Heartbeat `GET_STATE` every 1 s only while `safety.comm_armed` and no other command was sent in that second.
+- Button enable rules from `ADDAPP.buttons` (also while `local`: STOP and HV off stay enabled).
+- Thickness: HV off → 0 · HV on and no valid value (shutter closed) → `–` · off the material → 0 ·
+  on the material → value. Only the page; `/proc` is unchanged.
 - Settings: invalid fields are marked and **no** `SET` is sent; otherwise one `SET` per changed key
   (in `PARAMS` order), then `GET_CONFIG` again. The router password is sent only when typed
-  (empty field = keep). The live router connection state is not part of `/proc`; it is shown on
-  the device display (IP line), the settings page shows the configured SSID and whether a password
-  is stored.
+  (empty field = keep).
+- Size: the page is about 105 kB. While the browser loads it, `/api` waits (one connection at a
+  time, see change 1.5.25 row 12a), about 1 s on the device.
 
 ---
 

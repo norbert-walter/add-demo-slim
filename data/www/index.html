@@ -1,303 +1,2266 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ADD Demo – Process View</title>
-<link rel="stylesheet" href="/style.css">
+<title>IMS Demoanlage</title>
+<style>
+/* Fonts from the device (no CDN: in AP mode there is no internet). As a local file these URLs
+   do not resolve and the system font is used. */
+@font-face { font-family: 'Ubuntu'; font-weight: 400; font-style: normal; font-display: swap; src: url('/font-u400.woff2') format('woff2'); }
+@font-face { font-family: 'Ubuntu'; font-weight: 700; font-style: normal; font-display: swap; src: url('/font-u700.woff2') format('woff2'); }
+@font-face { font-family: 'Ubuntu Mono'; font-weight: 400; font-style: normal; font-display: swap; src: url('/font-m400.woff2') format('woff2'); }
+@font-face { font-family: 'Ubuntu Mono'; font-weight: 700; font-style: normal; font-display: swap; src: url('/font-m700.woff2') format('woff2'); }
+/* =========================================================
+   IMS Demoanlage UI — Design Tokens
+   Layout: Left nav (60px icons) + header (50px) + content
+   Colors: IMS dark blue professional theme
+========================================================= */
+:root {
+  /* IMS Brand Colors */
+  --ims-blue:        #005A9A;
+  --ims-orange:      #F39200;
+  --ims-silver:      #D0D0D0;
+
+  /* Dark Theme (primary — matches IMS MEVIweb) */
+  --nav-bg:          #07151c;
+  --nav-active:      #005F8F;
+  --nav-icon:        #CDE6F9;
+  --nav-icon-active: #00B6F8;
+  --nav-icon-hover:  #FFA104;
+
+  --header-bg:       #004578;
+  --header-fg:       #CDE6F9;
+
+  --page-bg:         #003759;
+  --panel-bg:        #004578;
+  --panel-border:    #3B6481;
+  --panel-header-bg: #002847;
+
+  --fg:              #CDE6F9;
+  --fg-dim:          #6184A0;
+  --fg-muted:        #4A7CA0;
+
+  --input-bg:        #003256;
+  --input-border:    #8099AB;
+  --input-fg:        #F5FBFF;
+
+  --btn-bg:          #337BAE;
+  --btn-fg:          #CDE6F9;
+  --btn-bg-disabled: #005694;
+  --btn-fg-disabled: #6184A0;
+  --btn-hover-border:#FFA104;
+
+  --ok:              #03CA15;
+  --warn:            #F0F000;
+  --err:             #FF1010;
+  --info:            #00B6F8;
+
+  --table-even:      #003452;
+  --chart-grid:      #1F5E8E;
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --nav-bg:          #07151c;
+    --nav-active:      #005F8F;
+    --nav-icon:        #CDE6F9;
+    --nav-icon-active: #00B6F8;
+    --nav-icon-hover:  #FFA104;
+    --header-bg:       #004578;
+    --header-fg:       #CDE6F9;
+    --page-bg:         #003759;
+    --panel-bg:        #004578;
+    --panel-border:    #3B6481;
+    --panel-header-bg: #002847;
+    --fg:              #CDE6F9;
+    --fg-dim:          #6184A0;
+    --fg-muted:        #4A7CA0;
+    --input-bg:        #003256;
+    --input-border:    #8099AB;
+    --input-fg:        #F5FBFF;
+    --btn-bg:          #337BAE;
+    --btn-fg:          #CDE6F9;
+    --btn-bg-disabled: #005694;
+    --btn-fg-disabled: #6184A0;
+    --btn-hover-border:#FFA104;
+    --ok:              #03CA15;
+    --warn:            #F0F000;
+    --err:             #FF1010;
+    --info:            #00B6F8;
+    --table-even:      #003452;
+    --chart-grid:      #1F5E8E;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="light"] {
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Ubuntu', system-ui, sans-serif;
+  font-size: 13px;
+  background: var(--page-bg);
+  color: var(--fg);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* =========================================================
+   SHELL LAYOUT: nav-rail | header + content
+========================================================= */
+.shell {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* --- Left navigation rail --- */
+.nav-rail {
+  width: 60px;
+  background: var(--nav-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 0;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.nav-logo {
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--header-bg);
+  border-bottom: 1px solid #0a2030;
+}
+
+.nav-logo svg {
+  width: 36px;
+  height: auto;
+}
+
+.nav-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  flex: 1;
+}
+
+.nav-item {
+  width: 60px;
+  height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  color: var(--nav-icon);
+  position: relative;
+  transition: color 0.15s;
+  border: none;
+  background: none;
+  padding: 0;
+  text-decoration: none;
+}
+
+.nav-item:hover { color: var(--nav-icon-hover); }
+.nav-item.active {
+  color: var(--nav-icon-active);
+  background: var(--nav-active);
+}
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--nav-icon-active);
+}
+
+.nav-item svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.nav-item span {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.nav-bottom {
+  padding-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Tooltip */
+.nav-item[data-tip] { position: relative; }
+.nav-item[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: #001828;
+  color: var(--fg);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 100;
+}
+.nav-item[data-tip]:hover::after { opacity: 1; }
+
+/* --- Main area --- */
+.main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* --- Header --- */
+.topbar {
+  height: 50px;
+  background: var(--header-bg);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid #002847;
+}
+
+.topbar-alarm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  background: transparent;
+  border: 1.5px solid var(--err);
+  border-radius: 3px;
+  padding: 4px 10px;
+  min-width: 0;
+}
+
+.alarm-icon {
+  color: var(--err);
+  flex-shrink: 0;
+}
+.alarm-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; }
+
+.alarm-text { min-width: 0; }
+.alarm-title { font-weight: 600; font-size: 13px; color: var(--fg); }
+.alarm-detail { font-size: 11px; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.topbar-status-boxes {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.status-box {
+  border: 1.5px solid var(--err);
+  border-radius: 3px;
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg);
+  text-align: center;
+  min-width: 130px;
+  cursor: default;
+  position: relative;
+}
+.status-box .badge {
+  position: absolute;
+  top: -6px; right: -6px;
+  background: var(--err);
+  border-radius: 50%;
+  width: 16px; height: 16px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; color: #fff;
+}
+
+.topbar-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  gap: 2px;
+}
+.topbar-id { font-size: 14px; font-weight: 600; color: var(--fg); font-variant-numeric: tabular-nums; }
+.topbar-sub { font-size: 11px; color: var(--fg-dim); }
+
+.topbar-icons { display: flex; gap: 6px; align-items: center; }
+.topbar-icons svg { width: 20px; height: 20px; fill: none; stroke: var(--fg-dim); stroke-width: 1.8; cursor: pointer; }
+.topbar-icons svg:hover { stroke: var(--nav-icon-hover); }
+
+.ims-logo-sm { opacity: 0.85; }
+.ims-logo-sm svg { width: 70px; height: auto; }
+
+/* Sub-header / breadcrumb */
+.subbar {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--page-bg);
+  border-bottom: 1px solid var(--panel-border);
+  flex-shrink: 0;
+}
+.subbar .star { color: var(--fg-dim); cursor: pointer; }
+.subbar .star:hover { color: var(--warn); }
+.subbar .page-title { font-weight: 500; }
+.subbar-right {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Connection status */
+.conn-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+.conn-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--fg-muted);
+}
+.conn-dot.online { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+.conn-dot.offline { background: var(--err); }
+
+/* =========================================================
+   PAGE CONTENT AREA
+========================================================= */
+.page-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 16px;
+  min-width: 0;
+}
+.page-content:not(.active) { display: none; }
+
+/* =========================================================
+   PROCESS PAGE LAYOUT
+========================================================= */
+.process-grid {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  grid-template-rows: auto 1fr;
+  gap: 10px;
+}
+
+/* Material info bar */
+.material-bar {
+  grid-column: 1 / -1;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0;
+}
+.mat-cell {
+  padding: 6px 14px;
+  border-right: 1px solid var(--panel-border);
+}
+.mat-cell:last-child { border-right: none; }
+.mat-cell .label { font-size: 10px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
+.mat-cell .value { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--fg); }
+
+/* Left panel: measurements */
+.left-panels { display: flex; flex-direction: column; gap: 10px; }
+
+/* Panel */
+.panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.panel-header {
+  background: var(--panel-header-bg);
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panel-body { padding: 10px 12px; }
+
+/* Measurement values table */
+.meas-table { width: 100%; }
+.meas-table tr td {
+  padding: 2px 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.meas-table .lbl { color: var(--fg-dim); width: 32px; }
+.meas-table .val { font-weight: 600; color: var(--fg); text-align: right; padding-right: 4px; }
+.meas-table .unit { color: var(--fg-dim); font-size: 11px; }
+.meas-table .pos-row td { color: var(--info); font-weight: 600; }
+
+/* Control buttons */
+.ctrl-buttons { display: flex; flex-direction: column; gap: 6px; }
+.btn {
+  padding: 7px 12px;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border: 1px solid var(--btn-bg);
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: center;
+  transition: border-color 0.15s, opacity 0.15s;
+  width: 100%;
+}
+.btn:hover { border-color: var(--btn-hover-border); }
+.btn:disabled { background: var(--btn-bg-disabled); color: var(--btn-fg-disabled); border-color: var(--btn-bg-disabled); cursor: not-allowed; }
+.btn.btn-danger { background: #6B1010; border-color: var(--err); color: var(--fg); }
+.btn.btn-danger:hover { border-color: #FF6060; }
+.btn.btn-stop { background: #8B2000; border-color: #CC4400; color: #FFCCAA; }
+
+/* Status rows */
+.status-rows { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; }
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+.status-row .s-label { color: var(--fg-dim); }
+.status-row .s-val { font-weight: 500; color: var(--fg); }
+.s-ok { color: var(--ok) !important; }
+.s-warn { color: var(--warn) !important; }
+.s-err { color: var(--err) !important; }
+.s-info { color: var(--info) !important; }
+
+/* Main chart area */
+.chart-area {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.chart-panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.chart-panel .panel-header {
+  display: flex;
+  gap: 16px;
+}
+
+.chart-legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--fg-dim);
+}
+.legend-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.chart-canvas-wrap {
+  padding: 8px 12px 10px;
+  height: 220px;
+  position: relative;
+}
+.chart-canvas-wrap canvas { width: 100% !important; height: 100% !important; }
+
+/* =========================================================
+   GAUGE / METER
+========================================================= */
+.gauge-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px;
+}
+
+.gauge-svg { overflow: visible; }
+
+.gauge-value-big {
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  text-align: center;
+}
+.gauge-unit { font-size: 12px; color: var(--fg-dim); text-align: center; margin-top: -4px; }
+
+/* =========================================================
+   SETTINGS PAGE
+========================================================= */
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.form-group label {
+  font-size: 11px;
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.form-control {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 3px;
+  color: var(--input-fg);
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  width: 100%;
+  transition: border-color 0.15s;
+}
+.form-control:focus {
+  outline: none;
+  border-color: var(--info);
+}
+.form-control:hover:not(:focus) { border-color: var(--btn-hover-border); }
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  align-items: end;
+}
+.form-row .unit-label {
+  padding: 6px 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 3px;
+  color: var(--fg-dim);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.checkbox-row input[type="checkbox"] {
+  width: 16px; height: 16px;
+  accent-color: var(--info);
+  cursor: pointer;
+}
+.checkbox-row label { font-size: 13px; color: var(--fg); cursor: pointer; }
+
+.section-divider {
+  border: none;
+  border-top: 1px solid var(--panel-border);
+  margin: 12px 0;
+}
+
+.save-bar {
+  display: flex;
+  gap: 8px;
+  padding-top: 8px;
+  justify-content: flex-end;
+}
+
+/* =========================================================
+   CALIBRATION PAGE
+========================================================= */
+.calib-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.calib-table { width: 100%; border-collapse: collapse; }
+.calib-table th {
+  background: var(--panel-header-bg);
+  padding: 7px 12px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--fg);
+  border-bottom: 1px solid var(--panel-border);
+}
+.calib-table td {
+  padding: 7px 12px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--panel-border);
+  font-variant-numeric: tabular-nums;
+}
+.calib-table tr:nth-child(even) td { background: var(--table-even); }
+.calib-table tr:last-child td { border-bottom: none; }
+.calib-table td input {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 3px;
+  color: var(--input-fg);
+  padding: 4px 8px;
+  font-size: 12px;
+  width: 90px;
+  font-family: 'Ubuntu Mono', monospace;
+}
+.calib-table td input:focus { outline: none; border-color: var(--info); }
+
+.steps-panel { display: flex; flex-direction: column; gap: 8px; }
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--table-even);
+  border-radius: 3px;
+  border: 1px solid var(--panel-border);
+}
+.step-nr {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: var(--btn-bg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: var(--fg);
+  flex-shrink: 0;
+}
+.step-text { flex: 1; font-size: 12px; color: var(--fg); }
+.step-status { font-size: 11px; font-weight: 600; }
+
+/* Progress bar */
+.progress-wrap {
+  height: 8px;
+  background: var(--input-bg);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--info);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+/* =========================================================
+   LOG PAGE
+========================================================= */
+.log-table { width: 100%; border-collapse: collapse; }
+.log-table th {
+  background: var(--panel-header-bg);
+  padding: 7px 12px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--fg);
+  border-bottom: 1px solid var(--panel-border);
+}
+.log-table td {
+  padding: 5px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--panel-border);
+  font-variant-numeric: tabular-nums;
+}
+.log-table tr:hover td { background: rgba(255,161,4,0.06); }
+.log-tag {
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.log-tag.info  { background: rgba(0,182,248,0.18); color: var(--info); }
+.log-tag.warn  { background: rgba(240,240,0,0.15); color: var(--warn); }
+.log-tag.error { background: rgba(255,16,16,0.18);  color: var(--err); }
+.log-tag.ok    { background: rgba(3,202,21,0.18);   color: var(--ok); }
+
+/* =========================================================
+   RESPONSIVE
+========================================================= */
+@media (max-width: 700px) {
+  .process-grid { grid-template-columns: 1fr; }
+  .calib-grid { grid-template-columns: 1fr; }
+  .settings-grid { grid-template-columns: 1fr; }
+  .topbar-status-boxes { display: none; }
+  .ims-logo-sm { display: none; }
+  .nav-item span { display: none; }
+  .material-bar { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* =========================================================
+   SCROLLBAR
+========================================================= */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--nav-bg); }
+::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--btn-bg); }
+
+/* =========================================================
+   URL Config Modal
+========================================================= */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(3px);
+}
+.modal-overlay[hidden] { display: none !important; }
+.modal-box {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 5px;
+  padding: 24px;
+  width: 380px;
+  max-width: calc(100vw - 40px);
+}
+.modal-box h3 {
+  margin: 0 0 16px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.modal-box p { font-size: 12px; color: var(--fg-dim); margin: 0 0 12px; }
+
+/* Live blink */
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+.live-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 5px var(--ok);
+  animation: blink 2s ease-in-out infinite;
+  display: inline-block;
+}
+
+/* =========================================================
+   Additions for the ADD Demo Slim interface
+========================================================= */
+html { height: 100%; }
+.ctrl-buttons.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; flex-direction: unset; }
+.ctrl-buttons.grid2 .wide { grid-column: 1 / -1; }
+.btn.btn-hv-on { background: #6B1010; border-color: var(--err); color: #FFD0D0; }
+.btn.btn-hv-off { background: #0B5A1E; border-color: var(--ok); color: #D8FFD8; }
+.btn.btn-small { width: auto; padding: 4px 12px; font-size: 11px; }
+.btn.btn-secondary { background: var(--panel-header-bg); border-color: var(--panel-border); }
+.ctrl-hint { font-size: 11px; color: var(--warn); min-height: 14px; margin-top: 6px; }
+.topbar-alarm.ok { border-color: var(--ok); }
+.topbar-alarm.ok .alarm-icon { color: var(--ok); }
+.topbar-alarm.warn { border-color: var(--warn); }
+.topbar-alarm.warn .alarm-icon { color: var(--warn); }
+.topbar-alarm.err .alarm-icon { color: var(--err); }
+.status-box.on { border-color: var(--ok); }
+.status-box.on .badge { background: var(--ok); }
+.status-box.warn { border-color: var(--warn); }
+.status-box.warn .badge { background: var(--warn); color: #000; }
+.status-box .badge.hidden, .hidden { display: none !important; }
+.mat-cell .value.ok { color: var(--ok); }
+.mat-cell .value.warn { color: var(--warn); }
+.mat-cell .value.err { color: var(--err); }
+.form-control.bad { border-color: var(--err); box-shadow: 0 0 0 1px var(--err); }
+.form-hint { font-size: 11px; color: var(--fg-dim); margin-top: -6px; margin-bottom: 10px; }
+.form-hint.warn { color: var(--warn); }
+.step-item .btn { width: auto; padding: 4px 12px; font-size: 11px; flex-shrink: 0; }
+.step-item .step-inp { width: 70px; padding: 3px 6px; font-size: 12px; }
+.step-status.ok { color: var(--ok); }
+.step-status.err { color: var(--err); }
+.step-status.dim { color: var(--fg-dim); }
+.calib-live { display: flex; gap: 24px; padding: 4px 0 10px; font-size: 12px; color: var(--fg-dim); flex-wrap: wrap; }
+.calib-live b { color: var(--fg); font-size: 15px; font-variant-numeric: tabular-nums; }
+.devlog { margin: 0; padding: 10px 12px; font-family: 'Ubuntu Mono', ui-monospace, monospace; font-size: 11px;
+  color: var(--fg); white-space: pre-wrap; max-height: 260px; overflow-y: auto; background: var(--table-even); }
+#toast { position: fixed; bottom: 24px; right: 24px; padding: 10px 20px; border-radius: 4px; font-size: 13px;
+  z-index: 1500; transition: opacity 0.4s; opacity: 0; pointer-events: none; background: var(--btn-bg); color: var(--btn-fg);
+  border: 1px solid var(--panel-border); max-width: calc(100vw - 48px); }
+#toast.err { background: #6B1010; border-color: var(--err); color: #FFE0E0; }
+#toast.show { opacity: 1; }
+.demo-badge { font-size: 10px; font-weight: 700; color: #000; background: var(--ims-orange); border-radius: 3px; padding: 1px 6px; }
+.process-grid { grid-template-columns: 250px 1fr; }
+@media (max-width: 700px) { .process-grid { grid-template-columns: 1fr; } }
+
+.ctrl-buttons .btn { min-height: 40px; }   /* touch targets on a tablet */
+
+</style>
 </head>
-<!-- index.html – Process View (Contract V1.5.22 §5.5, Sprint W1). SKELETON by the reviewer: the markup
-     and the given helpers stay as they are; only the functions marked TODO(W1.4) are filled in. -->
-<body class="theme-dark">
-<div class="wrap">
-
-  <div class="topbar">
-    <h1>ADD DEMO · PROCESS VIEW</h1>
-    <div class="status-pill offline" id="pill"><span class="dot off" id="pillDot"></span><span id="pillText">Connecting…</span></div>
-    <span class="local-badge hidden" id="localBadge">LOCAL</span>
-    <span class="spacer"></span>
-    <a href="/settings">Settings ›</a>
-    <select class="text-input" id="theme">
-      <option value="theme-dark">Dark</option><option value="theme-light">Light</option>
-      <option value="theme-night">Night</option><option value="theme-bw">B&amp;W</option>
-    </select>
-  </div>
-
-  <div class="sec">State</div>
-  <div class="grid">
-    <div class="panel span2">
-      <div class="lbl">Safety state</div>
-      <div class="state warn" id="state">---</div>
-      <div class="sub" id="err"></div>
+<body>
+<!-- Connection dialog -->
+<div class="modal-overlay" id="urlModal">
+  <div class="modal-box">
+    <h3>Verbindung zur Demoanlage</h3>
+    <p>IP-Adresse oder Hostname der Demoanlage. Im eigenen WLAN der Anlage („ADD-Demo“) ist das
+      <code>192.168.4.1</code>. Die Seite liest <code>/proc</code> und sendet Befehle an <code>/api</code>
+      (JSON mit CRC32, CONTRACT §4/§5).</p>
+    <div class="form-group">
+      <label>Host / IP-Adresse</label>
+      <input type="text" class="form-control" id="hostInput" placeholder="z. B. 192.168.4.1 oder 192.168.1.39" value="">
     </div>
-    <div class="panel"><div class="lbl">HV</div><div class="v-med" id="hv">---</div></div>
-    <div class="panel"><div class="lbl">Shutter</div><div class="v-med" id="shutter">---</div></div>
-    <div class="panel"><div class="lbl">Mode</div><div class="v-med" id="mode">---</div></div>
-  </div>
-
-  <div class="sec">Measurement</div>
-  <div class="grid">
-    <div class="panel"><div class="lbl">Position</div><div class="v-big"><span id="pos">---</span><span class="u"> mm</span></div></div>
-    <div class="panel"><div class="lbl">Speed</div><div class="v-med"><span id="vel">---</span><span class="u"> mm/s</span></div></div>
-    <div class="panel"><div class="lbl">Distance</div><div class="v-med"><span id="dist">---</span><span class="u"> mm</span></div></div>
-    <div class="panel"><div class="lbl">Thickness</div><div class="v-big"><span id="thick">---</span><span class="u"> mm</span></div></div>
-    <div class="panel"><div class="lbl">Average</div><div class="v-med"><span id="avg">---</span><span class="u"> mm</span></div>
-      <div class="sub">n = <span id="n">0</span></div></div>
-  </div>
-
-  <div class="grid two">
-    <div class="panel">
-      <div class="lbl">Distance / thickness (last 100 valid samples)</div>
-      <canvas class="chart" id="chart" width="640" height="160"></canvas>
-      <div class="legend"><span class="dist">— DIST</span> &nbsp; <span class="thick">— THICK</span></div>
+    <div class="form-group">
+      <label>Port</label>
+      <input type="text" class="form-control" id="portInput" placeholder="80" value="80">
     </div>
-    <div class="panel">
-      <div class="lbl">Safety flags (SIM = simulated)</div>
-      <div id="flags"></div>
-    </div>
-  </div>
-
-  <div class="sec">Operation</div>
-  <div class="panel">
-    <div class="btns">
-      <button class="btn btn-secondary" id="btnInit" disabled>INIT</button>
-      <button class="btn btn-primary" id="btnHv" disabled>HV ON</button>
-      <button class="btn btn-primary" id="btnMeasure" disabled>MEASURE</button>
-      <button class="btn btn-primary" id="btnTraverse" disabled>TRAVERSE</button>
-      <button class="btn btn-secondary" id="btnAck" disabled>ACK</button>
-      <button class="btn btn-danger btn-stop" id="btnStop">STOP</button>
-    </div>
-    <div class="hint mt" id="hint"></div>
-  </div>
-
-  <div class="val-strip" id="valStrip"><span class="val-lbl">ADD v1.0:</span></div>
-</div>
-
-<div class="dialog-overlay hidden" id="confirmOverlay">
-  <div class="dialog">
-    <div class="dialog-title" id="confirmTitle">Confirm</div>
-    <div class="dialog-body" id="confirmBody"></div>
-    <div class="dialog-btns">
-      <button class="btn btn-secondary" id="confirmCancel">Cancel</button>
-      <button class="btn btn-danger" id="confirmOk">Execute</button>
+    <div class="save-bar">
+      <button class="btn" id="btnConnect">Verbinden</button>
+      <button class="btn btn-secondary" id="btnDemo">Demo-Modus</button>
     </div>
   </div>
 </div>
-<div class="toast hidden" id="toast"></div>
 
-<script src="/app.js"></script>
+<!-- Confirm dialog -->
+<div class="modal-overlay" id="confirmModal" hidden>
+  <div class="modal-box">
+    <h3 id="confirmTitle">Bestätigen</h3>
+    <p id="confirmBody"></p>
+    <div class="save-bar">
+      <button class="btn btn-secondary" id="confirmCancel">Abbrechen</button>
+      <button class="btn btn-danger" id="confirmOk">Ausführen</button>
+    </div>
+  </div>
+</div>
+
+<div class="shell">
+
+  <!-- Navigation rail -->
+  <nav class="nav-rail" role="navigation" aria-label="Hauptnavigation">
+    <div class="nav-logo">
+      <svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+        <rect x="8" y="8" width="64" height="16" rx="2" fill="#005A9A"/>
+        <path d="M8 30 Q16 26 24 30 Q32 34 40 30 Q48 26 56 30 Q64 34 72 30 L72 46 Q64 50 56 46 Q48 42 40 46 Q32 50 24 46 Q16 42 8 46 Z" fill="#F39200"/>
+        <rect x="8" y="54" width="64" height="16" rx="2" fill="#005A9A"/>
+      </svg>
+    </div>
+    <div class="nav-items">
+      <button class="nav-item active" data-page="process" data-tip="Prozess">
+        <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg><span>Prozess</span>
+      </button>
+      <button class="nav-item" data-page="status" data-tip="Status">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg><span>Status</span>
+      </button>
+      <button class="nav-item" data-page="settings" data-tip="Einstellungen">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg><span>Config</span>
+      </button>
+      <button class="nav-item" data-page="calibration" data-tip="Kalibrierung">
+        <svg viewBox="0 0 24 24"><path d="M2 20h20M12 4v16M6 9l6-5 6 5"/></svg><span>Kalib.</span>
+      </button>
+    </div>
+    <div class="nav-bottom">
+      <button class="nav-item" data-page="log" data-tip="Log">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="12" y2="16"/></svg><span>Log</span>
+      </button>
+      <button class="nav-item" id="navConnect" data-tip="Verbindung">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49M7.76 7.76a6 6 0 0 0 0 8.49M20.49 3.51a12 12 0 0 1 0 16.97M3.51 3.51a12 12 0 0 0 0 16.97"/></svg><span>Verbind.</span>
+      </button>
+    </div>
+  </nav>
+
+  <div class="main-area">
+    <!-- Header -->
+    <header class="topbar">
+      <div class="topbar-alarm warn" id="alarmBox">
+        <div class="alarm-icon">
+          <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <div class="alarm-text">
+          <div class="alarm-title" id="alarmTitle">Keine Verbindung</div>
+          <div class="alarm-detail" id="alarmDetail">Host eingeben und verbinden</div>
+        </div>
+      </div>
+      <div class="topbar-status-boxes">
+        <div class="status-box" id="sboxHv">Hochspannung<div class="badge" id="sboxHvBadge">!</div></div>
+        <div class="status-box" id="sboxShutter">Shutter<div class="badge" id="sboxShutterBadge">!</div></div>
+      </div>
+      <div class="topbar-meta">
+        <div class="topbar-id" id="deviceId">–</div>
+        <div class="topbar-sub">ADD Demoanlage Slim</div>
+      </div>
+      <div class="ims-logo-sm">
+        <svg viewBox="0 0 120 40" xmlns="http://www.w3.org/2000/svg" style="width:90px;height:auto;opacity:0.7">
+          <text x="4" y="32" font-family="Arial Black, sans-serif" font-size="34" font-weight="900" fill="#005A9A" letter-spacing="-1">IMS</text>
+          <rect x="4" y="34" width="112" height="3" fill="#F39200"/>
+        </svg>
+      </div>
+    </header>
+
+    <div class="main-area" style="overflow:hidden; flex:1; display:flex; flex-direction:column;">
+      <div class="subbar">
+        <span class="star">☆</span>
+        <span class="page-title" id="pageTitle">Prozess</span>
+        <span class="demo-badge hidden" id="demoBadge">DEMO</span>
+        <div style="margin-left:auto;display:flex;gap:12px;align-items:center;">
+          <div class="conn-indicator"><div class="conn-dot offline" id="connDot"></div><span id="connLabel">Nicht verbunden</span></div>
+          <div class="subbar-right" id="clockDisplay">–</div>
+        </div>
+      </div>
+
+      <!-- ===================== PROCESS ===================== -->
+      <div class="page-content active" id="page-process">
+        <div class="process-grid">
+          <div class="material-bar">
+            <div class="mat-cell"><div class="label">Zustand</div><div class="value" id="matState">–</div></div>
+            <div class="mat-cell"><div class="label">Position</div><div class="value" id="matPos">– mm</div></div>
+            <div class="mat-cell"><div class="label">Geschwindigkeit</div><div class="value" id="matVel">– mm/s</div></div>
+            <div class="mat-cell"><div class="label">Abstand</div><div class="value" id="matDist">– mm</div></div>
+            <div class="mat-cell"><div class="label">Dicke Ist</div><div class="value" id="matThick">– mm</div></div>
+            <div class="mat-cell"><div class="label">Temperatur (SIM)</div><div class="value" id="matTemp">– °C</div></div>
+          </div>
+
+          <div class="left-panels">
+            <div class="panel">
+              <div class="panel-header">Messung</div>
+              <div class="panel-body">
+                <table class="meas-table">
+                  <tr><td class="lbl">Max</td><td class="val" id="mMax">–</td><td class="unit">mm</td></tr>
+                  <tr><td class="lbl">Avg</td><td class="val" id="mAvg">–</td><td class="unit">mm</td></tr>
+                  <tr><td class="lbl">Min</td><td class="val" id="mMin">–</td><td class="unit">mm</td></tr>
+                  <tr><td class="lbl">Ist</td><td class="val" id="mAct" style="color:var(--info);font-size:15px">–</td><td class="unit">mm</td></tr>
+                  <tr><td class="lbl">n</td><td class="val" id="mN">0</td><td class="unit"></td></tr>
+                  <tr class="pos-row"><td class="lbl">Pos</td><td class="val" id="mPos">–</td><td class="unit">mm</td></tr>
+                </table>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header">Dickenmesser</div>
+              <div class="panel-body" style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+                <div class="gauge-wrap">
+                  <canvas id="gaugeCanvas" width="150" height="90" style="width:150px;height:90px;"></canvas>
+                  <div class="gauge-value-big" id="gaugeValue">–</div>
+                  <div class="gauge-unit">mm Dicke</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header">Steuerung</div>
+              <div class="panel-body">
+                <div class="ctrl-buttons grid2">
+                  <button class="btn" id="btnInit" disabled>INIT</button>
+                  <button class="btn btn-hv-on" id="btnHv" disabled>HV EIN</button>
+                  <button class="btn" id="btnMeasure" disabled>MESSEN</button>
+                  <button class="btn" id="btnTraverse" disabled>TRAVERSE</button>
+                  <button class="btn" id="btnPark" disabled>PARK</button>
+                  <button class="btn" id="btnService" disabled>SERVICE</button>
+                  <button class="btn wide" id="btnAck" disabled>ACK – Fehler quittieren</button>
+                  <button class="btn btn-stop wide" id="btnStop">■ STOP</button>
+                </div>
+                <div class="ctrl-hint" id="ctrlHint"></div>
+                <div class="status-rows">
+                  <div class="status-row"><span class="s-label">Betriebsart</span><span class="s-val s-info" id="stMode">–</span></div>
+                  <div class="status-row"><span class="s-label">Achse</span><span class="s-val" id="stAxis">–</span></div>
+                  <div class="status-row"><span class="s-label">Hochspannung</span><span class="s-val" id="stHV">–</span></div>
+                  <div class="status-row"><span class="s-label">Shutter</span><span class="s-val" id="stShutter">–</span></div>
+                  <div class="status-row"><span class="s-label">Sicherheitskreis</span><span class="s-val" id="stInterlock">–</span></div>
+                  <div class="status-row"><span class="s-label">Kühlung</span><span class="s-val" id="stCooling">–</span></div>
+                  <div class="status-row"><span class="s-label">Not-Aus</span><span class="s-val" id="stEstop">–</span></div>
+                  <div class="status-row"><span class="s-label">Watchdog</span><span class="s-val" id="stWatchdog">–</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="chart-area">
+            <div class="chart-panel">
+              <div class="panel-header">
+                <span>Dickenverlauf (letzte 100 gültige Messwerte)</span>
+                <div class="chart-legend">
+                  <div class="legend-item"><div class="legend-dot" style="background:var(--info)"></div>Dicke</div>
+                  <div class="legend-item"><div class="legend-dot" style="background:var(--warn)"></div>Kantenschwelle</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;font-size:10px;font-weight:400;color:var(--fg-dim);"><div class="live-dot"></div> LIVE</div>
+              </div>
+              <div class="chart-canvas-wrap"><canvas id="trendChart"></canvas></div>
+            </div>
+            <div class="chart-panel">
+              <div class="panel-header">
+                <span>Abstand Sensor – Messgut</span>
+                <div class="chart-legend">
+                  <div class="legend-item"><div class="legend-dot" style="background:#F39200"></div>Abstand (mm)</div>
+                  <div class="legend-item"><div class="legend-dot" style="background:var(--fg-dim)"></div>Bezugsebene base_dist</div>
+                </div>
+              </div>
+              <div class="chart-canvas-wrap"><canvas id="distChart"></canvas></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== STATUS ===================== -->
+      <div class="page-content" id="page-status">
+        <div class="settings-grid">
+          <div class="panel">
+            <div class="panel-header">System<button class="btn btn-small" id="btnStateRefresh">Aktualisieren</button></div>
+            <div class="panel-body"><div class="status-rows">
+              <div class="status-row"><span class="s-label">Host</span><span class="s-val" id="ssHost">–</span></div>
+              <div class="status-row"><span class="s-label">Laufzeit seit Start</span><span class="s-val" id="ssUptime">–</span></div>
+              <div class="status-row"><span class="s-label">WLAN (Router)</span><span class="s-val" id="ssSSID">–</span></div>
+              <div class="status-row"><span class="s-label">Zykluszeit max.</span><span class="s-val" id="ssCycle">–</span></div>
+              <div class="status-row"><span class="s-label">Zyklusabstand max.</span><span class="s-val" id="ssPeriod">–</span></div>
+              <div class="status-row"><span class="s-label">STOP-Latenz max.</span><span class="s-val" id="ssPrio">–</span></div>
+              <div class="status-row"><span class="s-label">Zyklen über 1 ms</span><span class="s-val" id="ssOverruns">–</span></div>
+            </div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-header">Motor / Achse</div>
+            <div class="panel-body"><div class="status-rows">
+              <div class="status-row"><span class="s-label">Achsstatus</span><span class="s-val" id="msState">–</span></div>
+              <div class="status-row"><span class="s-label">Position</span><span class="s-val" id="msPos">–</span></div>
+              <div class="status-row"><span class="s-label">Geschwindigkeit</span><span class="s-val" id="msVel">–</span></div>
+              <div class="status-row"><span class="s-label">Referenziert</span><span class="s-val" id="msHomed">–</span></div>
+              <div class="status-row"><span class="s-label">Zone</span><span class="s-val" id="msZone">–</span></div>
+              <div class="status-row"><span class="s-label">Endschalter vorn</span><span class="s-val" id="msLimF">–</span></div>
+              <div class="status-row"><span class="s-label">Endschalter hinten</span><span class="s-val" id="msLimB">–</span></div>
+            </div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-header">Sicherheit</div>
+            <div class="panel-body"><div class="status-rows">
+              <div class="status-row"><span class="s-label">Zustand</span><span class="s-val" id="ioState">–</span></div>
+              <div class="status-row"><span class="s-label">Fehler</span><span class="s-val" id="ioErr">–</span></div>
+              <div class="status-row"><span class="s-label">Not-Aus</span><span class="s-val" id="ioEstop">–</span></div>
+              <div class="status-row"><span class="s-label">Hochspannung</span><span class="s-val" id="ioHV">–</span></div>
+              <div class="status-row"><span class="s-label">HV-Freigabe</span><span class="s-val" id="ioHvOk">–</span></div>
+              <div class="status-row"><span class="s-label">Shutter</span><span class="s-val" id="ioShutter">–</span></div>
+              <div class="status-row"><span class="s-label">Sicherheitskreis (SIM)</span><span class="s-val" id="ioInterlock">–</span></div>
+              <div class="status-row"><span class="s-label">Kühlung (SIM)</span><span class="s-val" id="ioCooling">–</span></div>
+              <div class="status-row"><span class="s-label">Temperatur (SIM)</span><span class="s-val" id="ioTemp">–</span></div>
+              <div class="status-row"><span class="s-label">Kommunikations-Watchdog</span><span class="s-val" id="ioArmed">–</span></div>
+              <div class="status-row"><span class="s-label">Bedienvorrang Display</span><span class="s-val" id="ioLocal">–</span></div>
+            </div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-header">ADD-Validierung (/add)</div>
+            <div class="panel-body"><div class="status-rows" id="valList"><div class="status-row"><span class="s-label">–</span></div></div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-header">Messkette</div>
+            <div class="panel-body"><div class="status-rows">
+              <div class="status-row"><span class="s-label">Abstand</span><span class="s-val" id="snDist">–</span></div>
+              <div class="status-row"><span class="s-label">Dicke</span><span class="s-val" id="snThick">–</span></div>
+              <div class="status-row"><span class="s-label">Im Messbereich</span><span class="s-val" id="snRange">–</span></div>
+              <div class="status-row"><span class="s-label">Auf Material</span><span class="s-val" id="snMat">–</span></div>
+              <div class="status-row"><span class="s-label">Messwert gültig</span><span class="s-val" id="snValid">–</span></div>
+              <div class="status-row"><span class="s-label">Mittelwert / n</span><span class="s-val" id="snAvg">–</span></div>
+            </div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== SETTINGS ===================== -->
+      <div class="page-content" id="page-settings">
+        <div class="settings-grid">
+          <div class="panel">
+            <div class="panel-header">Positionen</div>
+            <div class="panel-body">
+              <div class="form-group"><label>Messposition (START_MEASURE)</label>
+                <div class="form-row"><input type="number" class="form-control" id="f_measure_pos" step="0.1"><span class="unit-label">mm</span></div></div>
+              <div class="form-hint">Messzone 61 … 242 mm</div>
+              <div class="form-group"><label>Serviceposition (SERVICE)</label>
+                <div class="form-row"><input type="number" class="form-control" id="f_maint_pos" step="0.1"><span class="unit-label">mm</span></div></div>
+              <div class="form-hint">Servicezone 21 … 60 mm; Parkposition fest 2 mm</div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header">Profilfahrt (TRAVERSE)</div>
+            <div class="panel-body">
+              <div class="form-group"><label>Start</label>
+                <div class="form-row"><input type="number" class="form-control" id="f_traverse_start" step="0.1"><span class="unit-label">mm</span></div></div>
+              <div class="form-group"><label>Ende</label>
+                <div class="form-row"><input type="number" class="form-control" id="f_traverse_end" step="0.1"><span class="unit-label">mm</span></div></div>
+              <div class="form-group"><label>Geschwindigkeit</label>
+                <div class="form-row"><input type="number" class="form-control" id="f_traverse_speed" step="0.1"><span class="unit-label">mm/s</span></div></div>
+              <div class="form-group"><label>Shutter-Haltezeit</label>
+                <div class="form-row"><input type="number" class="form-control" id="f_shutter_hold" step="0.1"><span class="unit-label">s</span></div></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header">Messung</div>
+            <div class="panel-body">
+              <div class="form-group"><label>Kantenschwelle (auf Material ab)</label>
+                <div class="form-row"><input type="number" class="form-control" id="f_edge_threshold" step="0.1"><span class="unit-label">mm</span></div></div>
+              <div class="form-group"><label>Bezugsebene base_dist</label>
+                <div class="form-row"><input type="number" class="form-control" id="f_base_dist" step="0.1"><span class="unit-label">mm</span></div></div>
+              <div class="form-hint">Dicke = base_dist − Abstand</div>
+              <div class="section-divider"></div>
+              <div class="checkbox-row"><input type="checkbox" id="f_estop_nc"><label for="f_estop_nc">Not-Aus als Öffner (mit Drahtbrucherkennung)</label></div>
+              <div class="form-hint warn">Muss zur Verdrahtung passen, sonst Dauer-Not-Aus. Nur bei stehender Achse und HV aus.</div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header">Simulierte Sicherheitssignale (sofort wirksam)</div>
+            <div class="panel-body">
+              <div class="checkbox-row"><input type="checkbox" id="f_interlock"><label for="f_interlock">Sicherheitskreis geschlossen (SIM)</label></div>
+              <div class="checkbox-row"><input type="checkbox" id="f_cooling_flow"><label for="f_cooling_flow">Kühlwasser fließt (SIM)</label></div>
+              <div class="form-group"><label>Kühlwassertemperatur (SIM)</label>
+                <div class="form-row"><input type="number" class="form-control" id="f_temp" step="0.5"><span class="unit-label">°C</span></div></div>
+              <div class="form-hint">HV ein nur bis 30 °C; über 32 °C Fehler TEMP_HIGH (quittieren mit ACK)</div>
+              <div class="save-bar"><button class="btn btn-small" id="btnSetTemp">Temperatur setzen</button></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header">WLAN (Router)</div>
+            <div class="panel-body">
+              <div class="form-group"><label>SSID</label><input type="text" class="form-control" id="f_wifi_ssid" maxlength="32"></div>
+              <div class="form-group"><label>Passwort</label><input type="password" class="form-control" id="f_wifi_pass" maxlength="63" autocomplete="new-password"></div>
+              <div class="form-hint">Leer lassen = gespeichertes Passwort behalten. Wirkt nach einem Neustart.</div>
+              <div class="save-bar"><button class="btn btn-danger btn-small" id="btnReboot">Neustart</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="save-bar" style="padding:12px 0;">
+          <button class="btn btn-secondary btn-small" id="btnReload">Neu laden</button>
+          <button class="btn btn-small" id="btnSave">Speichern</button>
+        </div>
+      </div>
+
+      <!-- ===================== CALIBRATION ===================== -->
+      <div class="page-content" id="page-calibration">
+        <div class="calib-grid">
+          <div>
+            <div class="panel" style="margin-bottom:12px;">
+              <div class="panel-header">Kalibrierpunkte (Referenzstufen)</div>
+              <div class="panel-body" style="padding:0;">
+                <table class="calib-table">
+                  <thead><tr><th>Punkt</th><th>Referenz (mm)</th><th>Rohwert (mm)</th><th>Status</th></tr></thead>
+                  <tbody>
+                    <tr><td>Nah</td><td><input type="number" id="f_calib_near_ref" step="0.1"></td><td id="calNearRaw">–</td><td id="calNearSt">–</td></tr>
+                    <tr><td>Fern</td><td><input type="number" id="f_calib_far_ref" step="0.1"></td><td id="calFarRaw">–</td><td id="calFarSt">–</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="panel-body">
+                <div class="calib-live">
+                  <span>Abstand jetzt <b id="calLiveDist">–</b> mm</span>
+                  <span>Position <b id="calLivePos">–</b> mm</span>
+                  <span>Kalibrierung <b id="calValid">–</b></span>
+                </div>
+                <div class="save-bar">
+                  <button class="btn btn-secondary btn-small" id="btnCalReset">Zurücksetzen</button>
+                  <button class="btn btn-small" id="btnCalRefs">Referenzen setzen</button>
+                </div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">Sensor-Kennlinie (Rohwert → kalibriert)</div>
+              <div class="chart-canvas-wrap" style="height:200px;"><canvas id="calibChart"></canvas></div>
+            </div>
+          </div>
+          <div>
+            <div class="panel" style="margin-bottom:12px;">
+              <div class="panel-header">Kalibrierablauf</div>
+              <div class="panel-body">
+                <div class="steps-panel">
+                  <div class="step-item"><div class="step-nr">1</div><div class="step-text">Referenzfahrt (INIT) und HV aus. Achse zur Mitte der nahen Stufe fahren</div>
+                    <input type="number" class="form-control step-inp" id="calPosNear" value="215"><button class="btn" id="btnCalMoveNear">Fahren</button></div>
+                  <div class="step-item"><div class="step-nr">2</div><div class="step-text">Wert übernehmen, wenn die Achse steht und der Abstand ruhig ist (0,5 s stabil)</div>
+                    <span class="step-status dim" id="calStNear"></span><button class="btn" id="btnCalNear">Nah übernehmen</button></div>
+                  <div class="step-item"><div class="step-nr">3</div><div class="step-text">Achse zur Mitte der fernen Stufe fahren</div>
+                    <input type="number" class="form-control step-inp" id="calPosFar" value="115"><button class="btn" id="btnCalMoveFar">Fahren</button></div>
+                  <div class="step-item"><div class="step-nr">4</div><div class="step-text">Wert übernehmen</div>
+                    <span class="step-status dim" id="calStFar"></span><button class="btn" id="btnCalFar">Fern übernehmen</button></div>
+                  <div class="step-item"><div class="step-nr">5</div><div class="step-text">Referenzwerte prüfen (links) und Kalibrierung dauerhaft speichern</div>
+                    <span class="step-status dim" id="calStSave"></span><button class="btn" id="btnCalSave">Speichern</button></div>
+                </div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">Bezugsebene</div>
+              <div class="panel-body">
+                <p style="margin:0 0 8px;font-size:12px;color:var(--fg-dim)">Übernimmt den aktuellen kalibrierten Abstand als <code>base_dist</code> (Dicke 0). Auf der Demoanlage ist das normalerweise der feste Wert 70 mm (Einstellungen).</p>
+                <div class="calib-live"><span>base_dist <b id="calBase">–</b> mm</span></div>
+                <div class="save-bar"><button class="btn btn-small" id="btnCalBase">Bezugsebene übernehmen</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== LOG ===================== -->
+      <div class="page-content" id="page-log">
+        <div class="panel" style="margin-bottom:12px;">
+          <div class="panel-header"><span>Geräteprotokoll (/log)</span><button class="btn btn-small" id="btnDevLog">Laden</button></div>
+          <pre class="devlog" id="devLog">–</pre>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><span>Protokoll dieser Seite</span><button class="btn btn-small" id="btnClearLog">Löschen</button></div>
+          <div style="overflow-x:auto;">
+            <table class="log-table">
+              <thead><tr><th style="width:140px;">Zeitstempel</th><th style="width:70px;">Level</th><th>Nachricht</th></tr></thead>
+              <tbody id="logTableBody"><tr><td colspan="3" style="color:var(--fg-dim);text-align:center;padding:20px;">Keine Einträge</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+/* ===== ADDAPP: copy of data/www/app.js (byte for byte, checked by test/js/test_pages.js) ===== */
+/**
+ * app.js – pure logic of the ADD Demo web UI (Contract V1.5.22 §5.5, Sprint W1).
+ *
+ * No DOM, no fetch, no timers: every function takes plain data and returns plain data, so that
+ * test/js/test_app.js can test it with node. The pages (index.html, settings.html) load it with
+ * <script src="/app.js"><\/script> and use the global ADDAPP; node uses require().
+ *
+ * SKELETON by the reviewer: constants and the CRC functions are given. Fill in the functions marked
+ * TODO(W1.x) exactly as their comment says; do not add or rename functions, do not change the given part.
+ * ES5 syntax plus const/let, arrow functions and template strings (every current browser).
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.ADDAPP = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  // ---- constants (given) ---------------------------------------------------------------------
+  const ERR_NAMES = { 0: 'OK', '-1': 'BAD_CRC', '-2': 'BAD_JSON', '-3': 'UNKNOWN_CMD', '-4': 'BAD_PARAM',
+    '-5': 'STATE', '-6': 'PRECONDITION', '-7': 'BUSY', '-8': 'NOT_STABLE', '-9': 'CALIB_INVALID',
+    '-10': 'LOCAL_CONTROL' };                                       // CONTRACT §3.3
+  const SYS_ERR_NAMES = ['NONE', 'ESTOP', 'TEMP_HIGH', 'COMM_TIMEOUT', 'MOTOR_FAULT', 'HOMING_FAILED'];  // §3.2
+  const TEMP_FAULT_C = 32.0;                                         // §3.2 TEMP_HIGH
+  const HEARTBEAT_MS = 2000;
+  const SERIES_MAX = 100;
+  /** Settings keys in display order (CONTRACT §9). type: 'num' | 'bool' | 'str'. */
+  const PARAMS = [
+    { key: 'measure_pos',    type: 'num', min: 61,  max: 242,  unit: 'mm' },
+    { key: 'maint_pos',      type: 'num', min: 21,  max: 60,   unit: 'mm' },
+    { key: 'traverse_start', type: 'num', min: 61,  max: 242,  unit: 'mm' },
+    { key: 'traverse_end',   type: 'num', min: 61,  max: 242,  unit: 'mm' },
+    { key: 'traverse_speed', type: 'num', min: 1,   max: 20,   unit: 'mm/s' },
+    { key: 'shutter_hold',   type: 'num', min: 0,   max: 10,   unit: 's' },
+    { key: 'edge_threshold', type: 'num', min: 0.5, max: 100,  unit: 'mm' },
+    { key: 'base_dist',      type: 'num', min: 40,  max: 300,  unit: 'mm' },
+    { key: 'calib_near_ref', type: 'num', min: 40,  max: 300,  unit: 'mm' },
+    { key: 'calib_far_ref',  type: 'num', min: 40,  max: 300,  unit: 'mm' },
+    { key: 'temp',           type: 'num', min: -20, max: 99.9, unit: '°C' },
+    { key: 'interlock',      type: 'bool' },
+    { key: 'cooling_flow',   type: 'bool' },
+    { key: 'estop_nc',       type: 'bool' },
+    { key: 'wifi_ssid',      type: 'str', min: 0, max: 32 },
+    { key: 'wifi_pass',      type: 'str', min: 8, max: 63 },          // empty = keep the stored password
+  ];
+
+  // ---- CRC frame (given: CONTRACT §4, verbatim) -------------------------------------------------
+  function crc32(str) {
+    let c, crc = 0xFFFFFFFF; const b = new TextEncoder().encode(str);
+    for (const x of b) { c = (crc ^ x) & 0xFF; for (let k = 0; k < 8; k++) c = c & 1 ? (c >>> 1) ^ 0xEDB88320 : c >>> 1; crc = (crc >>> 8) ^ c; }
+    return ((crc ^ 0xFFFFFFFF) >>> 0).toString(16).toUpperCase().padStart(8, '0');
+  }
+  function frame(obj) { const body = JSON.stringify(obj); return body.slice(0, -1) + ',"crc":"' + crc32(body) + '"}'; }
+  function verify(t) {
+    t = t.trimEnd(); const i = t.lastIndexOf(',"crc":"');
+    return i >= 0 && t.length === i + 18 && t.endsWith('"}') && crc32(t.slice(0, i) + '}') === t.substr(i + 8, 8).toUpperCase();
+  }
+
+  // ---- W1.1: protocol and formatting -------------------------------------------------------------
+  /** Framed text -> {ok:true, data: JSON.parse(text)} (the crc member stays in data) |
+   *  {ok:false, error:'crc'} (not a string or verify fails) |
+   *  {ok:false, error:'json'} (CRC fine, but JSON.parse throws or the result is not a plain object). */
+  function parseFramed(text) {
+    if (typeof text !== 'string') return { ok: false, error: 'crc' };
+    const trimmed = text.trimEnd();
+    if (!verify(trimmed)) return { ok: false, error: 'crc' };
+    let data;
+    try { data = JSON.parse(trimmed); } catch (_) { return { ok: false, error: 'json' }; }
+    if (data === null || typeof data !== 'object' || Array.isArray(data)) return { ok: false, error: 'json' };
+    return { ok: true, data };
+  }
+  /** Request body for POST /api: frame({cmd, params}); params defaults to {} (also for null). */
+  function apiBody(cmd, params) {
+    return frame({ cmd, params: params ?? {} });
+  }
+  /** API result name (§3.3); unknown code c -> 'ERR c'. */
+  function errName(code) {
+    const name = ERR_NAMES[String(code)];
+    return name ?? `ERR ${code}`;
+  }
+  /** System error name (§3.2); unknown code c -> 'ERR c'. */
+  function sysErrName(code) {
+    const name = SYS_ERR_NAMES[code];
+    return name ?? `ERR ${code}`;
+  }
+  /** Number with `digits` decimals (default 1); not a finite number (incl. null/undefined) -> '---'. */
+  function fmt(x, digits) {
+    if (x === null || x === undefined || !Number.isFinite(x)) return '---';
+    const d = digits !== undefined ? digits : 1;
+    return x.toFixed(d);
+  }
+  /** Toast text of an /api reply object: err 0 -> '<cmd>: OK'; else '<cmd>: <errName>' plus
+   *  ' - <msg>' if msg is a non-empty string. No reply (null) -> 'no reply'. */
+  function replyText(resp) {
+    if (resp === null) return 'no reply';
+    const cmd = resp.cmd;
+    if (resp.err === 0) return `${cmd}: OK`;
+    let s = `${cmd}: ${errName(resp.err)}`;
+    if (typeof resp.msg === 'string' && resp.msg !== '') s += ` - ${resp.msg}`;
+    return s;
+  }
+
+  // ---- W1.2: process view rules ------------------------------------------------------------------
+  /** Colour class of a safety state: READY/RUNNING 'ok', FAULT/WAIT_ACK 'danger', every other 'warn'. */
+  function stateClass(state) {
+    if (state === 'READY' || state === 'RUNNING') return 'ok';
+    if (state === 'FAULT' || state === 'WAIT_ACK') return 'danger';
+    return 'warn';
+  }
+  /** Display strings of a /proc object p:
+   *  { state, stateCls: stateClass(state), pos, vel (fmt), dist: fmt if measure.valid else '---',
+   *    thick: fmt if measure.valid && measure.on_material else '---', avg: fmt if measure.n > 0 else '---',
+   *    n: String(measure.n), mode: motion.mode, err: '' if err === 0 else sysErrName(err),
+   *    hv: 'ON'|'OFF', shutter: 'OPEN'|'CLOSED' (safety.shutter === 'open'), local: !!p.local } */
+  function view(p) {
+    const m = p.measure;
+    const s = p.safety;
+    return {
+      state: p.state,
+      stateCls: stateClass(p.state),
+      pos: fmt(p.motion.pos),
+      vel: fmt(p.motion.vel),
+      dist: m.valid ? fmt(m.dist) : '---',
+      thick: (m.valid && m.on_material) ? fmt(m.thick) : '---',
+      avg: m.n > 0 ? fmt(m.avg) : '---',
+      n: String(m.n),
+      mode: p.motion.mode,
+      err: p.err === 0 ? '' : sysErrName(p.err),
+      hv: s.hv_on ? 'ON' : 'OFF',
+      shutter: s.shutter === 'open' ? 'OPEN' : 'CLOSED',
+      local: !!p.local,
+    };
+  }
+  /** Safety flag chips, always these four in this order:
+   *  {id:'estop', text:'E-STOP ACTIVE'|'E-STOP OK', cls: estop ? 'danger' : 'ok'},
+   *  {id:'interlock', text:'INTERLOCK (SIM)', cls: interlock ? 'ok' : 'danger'},
+   *  {id:'cooling', text:'COOLING (SIM)', cls: cooling_flow ? 'ok' : 'danger'},
+   *  {id:'temp', text:'TEMP (SIM) <fmt(temp)> °C', cls: temp_ok ? 'ok' : (temp > TEMP_FAULT_C ? 'danger' : 'warn')} */
+  function flags(p) {
+    const s = p.safety;
+    return [
+      { id: 'estop', text: s.estop ? 'E-STOP ACTIVE' : 'E-STOP OK', cls: s.estop ? 'danger' : 'ok' },
+      { id: 'interlock', text: 'INTERLOCK (SIM)', cls: s.interlock ? 'ok' : 'danger' },
+      { id: 'cooling', text: 'COOLING (SIM)', cls: s.cooling_flow ? 'ok' : 'danger' },
+      { id: 'temp', text: `TEMP (SIM) ${fmt(s.temp)} °C`, cls: s.temp_ok ? 'ok' : (s.temp > TEMP_FAULT_C ? 'danger' : 'warn') },
+    ];
+  }
+  /** Button rules of the process view. p = last valid /proc object or null (no data yet / offline).
+   *  Returns { INIT, HV, MEASURE, TRAVERSE, STOP, ACK } each {enabled:bool}, HV additionally
+   *  {label, cmd}, plus hint (string).
+   *  idle = motion.state === 'idle'; local = p.local; st = p.state.
+   *  INIT:     !local && (st === 'SAFE_START' || st === 'READY') && idle
+   *  HV:       hv_on -> {label:'HV OFF', cmd:'HV_OFF', enabled:true}
+   *            else  -> {label:'HV ON',  cmd:'HV_ON',  enabled: !local && (st === 'READY' || st === 'RUNNING') && hv_ok}
+   *  MEASURE, TRAVERSE: !local && st === 'RUNNING' && motion.homed && idle
+   *  STOP:     always enabled (also with p === null)
+   *  ACK:      !local && st === 'WAIT_ACK'
+   *  hint:     local ? 'Operator at display has priority' : ''
+   *  p === null: all disabled except STOP, HV {label:'HV ON', cmd:'HV_ON'}, hint ''. */
+  function buttons(p) {
+    if (p === null) {
+      return {
+        INIT: { enabled: false },
+        HV: { label: 'HV ON', cmd: 'HV_ON', enabled: false },
+        MEASURE: { enabled: false },
+        TRAVERSE: { enabled: false },
+        STOP: { enabled: true },
+        ACK: { enabled: false },
+        hint: '',
+      };
+    }
+
+    const idle = p.motion.state === 'idle';
+    const local = !!p.local;
+    const st = p.state;
+    const s = p.safety;
+
+    const INIT = !local && (st === 'SAFE_START' || st === 'READY') && idle;
+
+    let HV;
+    if (s.hv_on) {
+      HV = { label: 'HV OFF', cmd: 'HV_OFF', enabled: true };
+    } else {
+      HV = { label: 'HV ON', cmd: 'HV_ON', enabled: !local && (st === 'READY' || st === 'RUNNING') && s.hv_ok };
+    }
+
+    const MEASURE = !local && st === 'RUNNING' && p.motion.homed && idle;
+    const TRAVERSE = !local && st === 'RUNNING' && p.motion.homed && idle;
+    const STOP = true;
+    const ACK = !local && st === 'WAIT_ACK';
+
+    return {
+      INIT: { enabled: INIT },
+      HV: HV,
+      MEASURE: { enabled: MEASURE },
+      TRAVERSE: { enabled: TRAVERSE },
+      STOP: { enabled: STOP },
+      ACK: { enabled: ACK },
+      hint: local ? 'Operator at display has priority' : '',
+    };
+  }
+  /** Commands that need the confirmation dialog (Style Guide 7.8): HV_ON, ACK, REBOOT, CALIB_RESET.
+   *  Returns {title, body} or null. Texts:
+   *  HV_ON:  'Switch HV on?', 'The X-ray source (HV LED) is switched on.'
+   *  ACK:    'Acknowledge fault?', 'The cause is gone. The system returns to READY or SAFE_START.'
+   *  REBOOT: 'Reboot device?', 'The device restarts. The connection is lost for some seconds.'
+   *  CALIB_RESET: 'Reset calibration?', 'The calibration returns to the factory values.' */
+  function confirmText(cmd) {
+    const map = {
+      HV_ON: { title: 'Switch HV on?', body: 'The X-ray source (HV LED) is switched on.' },
+      ACK: { title: 'Acknowledge fault?', body: 'The cause is gone. The system returns to READY or SAFE_START.' },
+      REBOOT: { title: 'Reboot device?', body: 'The device restarts. The connection is lost for some seconds.' },
+      CALIB_RESET: { title: 'Reset calibration?', body: 'The calibration returns to the factory values.' },
+    };
+    return map[cmd] || null;
+  }
+  /** true if a GET_STATE heartbeat must be sent now: p not null, p.safety.comm_armed and
+   *  (now - lastSent) >= HEARTBEAT_MS. */
+  function heartbeatDue(p, now, lastSent) {
+    return p !== null && p.safety.comm_armed && (now - lastSent) >= HEARTBEAT_MS;
+  }
+  /** Time series for the chart: if p.measure.valid push {dist, thick} (numbers from p.measure);
+   *  then drop from the front until length <= max (default SERIES_MAX). Mutates and returns series. */
+  function seriesPush(series, p, max) {
+    const m = p.measure;
+    if (m.valid) {
+      series.push({ dist: m.dist, thick: m.thick });
+    }
+    const limit = max !== undefined ? max : SERIES_MAX;
+    while (series.length > limit) {
+      series.shift();
+    }
+    return series;
+  }
+  /** Status pill: conn 'ok' -> {text:'Online', offline:false}; 'crc' -> {text:'CRC error', offline:true};
+   *  every other value -> {text:'Offline', offline:true}. */
+  function pill(conn) {
+    if (conn === 'ok') return { text: 'Online', offline: false };
+    if (conn === 'crc') return { text: 'CRC error', offline: true };
+    return { text: 'Offline', offline: true };
+  }
+  /** Validation strip (Style Guide 6.10) from the /add document (object or null).
+   *  No add.validation.validated_by array or an empty one -> [{text:'not validated', cls:'warn'}].
+   *  Else take the entry with the largest validated_at (ISO strings compare as text; the first wins
+   *  on equality) and return, for each member of entry.score in object order:
+   *    'pass' -> {text:'✓ <key>', cls:''}, 'warning' -> {text:'! <key>', cls:'warn'},
+   *    every other value -> {text:'✗ <key>', cls:'fail'},
+   *  followed by {text: '<STATUS> · <version> · <validated_at first 10 chars>', cls:'info'} with
+   *  STATUS = status in upper case, '_' replaced by ' ' (e.g. 'PASSED WITH WARNINGS'). */
+  function validationBadges(add) {
+    if (!add || !add.validation || !Array.isArray(add.validation.validated_by) || add.validation.validated_by.length === 0) {
+      return [{ text: 'not validated', cls: 'warn' }];
+    }
+
+    let best = null;
+    for (const entry of add.validation.validated_by) {
+      if (!best || entry.validated_at > best.validated_at) {
+        best = entry;
+      }
+    }
+
+    const badges = [];
+    for (const key of Object.keys(best.score)) {
+      const score = best.score[key];
+      let text, cls;
+      if (score === 'pass') {
+        text = `✓ ${key}`;
+        cls = '';
+      } else if (score === 'warning') {
+        text = `! ${key}`;
+        cls = 'warn';
+      } else {
+        text = `✗ ${key}`;
+        cls = 'fail';
+      }
+      badges.push({ text, cls });
+    }
+
+    const status = best.status.toUpperCase().replace(/_/g, ' ');
+    const version = best.version;
+    const validated_at = best.validated_at.substring(0, 10);
+    badges.push({ text: `${status} · ${version} · ${validated_at}`, cls: 'info' });
+
+    return badges;
+  }
+
+  // ---- W1.3: settings rules ----------------------------------------------------------------------
+  /** Check one form value against PARAMS. raw: string from an input (for 'bool' also true/false).
+   *  'num':  trimmed string, Number(raw) must be finite and min <= x <= max -> {ok:true, value:x}
+   *          (empty string is invalid); else {ok:false, error:'<min> ... <max>'} (numbers as String()).
+   *  'bool': true/'true'/'1' -> true, false/'false'/'0' -> false, else {ok:false, error:'true or false'}
+   *  'str':  wifi_ssid: length 0..32; wifi_pass: length 8..63 (the empty string is handled by
+   *          configDiff, not here); else {ok:false, error:'<min> ... <max> characters'}
+   *  unknown key -> {ok:false, error:'unknown key'} */
+  function checkParam(key, raw) {
+    var param = PARAMS.find(function (p) { return p.key === key; });
+    if (!param) { return { ok: false, error: 'unknown key' }; }
+
+    if (param.type === 'num') {
+      var s = String(raw).trim();
+      if (s === '') { return { ok: false, error: String(param.min) + ' ... ' + String(param.max) }; }
+      var x = Number(s);
+      if (!isFinite(x) || x < param.min || x > param.max) { return { ok: false, error: String(param.min) + ' ... ' + String(param.max) }; }
+      return { ok: true, value: x };
+    }
+
+    if (param.type === 'bool') {
+      if (raw === true || raw === 'true' || raw === '1') { return { ok: true, value: true }; }
+      if (raw === false || raw === 'false' || raw === '0') { return { ok: true, value: false }; }
+      return { ok: false, error: 'true or false' };
+    }
+
+    if (param.type === 'str') {
+      var str = String(raw);
+      if ('min' in param && str.length < param.min) { return { ok: false, error: String(param.min) + ' ... ' + String(param.max) + ' characters' }; }
+      if ('max' in param && str.length > param.max) { return { ok: false, error: String(param.min) + ' ... ' + String(param.max) + ' characters' }; }
+      return { ok: true, value: str };
+    }
+
+    return { ok: false, error: 'unknown key' };
+  }
+  /** SET commands for the changes of a settings form.
+   *  cfg: the "config" object of GET_CONFIG; form: {key: raw value} for some or all PARAMS keys.
+   *  For every PARAMS key (in PARAMS order) that is present in form:
+   *    wifi_pass: skipped if form.wifi_pass === '' (keep stored password), else checked and always set;
+   *    other keys: checkParam; invalid -> errors.push({key, error}); valid and different from cfg[key]
+   *    -> sets.push({key, value}). Numbers count as different if |a - b| > 0.0001.
+   *  Returns {sets, errors}. */
+  function configDiff(cfg, form) {
+    var sets = [];
+    var errors = [];
+
+    for (var i = 0; i < PARAMS.length; i++) {
+      var key = PARAMS[i].key;
+      if (!(key in form)) { continue; }
+
+      var raw = form[key];
+
+      // wifi_pass: skip if empty string (keep stored password)
+      if (key === 'wifi_pass' && raw === '') { continue; }
+
+      var result = checkParam(key, raw);
+
+      if (!result.ok) {
+        errors.push({ key: key, error: result.error });
+      } else {
+        // wifi_pass is always sent when typed (no comparison with cfg)
+        if (key === 'wifi_pass') {
+          sets.push({ key: key, value: result.value });
+        } else {
+          var oldVal = cfg[key];
+          var different;
+          if (typeof result.value === 'number' && typeof oldVal === 'number') {
+            different = Math.abs(result.value - oldVal) > 0.0001;
+          } else {
+            different = result.value !== oldVal;
+          }
+          if (different) {
+            sets.push({ key: key, value: result.value });
+          }
+        }
+      }
+    }
+
+    return { sets: sets, errors: errors };
+  }
+
+  return { ERR_NAMES, SYS_ERR_NAMES, TEMP_FAULT_C, HEARTBEAT_MS, SERIES_MAX, PARAMS,
+    crc32, frame, verify, parseFramed, apiBody, errName, sysErrName, fmt, replyText,
+    stateClass, view, flags, buttons, confirmText, heartbeatDue, seriesPush, pill, validationBadges,
+    checkParam, configDiff };
+});
+/* ===== end of ADDAPP ===== */
+</script>
 <script>
 'use strict';
-// ---- given helpers (do not change) -----------------------------------------------------------
+// =====================================================================================
+// IMS-style operator UI for the ADD Demo Slim (CONTRACT V1.5.26, §5.5).
+// ONE file for two uses:
+//   - served by the device at "/"  -> talks to its own origin, no connection dialog
+//   - opened as a local file (file://) -> connection dialog (host/IP) or demo mode
+// Device interface:
+//   GET  http://<host>/proc          process image, framed with CRC32 (CONTRACT §4, §5.4)
+//   POST http://<host>/api           {"cmd":..,"params":{..},"crc":".."}  (CONTRACT §5.2)
+//   GET  http://<host>/log           device log (text)
+// The body is sent as text/plain: a "simple" CORS request without preflight (the firmware
+// reads the body regardless of the content type and answers every request with
+// Access-Control-Allow-Origin: *).
+// Protocol and rule functions: window.ADDAPP (data/www/app.js of the firmware, embedded above).
+// =====================================================================================
 const A = window.ADDAPP;
 const POLL_MS = 500;
+const HEARTBEAT_MS = 1000;          // device watchdog fires after 5 s without a valid /api packet
+const SERIES_MAX = 100;
 const $ = (id) => document.getElementById(id);
-let last = null;             // last valid /proc object, null while offline
-let conn = 'offline';        // 'ok' | 'crc' | 'offline'
-let lastHeartbeat = 0;       // Date.now() of the last GET_STATE
-const series = [];           // chart samples {dist, thick}
 
-function setTheme(name) {
-  document.body.className = name;
-  $('theme').value = name;
-  try { localStorage.setItem('add-dashboard-theme', name); } catch (e) {}
-}
+let HOST = '';
+let demo = null;                    // DemoDevice while in demo mode
+let last = null;                    // last valid /proc object
+let conn = 'offline';               // 'ok' | 'crc' | 'offline'
+let cfg = null;                     // last GET_CONFIG config
+let lastApi = 0;                    // Date.now() of the last /api request (any command feeds the watchdog)
+let pollTimer = null;
+const series = [];                  // {dist, thick}
+let stat = { n: 0, max: null, min: null };   // max/min of the current acquisition (page side)
+let logEntries = [];
+
+// ---- small helpers ---------------------------------------------------------------------------
+const f1 = (x) => A.fmt(x, 1);
+const f2 = (x) => A.fmt(x, 2);
+function cls(el, c) { el.classList.remove('s-ok', 's-warn', 's-err', 's-info'); if (c) el.classList.add(c); }
+function setVal(id, text, c) { const el = $(id); el.textContent = text; cls(el, c); }
+function yesNo(id, v, yes, no, cYes, cNo) { setVal(id, v ? yes : no, v ? cYes : cNo); }
+function escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
 let toastTimer = null;
-function toast(text, isError) {
+function toast(msg, isErr) {
   const t = $('toast');
-  t.textContent = text; t.className = 'toast' + (isError ? ' err' : '');
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = 'toast hidden'; }, 4000);
+  t.textContent = msg;
+  t.className = 'show' + (isErr ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, isErr ? 5000 : 2500);
 }
-function showConfirm(title, body, action) {
-  $('confirmTitle').textContent = title; $('confirmBody').textContent = body;
-  $('confirmOk').onclick = () => { closeConfirm(); action(); };
-  $('confirmOverlay').classList.remove('hidden');
+function addLog(level, msg) {
+  logEntries.unshift({ ts: new Date().toLocaleString('de-DE'), level, msg });
+  if (logEntries.length > 300) logEntries.length = 300;
+  if ($('page-log').classList.contains('active')) renderLog();
 }
-function closeConfirm() { $('confirmOverlay').classList.add('hidden'); }
-/** Two lines, each scaled to its own min..max (Style Guide 6.7 sparkline). */
-function drawChart() {
-  const c = $('chart'), ctx = c.getContext('2d'), W = c.width, H = c.height;
-  ctx.clearRect(0, 0, W, H);
-  if (series.length < 2) return;
-  const css = getComputedStyle(document.body);
-  [['dist', '--accent'], ['thick', '--accent2']].forEach(([k, col]) => {
-    const v = series.map((s) => s[k]);
-    const min = Math.min.apply(null, v), max = Math.max.apply(null, v), range = max - min || 1;
-    ctx.beginPath();
-    v.forEach((y, i) => {
-      const px = (i / (v.length - 1)) * W, py = H - ((y - min) / range) * (H - 6) - 3;
-      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-    });
-    ctx.strokeStyle = css.getPropertyValue(col).trim(); ctx.lineWidth = 1.5; ctx.stroke();
-  });
+function renderLog() {
+  const tb = $('logTableBody');
+  if (!logEntries.length) { tb.innerHTML = '<tr><td colspan="3" style="color:var(--fg-dim);text-align:center;padding:20px;">Keine Einträge</td></tr>'; return; }
+  tb.innerHTML = logEntries.slice(0, 100).map((e) =>
+    `<tr><td style="color:var(--fg-dim)">${e.ts}</td><td><span class="log-tag ${e.level}">${e.level.toUpperCase()}</span></td><td>${escHtml(e.msg)}</td></tr>`).join('');
 }
 
-// ---- TODO(W1.4) --------------------------------------------------------------------------------
-/** POST /api with A.apiBody(cmd, params). Returns the reply object (A.parseFramed(text).data) or
- *  null (network error, HTTP error without a framed body, CRC/JSON error).
- *  Unless quiet: toast(A.replyText(reply), !reply || reply.err !== 0). Never retries (also not on BUSY). */
+// ---- confirmation dialog ---------------------------------------------------------------------
+const CONFIRM = {
+  HV_ON: ['Hochspannung einschalten?', 'Die Röntgenquelle (HV-LED) wird eingeschaltet. Der Shutter öffnet erst beim Messen.'],
+  ACK: ['Fehler quittieren?', 'Die Ursache muss behoben sein. Die Anlage geht danach in READY bzw. SAFE_START.'],
+  REBOOT: ['Gerät neu starten?', 'Die Anlage startet neu, die Verbindung ist einige Sekunden unterbrochen. Die HV muss aus sein.'],
+  CALIB_RESET: ['Kalibrierung zurücksetzen?', 'Die Kalibrierung wird auf die Werkswerte (40/40, 65/65) gesetzt. Gespeichert wird erst mit „Speichern“.'],
+  ESTOP_NC: ['Not-Aus-Verdrahtung ändern?', 'Passt die Einstellung nicht zur Verdrahtung, zeigt die Anlage Dauer-Not-Aus.'],
+};
+function confirmThen(key, action) {
+  const c = CONFIRM[key];
+  $('confirmTitle').textContent = c[0];
+  $('confirmBody').textContent = c[1];
+  $('confirmOk').onclick = () => { $('confirmModal').hidden = true; action(); };
+  $('confirmModal').hidden = false;
+}
+
+// ---- device access ---------------------------------------------------------------------------
+// on the device HOST is '' -> relative URLs to the own origin
+function baseUrl() { return HOST ? 'http://' + HOST : ''; }
+const ON_DEVICE = location.protocol === 'http:' || location.protocol === 'https:';
+
+/** /api command; returns the reply object or null. Unless quiet: toast and log line. */
 async function api(cmd, params, quiet) {
+  lastApi = Date.now();
   let reply = null;
-  try {
-    // HTTP 400 (BAD_CRC, BAD_JSON) also carries a framed reply - read the body for every status
-    const res = await fetch('/api', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: A.apiBody(cmd, params) });
-    const parsed = A.parseFramed(await res.text());
-    if (parsed.ok) reply = parsed.data;
-  } catch (e) {
-    reply = null;
-  }
-  if (!quiet) toast(A.replyText(reply), !reply || reply.err !== 0);   // also 'no reply' as an error
-  return reply;
-}
-/** A user command: with A.confirmText(cmd) -> showConfirm(title, body, () => api(cmd)); else api(cmd). */
-function command(cmd) {
-  const ct = A.confirmText(cmd);
-  if (ct) {
-    showConfirm(ct.title, ct.body, () => api(cmd));
-  } else {
-    api(cmd);
-  }
-}
-/** Show p (or "no data" for null) on the page:
- *  pill (A.pill(conn): #pillText text, #pill class 'status-pill' + ' offline', #pillDot 'dot' + ' off'),
- *  with p: #state text and class 'state ' + v.stateCls, #err, #hv, #shutter, #mode, #pos, #vel, #dist,
- *  #thick, #avg, #n from A.view(p); #localBadge visible only while v.local; #flags = one
- *  <span class="chip <cls>"> per A.flags(p) entry (textContent = text);
- *  always: every button disabled = !A.buttons(p).<KEY>.enabled, #btnHv text = HV.label, #hint = hint. */
-function render(p) {
-  // Pill
-  const pL = A.pill(conn);
-  $('pillText').textContent = pL.text;
-  $('pill').className = 'status-pill' + (pL.offline ? ' offline' : '');
-  $('pillDot').className = 'dot' + (pL.offline ? ' off' : '');
-
-  if (p === null) {
-    $('state').textContent = '---';
-    $('state').className = 'state warn';
-    $('err').textContent = '';
-    $('hv').textContent = '---';
-    $('shutter').textContent = '---';
-    $('mode').textContent = '---';
-    $('pos').textContent = '---';
-    $('vel').textContent = '---';
-    $('dist').textContent = '---';
-    $('thick').textContent = '---';
-    $('avg').textContent = '---';
-    $('n').textContent = '0';
-    $('localBadge').classList.add('hidden');
-    $('flags').innerHTML = '';
-  } else {
-    const v = A.view(p);
-    $('state').textContent = v.state;
-    $('state').className = 'state ' + v.stateCls;
-    $('err').textContent = v.err;
-    $('hv').textContent = v.hv;
-    $('shutter').textContent = v.shutter;
-    $('mode').textContent = v.mode;
-    $('pos').textContent = v.pos;
-    $('vel').textContent = v.vel;
-    $('dist').textContent = v.dist;
-    $('thick').textContent = v.thick;
-    $('avg').textContent = v.avg;
-    $('n').textContent = v.n;
-    if (v.local) { $('localBadge').classList.remove('hidden'); }
-    else { $('localBadge').classList.add('hidden'); }
-    // flags
-    const fl = A.flags(p);
-    $('flags').innerHTML = '';
-    for (const f of fl) {
-      const span = document.createElement('span');
-      span.className = 'chip ' + f.cls;
-      span.textContent = f.text;
-      $('flags').appendChild(span);
+  if (demo) reply = demo.api(cmd, params || {});
+  else {
+    try {
+      const r = await fetch(baseUrl() + '/api', {
+        method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: A.apiBody(cmd, params),
+        cache: 'no-store', signal: AbortSignal.timeout(4000),
+      });
+      const f = A.parseFramed(await r.text());        // HTTP 400 (BAD_CRC/BAD_JSON) is framed too
+      if (f.ok) reply = f.data;
+      else addLog('error', `${cmd}: Antwort mit ungültiger CRC`);
+    } catch (e) {
+      addLog('error', `${cmd}: keine Antwort (${e.name === 'TimeoutError' ? 'Zeitüberschreitung' : e.message})`);
     }
   }
+  if (!quiet) {
+    const txt = A.replyText(reply);
+    toast(txt, !reply || reply.err !== 0);
+    addLog(!reply || reply.err !== 0 ? 'error' : 'ok', txt + (params && Object.keys(params).length ? ' ' + JSON.stringify(params) : ''));
+  }
+  return reply;
+}
+function command(cmd, params) {
+  if (CONFIRM[cmd]) confirmThen(cmd, () => api(cmd, params));
+  else api(cmd, params);
+}
 
-  // Buttons
+async function poll() {
+  clearTimeout(pollTimer);
+  if (demo) { last = demo.proc(); conn = 'ok'; }
+  else if (HOST || ON_DEVICE) {
+    try {
+      const r = await fetch(baseUrl() + '/proc?t=' + Date.now(), { cache: 'no-store', signal: AbortSignal.timeout(2500) });
+      const f = A.parseFramed(await r.text());
+      if (f.ok) { last = f.data; if (conn !== 'ok') addLog('ok', 'Verbunden mit ' + HOST); conn = 'ok'; }
+      else { if (conn !== 'crc') addLog('error', '/proc: CRC-Fehler'); conn = 'crc'; last = null; }
+    } catch (e) {
+      if (conn !== 'offline') addLog('error', 'Verbindung verloren: ' + e.message);
+      conn = 'offline'; last = null;
+    }
+  }
+  if (last) onSample(last);
+  render(last);
+  // heartbeat: while the watchdog is armed, at least one /api packet per HEARTBEAT_MS
+  if (last && last.safety && last.safety.comm_armed && Date.now() - lastApi >= HEARTBEAT_MS) api('GET_STATE', null, true);
+  if (HOST || demo || ON_DEVICE) pollTimer = setTimeout(poll, POLL_MS);
+}
+
+async function loadConfig(quiet) {
+  const r = await api('GET_CONFIG', null, true);
+  if (r && r.err === 0 && r.config && typeof r.config === 'object') { cfg = r.config; fillForm(); renderCalib(); return true; }
+  if (!quiet) toast('GET_CONFIG fehlgeschlagen', true);
+  return false;
+}
+async function loadState() {
+  const r = await api('GET_STATE', null, true);
+  if (!r || r.err !== 0) return;
+  $('ssCycle').textContent = r.cycle_max_us + ' µs';
+  $('ssPeriod').textContent = r.period_max_us + ' µs';
+  $('ssPrio').textContent = r.prio_lat_max_us + ' µs';
+  $('ssOverruns').textContent = String(r.overruns);
+  const lim = 3000;
+  cls($('ssCycle'), r.cycle_max_us <= lim ? 's-ok' : 's-err');
+  cls($('ssPeriod'), r.period_max_us <= lim ? 's-ok' : 's-err');
+  cls($('ssPrio'), r.prio_lat_max_us <= lim ? 's-ok' : 's-err');
+}
+/** ADD validation (from /add): who validated the device description and with which result. */
+async function loadValidation() {
+  let add = null;
+  if (!demo) {
+    try {
+      const r = await fetch(baseUrl() + '/add', { cache: 'no-store', signal: AbortSignal.timeout(3000) });
+      if (r.ok) add = await r.json();
+    } catch (e) { add = null; }
+  }
+  const badges = A.validationBadges(add);
+  const LBL = { '': ['bestanden', 's-ok'], warn: ['Warnung', 's-warn'], fail: ['nicht bestanden', 's-err'], info: ['', 's-info'] };
+  $('valList').innerHTML = badges.map((b) => {
+    const [t, c] = LBL[b.cls] || ['', ''];
+    return `<div class="status-row"><span class="s-label">${escHtml(b.text)}</span><span class="s-val ${c}">${t}</span></div>`;
+  }).join('');
+}
+async function loadDevLog() {
+  if (demo) { $('devLog').textContent = 'Demo-Modus: kein Geräteprotokoll'; return; }
+  try {
+    const r = await fetch(baseUrl() + '/log?t=' + Date.now(), { cache: 'no-store', signal: AbortSignal.timeout(3000) });
+    $('devLog').textContent = (await r.text()) || '(leer)';
+  } catch (e) { $('devLog').textContent = 'Nicht erreichbar: ' + e.message; }
+}
+
+// ---- process data ------------------------------------------------------------------------------
+function onSample(p) {
+  const m = p.measure;
+  if (m.n < stat.n) stat = { n: 0, max: null, min: null };      // new acquisition on the device
+  if (m.n > stat.n && m.valid && m.on_material) {
+    stat.max = stat.max === null ? m.thick : Math.max(stat.max, m.thick);
+    stat.min = stat.min === null ? m.thick : Math.min(stat.min, m.thick);
+  }
+  stat.n = m.n;
+  if (m.in_range) {
+    // radiometric gauge: without high voltage there is no radiation and no thickness value
+    series.push({ dist: m.dist, thick: p.safety.hv_on && m.valid && m.on_material ? m.thick : 0 });
+    while (series.length > SERIES_MAX) series.shift();
+  }
+}
+
+function zoneOf(pos) { return pos <= 20 ? 'Parkzone' : pos <= 60 ? 'Servicezone' : 'Messzone'; }
+const MODE = { none: '–', measure: 'Messen (stationär)', traverse: 'Profilfahrt' };
+const AXIS = { idle: 'steht', moving: 'fährt', homing: 'Referenzfahrt', error: 'Fehler' };
+
+function render(p) {
+  // connection
+  const pill = A.pill(conn);
+  $('connDot').className = 'conn-dot ' + (pill.offline ? 'offline' : 'online');
+  $('connLabel').textContent = demo ? 'Demo-Modus' : (conn === 'ok' ? 'Verbunden' : conn === 'crc' ? 'CRC-Fehler' : ((HOST || ON_DEVICE) ? 'Keine Verbindung' : 'Nicht verbunden'));
+  $('deviceId').textContent = demo ? 'DEMO' : (HOST || '–');
+  $('ssHost').textContent = demo ? 'Demo-Modus' : (HOST || '–');
+
+  // buttons (rules of ADDAPP.buttons; PARK/SERVICE: READY or RUNNING, homed, idle)
   const b = A.buttons(p);
   $('btnInit').disabled = !b.INIT.enabled;
   $('btnHv').disabled = !b.HV.enabled;
+  $('btnHv').textContent = b.HV.cmd === 'HV_OFF' ? 'HV AUS' : 'HV EIN';
+  $('btnHv').className = 'btn ' + (b.HV.cmd === 'HV_OFF' ? 'btn-hv-off' : 'btn-hv-on');
   $('btnMeasure').disabled = !b.MEASURE.enabled;
   $('btnTraverse').disabled = !b.TRAVERSE.enabled;
   $('btnAck').disabled = !b.ACK.enabled;
-  $('btnStop').disabled = !b.STOP.enabled;
-  $('btnHv').textContent = b.HV.label;
-  $('hint').textContent = b.hint;
-}
-/** One poll: GET '/proc?t=' + Date.now(). Framed and valid -> conn 'ok', last = data,
- *  A.seriesPush(series, last), drawChart(); CRC/JSON error -> conn 'crc', last = null;
- *  network error -> conn 'offline', last = null. Then render(last); then, if
- *  A.heartbeatDue(last, Date.now(), lastHeartbeat): lastHeartbeat = Date.now(), api('GET_STATE', null, true).
- *  Finally setTimeout(poll, POLL_MS) – exactly one pending poll at any time. */
-async function poll() {
-  try {
-    const res = await fetch('/proc?t=' + Date.now());
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const text = await res.text();
-    const parsed = A.parseFramed(text);
-    if (!parsed.ok) { conn = 'crc'; last = null; }
-    else { conn = 'ok'; last = parsed.data; A.seriesPush(series, last); drawChart(); }
-  } catch (e) {
-    conn = 'offline'; last = null;
+  const moveOk = !!p && !p.local && (p.state === 'READY' || p.state === 'RUNNING') && p.motion.homed && p.motion.state === 'idle';
+  $('btnPark').disabled = !moveOk;
+  $('btnService').disabled = !moveOk;
+  $('btnCalMoveNear').disabled = !moveOk;
+  $('btnCalMoveFar').disabled = !moveOk;
+  $('ctrlHint').textContent = !p ? '' : p.local ? 'Bedienung am Display hat Vorrang' :
+    (p.state === 'SAFE_START' ? 'Zuerst INIT (Referenzfahrt)' : p.state === 'READY' && !p.safety.hv_ok ? 'HV gesperrt: Sicherheitskreis, Kühlung, Temperatur oder Not-Aus' :
+     p.state === 'READY' ? 'Für MESSEN/TRAVERSE zuerst HV EIN' : p.state === 'WAIT_ACK' ? 'Fehler: Ursache beheben, dann ACK' : '');
+
+  if (!p) {
+    $('alarmBox').className = 'topbar-alarm err';
+    $('alarmTitle').textContent = demo ? 'Demo-Modus' : ((HOST || ON_DEVICE) ? 'Keine Verbindung' : 'Nicht verbunden');
+    $('alarmDetail').textContent = HOST ? HOST + ' antwortet nicht' : 'Host eingeben und verbinden';
+    ['matState', 'matPos', 'matVel', 'matDist', 'matThick', 'matTemp'].forEach((id) => { $(id).textContent = '–'; $(id).className = 'value'; });
+    $('sboxHv').className = 'status-box'; $('sboxShutter').className = 'status-box';
+    return;
   }
+  const v = A.view(p), s = p.safety, m = p.measure, mo = p.motion;
+  // header
+  const sc = A.stateClass(p.state);
+  $('alarmBox').className = 'topbar-alarm ' + (sc === 'ok' ? 'ok' : sc === 'danger' ? 'err' : 'warn');
+  $('alarmTitle').textContent = p.state + (p.err ? ' – ' + A.sysErrName(p.err) : '') + (s.hv_on ? ' · Hochspannung EIN' : ' · Hochspannung AUS');
+  $('alarmDetail').textContent = `${MODE[mo.mode] || mo.mode} | Pos ${f1(mo.pos)} mm | ${AXIS[mo.state] || mo.state} | ${new Date().toLocaleTimeString('de-DE')}`;
+  $('sboxHv').className = 'status-box' + (s.hv_on ? '' : ' on');          // HV on: red with badge, off: green
+  $('sboxHvBadge').classList.toggle('hidden', !s.hv_on);
+  $('sboxShutter').className = 'status-box' + (s.shutter === 'open' ? ' warn' : ' on');
+  $('sboxShutterBadge').classList.toggle('hidden', s.shutter !== 'open');
+  // material bar
+  $('matState').textContent = p.state; $('matState').className = 'value ' + (sc === 'ok' ? 'ok' : sc === 'danger' ? 'err' : 'warn');
+  $('matPos').textContent = v.pos + ' mm';
+  $('matVel').textContent = v.vel + ' mm/s';
+  $('matDist').textContent = (m.in_range ? f1(m.dist) : 'außerhalb') + (m.in_range ? ' mm' : '');
+  const hv = s.hv_on;                         // HV off: thickness value 0 (no radiation)
+  // thickness value: HV off -> 0; HV on, shutter closed (no radiation on the material) -> '–';
+  // measuring: off material -> 0, on material -> value
+  const tv = !hv ? 0 : !m.valid ? null : m.on_material ? m.thick : 0;
+  $('matThick').textContent = tv === null ? '–' : f1(tv) + ' mm';
+  $('matTemp').textContent = f1(s.temp) + ' °C';
+  $('matTemp').className = 'value ' + (s.temp_ok ? '' : s.temp > A.TEMP_FAULT_C ? 'err' : 'warn');
+  // measurement
+  $('mMax').textContent = stat.max === null ? '–' : f2(stat.max);
+  $('mMin').textContent = stat.min === null ? '–' : f2(stat.min);
+  $('mAvg').textContent = m.n > 0 ? f2(m.avg) : '–';
+  $('mAct').textContent = tv === null ? '–' : f2(tv);
+  $('mN').textContent = String(m.n);
+  $('mPos').textContent = f1(mo.pos);
+  const g = tv === null ? 0 : tv;
+  drawGauge(g, 40);
+  $('gaugeValue').textContent = tv === null ? '–' : f2(tv);
+  // status rows
+  setVal('stMode', MODE[mo.mode] || mo.mode, 's-info');
+  setVal('stAxis', (AXIS[mo.state] || mo.state) + (mo.homed ? '' : ' · nicht referenziert'), mo.state === 'error' ? 's-err' : mo.homed ? 's-ok' : 's-warn');
+  yesNo('stHV', s.hv_on, 'EIN', 'AUS', 's-err', 's-ok');
+  yesNo('stShutter', s.shutter === 'open', 'Offen', 'Zu', 's-warn', 's-ok');
+  yesNo('stInterlock', s.interlock, 'OK (SIM)', 'Offen (SIM)', 's-ok', 's-err');
+  yesNo('stCooling', s.cooling_flow, 'OK (SIM)', 'Kein Fluss (SIM)', 's-ok', 's-err');
+  yesNo('stEstop', s.estop, 'AUSGELÖST', 'OK', 's-err', 's-ok');
+  yesNo('stWatchdog', s.comm_armed, 'aktiv (Heartbeat läuft)', 'aus', 's-info', '');
+  // charts
+  drawLine('trendChart', series.map((x) => x.thick), '#00B6F8', cfg ? cfg.edge_threshold : null, '#F0F000');
+  drawLine('distChart', series.map((x) => x.dist), '#F39200', cfg ? cfg.base_dist : null, '#6184A0');
+  // status page
+  $('ssUptime').textContent = formatUptime(Math.floor(p.ts / 1000));
+  setVal('msState', AXIS[mo.state] || mo.state, mo.state === 'error' ? 's-err' : '');
+  $('msPos').textContent = f1(mo.pos) + ' mm';
+  $('msVel').textContent = f1(mo.vel) + ' mm/s';
+  yesNo('msHomed', mo.homed, 'ja', 'nein', 's-ok', 's-warn');
+  $('msZone').textContent = mo.homed ? zoneOf(mo.pos) : '–';
+  yesNo('msLimF', mo.limit_fwd, 'betätigt', 'frei', 's-warn', '');
+  yesNo('msLimB', mo.limit_bwd, 'betätigt', 'frei', 's-warn', '');
+  setVal('ioState', p.state, sc === 'ok' ? 's-ok' : sc === 'danger' ? 's-err' : 's-warn');
+  setVal('ioErr', p.err ? A.sysErrName(p.err) : 'keiner', p.err ? 's-err' : 's-ok');
+  yesNo('ioEstop', s.estop, 'AUSGELÖST', 'OK', 's-err', 's-ok');
+  yesNo('ioHV', s.hv_on, 'EIN', 'AUS', 's-err', '');
+  yesNo('ioHvOk', s.hv_ok, 'erteilt', 'gesperrt', 's-ok', 's-warn');
+  yesNo('ioShutter', s.shutter === 'open', 'Offen', 'Zu', 's-warn', '');
+  yesNo('ioInterlock', s.interlock, 'geschlossen', 'offen', 's-ok', 's-err');
+  yesNo('ioCooling', s.cooling_flow, 'fließt', 'kein Fluss', 's-ok', 's-err');
+  setVal('ioTemp', f1(s.temp) + ' °C', s.temp_ok ? 's-ok' : s.temp > A.TEMP_FAULT_C ? 's-err' : 's-warn');
+  yesNo('ioArmed', s.comm_armed, 'aktiv', 'aus', 's-info', '');
+  yesNo('ioLocal', p.local, 'aktiv', 'aus', 's-warn', '');
+  $('snDist').textContent = m.in_range ? f2(m.dist) + ' mm' : 'außerhalb (' + f1(m.dist) + ')';
+  $('snThick').textContent = (hv ? f2(m.thick) : '0.00') + ' mm' + (hv ? '' : ' (HV aus)');
+  yesNo('snRange', m.in_range, 'ja', 'nein', 's-ok', 's-warn');
+  yesNo('snMat', m.on_material, 'ja', 'nein', 's-ok', '');
+  yesNo('snValid', m.valid, 'ja (Shutter offen)', 'nein', 's-ok', '');
+  $('snAvg').textContent = (m.n > 0 ? f2(m.avg) + ' mm' : '–') + ' / ' + m.n;
+  // calibration live values
+  $('calLiveDist').textContent = m.in_range ? f2(m.dist) : 'außerhalb';
+  $('calLivePos').textContent = f1(mo.pos);
+}
+
+function formatUptime(sec) {
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  return `${h} h ${m} min ${s} s`;
+}
+
+// ---- drawing ---------------------------------------------------------------------------------
+function fitCanvas(c) {
+  const r = c.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  const w = Math.max(10, Math.round(r.width * dpr)), h = Math.max(10, Math.round(r.height * dpr));
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  return dpr;
+}
+/** Line chart with y grid, optional horizontal reference line. */
+function drawLine(id, values, color, ref, refColor) {
+  const c = $(id); if (!c.offsetParent) return;
+  const dpr = fitCanvas(c), ctx = c.getContext('2d'), W = c.width, H = c.height;
+  ctx.clearRect(0, 0, W, H);
+  const padL = 38 * dpr, padB = 14 * dpr, padT = 6 * dpr, w = W - padL - 6 * dpr, h = H - padB - padT;
+  const all = values.concat(ref !== null && ref !== undefined ? [ref] : []);
+  let lo = all.length ? Math.min.apply(null, all) : 0, hi = all.length ? Math.max.apply(null, all) : 1;
+  if (hi - lo < 2) { const mid = (hi + lo) / 2; lo = mid - 1; hi = mid + 1; }
+  const pad = (hi - lo) * 0.1; lo -= pad; hi += pad;
+  const y = (v) => padT + h - ((v - lo) / (hi - lo)) * h;
+  ctx.font = `${10 * dpr}px Ubuntu, system-ui, sans-serif`; ctx.fillStyle = '#6184A0'; ctx.strokeStyle = '#1F5E8E'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const v = lo + (hi - lo) * i / 4, yy = y(v);
+    ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(padL + w, yy); ctx.stroke();
+    ctx.textAlign = 'right'; ctx.fillText(v.toFixed(1), padL - 4 * dpr, yy + 3 * dpr);
+  }
+  if (ref !== null && ref !== undefined) {
+    ctx.setLineDash([5 * dpr, 4 * dpr]); ctx.strokeStyle = refColor; ctx.beginPath(); ctx.moveTo(padL, y(ref)); ctx.lineTo(padL + w, y(ref)); ctx.stroke(); ctx.setLineDash([]);
+  }
+  if (values.length < 2) { ctx.textAlign = 'center'; ctx.fillText('noch keine Messwerte', padL + w / 2, padT + h / 2); return; }
+  ctx.strokeStyle = color; ctx.lineWidth = 1.6 * dpr; ctx.beginPath();
+  values.forEach((v, i) => { const xx = padL + (i / (SERIES_MAX - 1)) * w; i ? ctx.lineTo(xx, y(v)) : ctx.moveTo(xx, y(v)); });
+  ctx.stroke();
+}
+function drawGauge(value, max) {
+  const canvas = $('gaugeCanvas'), ctx = canvas.getContext('2d'), W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  const cx = W / 2, cy = H - 10, r = Math.min(W, H * 1.8) / 2 - 4;
+  const ratio = Math.min(1, Math.max(0, value / max)), valAngle = Math.PI + ratio * Math.PI;
+  ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, 0, false); ctx.strokeStyle = '#1F5E8E'; ctx.lineWidth = 10; ctx.lineCap = 'butt'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, valAngle, false); ctx.strokeStyle = '#00B6F8'; ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + (r - 14) * Math.cos(valAngle), cy + (r - 14) * Math.sin(valAngle));
+  ctx.strokeStyle = '#CDE6F9'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.fillStyle = '#CDE6F9'; ctx.fill();
+  ctx.fillStyle = '#6184A0'; ctx.font = '9px Ubuntu, sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('0', cx - r + 4, cy + 14); ctx.fillText((max / 2).toFixed(0), cx, cy - r - 4); ctx.fillText(max.toFixed(0), cx + r - 4, cy + 14);
+}
+function drawCalib() {
+  const c = $('calibChart'); if (!c.offsetParent || !cfg) return;
+  const dpr = fitCanvas(c), ctx = c.getContext('2d'), W = c.width, H = c.height;
+  ctx.clearRect(0, 0, W, H);
+  const pl = 40 * dpr, pb = 22 * dpr, pt = 8 * dpr, w = W - pl - 10 * dpr, h = H - pb - pt;
+  const lo = 30, hi = 80;
+  const X = (v) => pl + ((v - lo) / (hi - lo)) * w, Y = (v) => pt + h - ((v - lo) / (hi - lo)) * h;
+  ctx.font = `${10 * dpr}px Ubuntu, system-ui, sans-serif`; ctx.fillStyle = '#6184A0'; ctx.strokeStyle = '#1F5E8E'; ctx.lineWidth = 1;
+  for (let v = lo; v <= hi; v += 10) {
+    ctx.beginPath(); ctx.moveTo(pl, Y(v)); ctx.lineTo(pl + w, Y(v)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(X(v), pt); ctx.lineTo(X(v), pt + h); ctx.stroke();
+    ctx.textAlign = 'right'; ctx.fillText(String(v), pl - 4 * dpr, Y(v) + 3 * dpr);
+    ctx.textAlign = 'center'; ctx.fillText(String(v), X(v), pt + h + 14 * dpr);
+  }
+  ctx.setLineDash([4 * dpr, 4 * dpr]); ctx.strokeStyle = '#6184A0'; ctx.beginPath(); ctx.moveTo(X(lo), Y(lo)); ctx.lineTo(X(hi), Y(hi)); ctx.stroke(); ctx.setLineDash([]);
+  const p1 = [cfg.calib_near_raw, cfg.calib_near_ref], p2 = [cfg.calib_far_raw, cfg.calib_far_ref];
+  if (Math.abs(p2[0] - p1[0]) > 0.01) {
+    const k = (p2[1] - p1[1]) / (p2[0] - p1[0]), at = (x) => p1[1] + k * (x - p1[0]);
+    ctx.strokeStyle = cfg.calib_valid ? '#00B6F8' : '#FF1010'; ctx.lineWidth = 2 * dpr;
+    ctx.beginPath(); ctx.moveTo(X(lo), Y(at(lo))); ctx.lineTo(X(hi), Y(at(hi))); ctx.stroke();
+  }
+  ctx.fillStyle = '#F39200';
+  [p1, p2].forEach(([x, yv]) => { ctx.beginPath(); ctx.arc(X(x), Y(yv), 4 * dpr, 0, Math.PI * 2); ctx.fill(); });
+  ctx.fillStyle = '#6184A0'; ctx.textAlign = 'left'; ctx.fillText('Rohwert (mm) →  · Referenz ↑ (gestrichelt: 1:1)', pl + 4 * dpr, pt + 10 * dpr);
+}
+
+// ---- settings --------------------------------------------------------------------------------
+const FORM_KEYS = ['measure_pos', 'maint_pos', 'traverse_start', 'traverse_end', 'traverse_speed', 'shutter_hold',
+  'edge_threshold', 'base_dist', 'estop_nc', 'wifi_ssid', 'wifi_pass'];
+function fillForm() {
+  if (!cfg) return;
+  for (const p of A.PARAMS) {
+    const el = $('f_' + p.key); if (!el) continue;
+    el.classList.remove('bad');
+    if (p.type === 'bool') el.checked = !!cfg[p.key];
+    else if (p.key === 'wifi_pass') { el.value = ''; el.placeholder = cfg.wifi_pass_set ? 'gespeichert' : 'nicht gesetzt'; }
+    else el.value = String(cfg[p.key]);
+  }
+  $('ssSSID').textContent = cfg.wifi_ssid || '(keins – nur eigener Access Point)';
+}
+function readForm(keys) {
+  const f = {};
+  for (const k of keys) { const d = A.PARAMS.find((p) => p.key === k), el = $('f_' + k); f[k] = d.type === 'bool' ? el.checked : el.value; }
+  return f;
+}
+async function saveSettings() {
+  if (!cfg) { toast('Zuerst Konfiguration laden', true); return; }
+  const d = A.configDiff(cfg, readForm(FORM_KEYS));
+  for (const k of FORM_KEYS) $('f_' + k).classList.remove('bad');
+  if (d.errors.length) {
+    d.errors.forEach((e) => $('f_' + e.key).classList.add('bad'));
+    toast('Ungültig: ' + d.errors.map((e) => `${e.key} (${e.error})`).join(', '), true);
+    return;
+  }
+  if (!d.sets.length) { toast('Keine Änderungen', false); return; }
+  const doSave = async () => { for (const s of d.sets) await api('SET', { key: s.key, value: s.value }); await loadConfig(); };
+  if (d.sets.some((s) => s.key === 'estop_nc')) confirmThen('ESTOP_NC', doSave); else await doSave();
+}
+async function setNow(key, value) { await api('SET', { key, value }); await loadConfig(true); }
+
+// ---- calibration -----------------------------------------------------------------------------
+function renderCalib() {
+  if (!cfg) return;
+  $('f_calib_near_ref').value = String(cfg.calib_near_ref);
+  $('f_calib_far_ref').value = String(cfg.calib_far_ref);
+  $('calNearRaw').textContent = f2(cfg.calib_near_raw);
+  $('calFarRaw').textContent = f2(cfg.calib_far_raw);
+  const id = Math.abs(cfg.calib_near_raw - cfg.calib_near_ref) < 0.01 && Math.abs(cfg.calib_far_raw - cfg.calib_far_ref) < 0.01;
+  $('calNearSt').textContent = id ? 'Werkswert' : 'übernommen';
+  $('calFarSt').textContent = id ? 'Werkswert' : 'übernommen';
+  $('calValid').textContent = cfg.calib_valid ? 'gültig' : 'UNGÜLTIG';
+  $('calValid').style.color = cfg.calib_valid ? 'var(--ok)' : 'var(--err)';
+  $('calBase').textContent = f1(cfg.base_dist);
+  drawCalib();
+}
+async function calib(action, statusId) {
+  const r = await api('CALIB', { action });
+  if (statusId) {
+    const el = $(statusId);
+    el.textContent = r && r.err === 0 ? 'OK' : r ? A.errName(r.err) : 'keine Antwort';
+    el.className = 'step-status ' + (r && r.err === 0 ? 'ok' : 'err');
+  }
+  await loadConfig(true);
+}
+async function setRefs() {
+  const errs = [];
+  for (const k of ['calib_near_ref', 'calib_far_ref']) {
+    const c = A.checkParam(k, $('f_' + k).value);
+    $('f_' + k).classList.toggle('bad', !c.ok);
+    if (!c.ok) errs.push(k + ' (' + c.error + ')');
+  }
+  if (errs.length) { toast('Ungültig: ' + errs.join(', '), true); return; }
+  const d = A.configDiff(cfg || {}, readForm(['calib_near_ref', 'calib_far_ref']));
+  if (!d.sets.length) { toast('Referenzen unverändert', false); return; }
+  for (const s of d.sets) await api('SET', { key: s.key, value: s.value });
+  await loadConfig(true);
+}
+
+// ---- demo device (no hardware): a small simulation with the same data shapes -----------------
+function DemoDevice() {
+  const t0 = Date.now();
+  const st = { state: 'SAFE_START', err: 0, hv: false, shutter: 'closed', pos: 0, target: 0, vel: 0, mode: 'none', homed: false,
+    moving: false, interlock: true, cooling: true, temp: 18, n: 0, sum: 0,
+    cfg: { measure_pos: 155, maint_pos: 40, traverse_start: 80, traverse_end: 240, traverse_speed: 10, shutter_hold: 3, edge_threshold: 3,
+      base_dist: 70, calib_near_raw: 40, calib_near_ref: 40, calib_far_raw: 65, calib_far_ref: 65, calib_valid: true,
+      interlock: true, cooling_flow: true, temp: 18, estop_nc: false, wifi_ssid: '', wifi_pass_set: false } };
+  let tl = Date.now();
+  const step = () => {
+    const now = Date.now(), dt = (now - tl) / 1000; tl = now;
+    if (st.moving) {
+      const d = st.target - st.pos, s = Math.min(Math.abs(d), st.vel * dt);
+      st.pos += Math.sign(d) * s;
+      if (Math.abs(st.target - st.pos) < 0.01) {
+        st.pos = st.target; st.moving = false;
+        if (st.mode === 'homing') { st.homed = true; st.state = 'READY'; st.mode = 'none'; st.pos = 2; }
+        else if (st.mode === 'measure') st.shutter = 'open';
+        else if (st.mode === 'traverse') st.mode = 'none';
+      }
+      if (st.mode === 'traverse' && st.pos > 60) st.shutter = 'open';
+    }
+    const hvOk = st.interlock && st.cooling && st.temp <= 30;
+    if (st.hv && !hvOk) { st.hv = false; st.shutter = 'closed'; st.state = 'READY'; }
+    if (st.temp > 32 && st.state !== 'WAIT_ACK') { st.state = 'WAIT_ACK'; st.err = 2; st.hv = false; st.shutter = 'closed'; st.moving = false; st.mode = 'none'; }
+  };
+  // stair profile of the demo (thickness over position)
+  const thickAt = (x) => x < 90 ? 0 : x < 105 ? 5 : x < 125 ? 5 : x < 145 ? 10 : x < 165 ? 15 : x < 185 ? 20 : x < 205 ? 25 : x < 230 ? 30 : 0;
+  this.proc = () => {
+    step();
+    const th = thickAt(st.pos) + (Math.random() - 0.5) * 0.6, dist = st.cfg.base_dist - th;
+    const acq = st.shutter === 'open' && (st.mode === 'measure' || st.mode === 'traverse');
+    if (acq && th > st.cfg.edge_threshold) { st.n++; st.sum += th; }
+    return { ts: Date.now() - t0, state: st.state, err: st.err, local: false,
+      motion: { pos: st.pos, vel: st.moving ? st.vel : 0, state: st.moving ? (st.mode === 'homing' ? 'homing' : 'moving') : 'idle', mode: st.mode === 'homing' ? 'none' : st.mode, homed: st.homed, limit_fwd: false, limit_bwd: false },
+      measure: { dist, thick: Math.max(0, th), on_material: th > st.cfg.edge_threshold, valid: st.shutter === 'open', in_range: true, avg: st.n ? st.sum / st.n : 0, n: st.n },
+      safety: { estop: false, hv_on: st.hv, hv_ok: st.interlock && st.cooling && st.temp <= 30, shutter: st.shutter, interlock: st.interlock, cooling_flow: st.cooling, temp: st.temp, temp_ok: st.temp <= 30, comm_armed: st.hv || st.moving } };
+  };
+  const R = (cmd, err, extra) => Object.assign({ status: err ? 'error' : 'ok', err: err || 0, cmd }, extra || {});
+  const move = (target, vel, mode) => { st.target = target; st.vel = vel; st.moving = true; st.mode = mode; };
+  this.api = (cmd, p) => {
+    step();
+    const idle = !st.moving;
+    switch (cmd) {
+      case 'GET_STATE': return R(cmd, 0, { state: st.state, sys_err: st.err, local: false, cycle_max_us: 210, period_max_us: 1050, overruns: 0, prio_lat_max_us: 0 });
+      case 'GET_CONFIG': return R(cmd, 0, { config: Object.assign({}, st.cfg, { interlock: st.interlock, cooling_flow: st.cooling, temp: st.temp }) });
+      case 'INIT': if (!['SAFE_START', 'READY'].includes(st.state)) return R(cmd, -5); if (!idle) return R(cmd, -7); st.pos = Math.max(st.pos, 30); move(0, 20, 'homing'); return R(cmd, 0);
+      case 'HV_ON': if (!['READY', 'RUNNING'].includes(st.state)) return R(cmd, -5); if (!(st.interlock && st.cooling && st.temp <= 30)) return R(cmd, -6); st.hv = true; st.state = 'RUNNING'; return R(cmd, 0);
+      case 'HV_OFF': st.hv = false; st.shutter = 'closed'; if (st.state === 'RUNNING') st.state = 'READY'; return R(cmd, 0);
+      case 'START_MEASURE': if (st.state !== 'RUNNING') return R(cmd, -5); if (!idle) return R(cmd, -7); st.n = 0; st.sum = 0; move(st.cfg.measure_pos, 10, 'measure'); return R(cmd, 0);
+      case 'START_TRAVERSE': if (st.state !== 'RUNNING') return R(cmd, -5); if (!idle) return R(cmd, -7); st.n = 0; st.sum = 0; st.pos = st.cfg.traverse_start; move(st.cfg.traverse_end, st.cfg.traverse_speed, 'traverse'); return R(cmd, 0);
+      case 'PARK': case 'SERVICE': case 'MOVE':
+        if (!['READY', 'RUNNING'].includes(st.state)) return R(cmd, -5); if (!st.homed) return R(cmd, -6); if (!idle) return R(cmd, -7);
+        st.shutter = 'closed'; move(cmd === 'PARK' ? 2 : cmd === 'SERVICE' ? st.cfg.maint_pos : +p.pos, 10, 'none'); return R(cmd, 0);
+      case 'STOP': st.moving = false; st.mode = 'none'; st.shutter = 'closed'; return R(cmd, 0);
+      case 'ACK': if (st.state !== 'WAIT_ACK') return R(cmd, -5); if (st.temp > 32) return R(cmd, -6); st.err = 0; st.state = st.homed ? 'READY' : 'SAFE_START'; return R(cmd, 0);
+      case 'SET':
+        if (p.key === 'interlock') st.interlock = !!p.value; else if (p.key === 'cooling_flow') st.cooling = !!p.value;
+        else if (p.key === 'temp') st.temp = +p.value; else if (p.key in st.cfg) st.cfg[p.key] = p.value;
+        else if (p.key !== 'wifi_pass') return R(cmd, -4);
+        return R(cmd, 0);
+      case 'CALIB':
+        if (p.action === 'near') st.cfg.calib_near_raw = +(40 + (Math.random() - 0.5)).toFixed(2);
+        else if (p.action === 'far') st.cfg.calib_far_raw = +(65 + (Math.random() - 0.5)).toFixed(2);
+        else if (p.action === 'reset') { st.cfg.calib_near_raw = 40; st.cfg.calib_far_raw = 65; st.cfg.calib_near_ref = 40; st.cfg.calib_far_ref = 65; }
+        else if (p.action === 'base') st.cfg.base_dist = 70;
+        return R(cmd, 0);
+      case 'REBOOT': return R(cmd, st.hv ? -6 : 0);
+      default: return R(cmd, -3);
+    }
+  };
+}
+
+// ---- navigation and wiring ---------------------------------------------------------------------
+const TITLES = { process: 'Prozess', status: 'Status', settings: 'Einstellungen', calibration: 'Kalibrierung', log: 'Protokoll' };
+function showPage(page) {
+  document.querySelectorAll('.page-content').forEach((el) => el.classList.toggle('active', el.id === 'page-' + page));
+  document.querySelectorAll('.nav-item[data-page]').forEach((el) => el.classList.toggle('active', el.dataset.page === page));
+  $('pageTitle').textContent = TITLES[page] || page;
+  try { localStorage.setItem('ims_page', page); } catch (e) {}
+  if (location.hash !== '#' + page) history.replaceState(null, '', '#' + page);
+  if (page === 'settings' || page === 'calibration') loadConfig(true);
+  if (page === 'status') { loadState(); loadConfig(true); loadValidation(); }
+  if (page === 'log') { renderLog(); loadDevLog(); }
+  if (page === 'calibration') setTimeout(drawCalib, 0);
   render(last);
-  if (A.heartbeatDue(last, Date.now(), lastHeartbeat)) {
-    lastHeartbeat = Date.now();
-    api('GET_STATE', null, true);
-  }
-  setTimeout(poll, POLL_MS);
 }
-/** GET /add (plain JSON, not framed); #valStrip = the label span, then one
- *  <span class="badge <cls>"> per A.validationBadges(doc) entry; on any error A.validationBadges(null). */
-async function loadValidation() {
-  try {
-    const res = await fetch('/add?t=' + Date.now());
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const doc = await res.json();
-    const badges = A.validationBadges(doc);
-    const vs = $('valStrip');
-    while (vs.children.length > 1) vs.removeChild(vs.lastChild);
-    for (const b of badges) {
-      const span = document.createElement('span');
-      span.className = 'badge ' + b.cls;
-      span.textContent = b.text;
-      vs.appendChild(span);
-    }
-  } catch (e) {
-    const badges = A.validationBadges(null);
-    const vs = $('valStrip');
-    while (vs.children.length > 1) vs.removeChild(vs.lastChild);
-    for (const b of badges) {
-      const span = document.createElement('span');
-      span.className = 'badge ' + b.cls;
-      span.textContent = b.text;
-      vs.appendChild(span);
-    }
-  }
+function connect() {
+  const h = $('hostInput').value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  const port = $('portInput').value.trim() || '80';
+  if (!h) { $('hostInput').classList.add('bad'); return; }
+  HOST = port === '80' ? h : h + ':' + port;
+  demo = null; $('demoBadge').classList.add('hidden');
+  try { localStorage.setItem('ims_host', $('hostInput').value.trim()); localStorage.setItem('ims_port', port); } catch (e) {}
+  $('urlModal').hidden = true;
+  conn = 'offline'; last = null; series.length = 0; stat = { n: 0, max: null, min: null }; cfg = null;
+  addLog('info', 'Verbinde mit ' + HOST);
+  poll().then(() => loadConfig(true));
+}
+function useDemo() {
+  demo = new DemoDevice(); HOST = '';
+  $('demoBadge').classList.remove('hidden');
+  $('urlModal').hidden = true;
+  series.length = 0; stat = { n: 0, max: null, min: null };
+  addLog('info', 'Demo-Modus gestartet (keine Hardware)');
+  poll().then(() => loadConfig(true));
 }
 
 function init() {
-  try {
-    const saved = localStorage.getItem('add-dashboard-theme');
-    if (saved) setTheme(saved);
-  } catch (e) {}
-
-  $('theme').onchange = (e) => setTheme(e.target.value);
-
+  document.querySelectorAll('.nav-item[data-page]').forEach((b) => { b.onclick = () => showPage(b.dataset.page); });
+  $('navConnect').onclick = () => { $('urlModal').hidden = false; };
+  $('btnConnect').onclick = connect;
+  $('hostInput').onkeydown = (e) => { $('hostInput').classList.remove('bad'); if (e.key === 'Enter') connect(); };
+  $('btnDemo').onclick = useDemo;
+  $('confirmCancel').onclick = () => { $('confirmModal').hidden = true; };
+  // process
   $('btnInit').onclick = () => command('INIT');
   $('btnHv').onclick = () => command(A.buttons(last).HV.cmd);
   $('btnMeasure').onclick = () => command('START_MEASURE');
   $('btnTraverse').onclick = () => command('START_TRAVERSE');
-  $('btnStop').onclick = () => api('STOP');
+  $('btnPark').onclick = () => command('PARK');
+  $('btnService').onclick = () => command('SERVICE');
   $('btnAck').onclick = () => command('ACK');
-
-  $('confirmCancel').onclick = closeConfirm;
-
+  $('btnStop').onclick = () => api('STOP');                     // never a dialog
+  // status / log
+  $('btnStateRefresh').onclick = loadState;
+  $('btnDevLog').onclick = loadDevLog;
+  $('btnClearLog').onclick = () => { logEntries = []; renderLog(); };
+  // settings
+  $('btnSave').onclick = saveSettings;
+  $('btnReload').onclick = async () => { if (await loadConfig()) toast('Konfiguration geladen', false); };
+  $('f_interlock').onchange = (e) => setNow('interlock', e.target.checked);
+  $('f_cooling_flow').onchange = (e) => setNow('cooling_flow', e.target.checked);
+  $('btnSetTemp').onclick = () => {
+    const c = A.checkParam('temp', $('f_temp').value);
+    $('f_temp').classList.toggle('bad', !c.ok);
+    if (!c.ok) { toast('Ungültig: temp (' + c.error + ')', true); return; }
+    setNow('temp', c.value);
+  };
+  $('btnReboot').onclick = () => confirmThen('REBOOT', () => api('REBOOT'));
+  // calibration
+  $('btnCalMoveNear').onclick = () => api('MOVE', { pos: +$('calPosNear').value });
+  $('btnCalMoveFar').onclick = () => api('MOVE', { pos: +$('calPosFar').value });
+  $('btnCalNear').onclick = () => calib('near', 'calStNear');
+  $('btnCalFar').onclick = () => calib('far', 'calStFar');
+  $('btnCalSave').onclick = () => calib('save', 'calStSave');
+  $('btnCalBase').onclick = () => calib('base');
+  $('btnCalReset').onclick = () => confirmThen('CALIB_RESET', () => calib('reset'));
+  $('btnCalRefs').onclick = setRefs;
+  // clock, resize
+  const clock = () => { $('clockDisplay').textContent = new Date().toLocaleDateString('de-DE') + '  ' + new Date().toLocaleTimeString('de-DE'); };
+  clock(); setInterval(clock, 1000);
+  window.addEventListener('resize', () => { render(last); drawCalib(); });
+  // restore
+  try {
+    const h = localStorage.getItem('ims_host'), p = localStorage.getItem('ims_port');
+    if (h) $('hostInput').value = h;
+    if (p) $('portInput').value = p;
+    const pg = localStorage.getItem('ims_page');
+    if (pg && TITLES[pg]) showPage(pg);
+  } catch (e) {}
+  const hp = location.hash.slice(1);                 // "/#settings" (also the old /settings page)
+  if (TITLES[hp]) showPage(hp);
   render(null);
-  loadValidation();
-  poll();
+  drawGauge(0, 40);
+  if (ON_DEVICE) {                                   // served by the device: own origin, no dialog
+    $('navConnect').classList.add('hidden');
+    $('urlModal').hidden = true;
+    addLog('info', 'Verbunden mit ' + location.host);
+    poll().then(() => loadConfig(true));
+  } else {
+    $('urlModal').hidden = false;
+    $('hostInput').focus();
+  }
 }
 init();
+
 </script>
 </body>
 </html>

@@ -36,7 +36,7 @@ Acceptance criteria (Pflichtenheft V1.5 §7):
             measured in the device) each <= 3000; overruns reported only
   soak    : 10 min GET_STATE every 1 s: no COMM_TIMEOUT, all frames valid,
             then timing as above. --web: a second thread loads the web pages
-            and assets (/, /settings, /app.js, /style.css, fonts) without pause
+            and assets (/, /settings, /app.js, fonts) without pause
             during the whole soak (SPIFFS reads stop the other core briefly)
   local   : only with LOCAL_HOLD_MS > 0 in config.h (default 0 = no LOCAL
             priority): press any display button, then API HV_ON -> err -10
@@ -252,7 +252,7 @@ def t_parallel(host, n, threads):
     return cycle_ok(host, base) and not bad
 
 
-WEB_PATHS = ["/", "/settings", "/app.js", "/style.css",
+WEB_PATHS = ["/", "/settings", "/app.js",
              "/font-u400.woff2", "/font-u700.woff2", "/font-m400.woff2", "/font-m700.woff2"]
 
 

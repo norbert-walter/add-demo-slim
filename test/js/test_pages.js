@@ -1,79 +1,100 @@
-// FROZEN TESTS (Contract V1.5.22) – Sprint W1. Do not modify.
-// Static checks of the two pages data/www/index.html and data/www/settings.html:
-//   node --test test/js/test_pages.js                                  (both pages)
-//   node --test --test-name-pattern="^index" test/js/test_pages.js     (one page)
-// The behaviour of the pages is checked by the reviewer in a browser against scripts/fake_device.py.
+// Tests of the web pages (Contract V1.5.26, §5.5) – the IMS operator UI replaces the W1 pages.
+//   node --test test/js/test_pages.js
+// data/www/index.html is ONE file for two uses: served by the device at "/" and opened as a local
+// file (connection dialog). It embeds a byte-identical copy of data/www/app.js (ADDAPP).
+// The behaviour is checked by the reviewer in a browser against scripts/fake_device.py.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const crypto = require('node:crypto');
 
 const WWW = path.join(__dirname, '..', '..', 'data', 'www');
-const PAGES = {
-  index: {
-    tag: 'W1.4',
-    head: '1a7d3c24ffc8e24402346e0458d3de7ca839c8de7767c32596b833aad622e045',
-    functions: ['api', 'command', 'render', 'poll', 'loadValidation', 'init'],
-    ids: ['pill', 'pillDot', 'pillText', 'localBadge', 'theme', 'state', 'err', 'hv', 'shutter', 'mode', 'pos', 'vel',
-          'dist', 'thick', 'avg', 'n', 'chart', 'flags', 'btnInit', 'btnHv', 'btnMeasure', 'btnTraverse', 'btnAck',
-          'btnStop', 'hint', 'valStrip', 'confirmOverlay', 'confirmTitle', 'confirmBody', 'confirmCancel', 'confirmOk', 'toast'],
-  },
-  settings: {
-    tag: 'W1.5',
-    head: 'd80a852920542418aff647aa728ae1a975c9c95e0ab057663ebfe4fc8e04abb1',
-    functions: ['api', 'readForm', 'fillForm', 'load', 'save', 'setNow', 'init'],
-    ids: ['pill', 'pillDot', 'pillText', 'theme', 'f_measure_pos', 'f_maint_pos', 'f_traverse_start', 'f_traverse_end',
-          'f_traverse_speed', 'f_shutter_hold', 'f_edge_threshold', 'f_base_dist', 'f_calib_near_ref', 'f_calib_far_ref',
-          'f_temp', 'f_interlock', 'f_cooling_flow', 'f_estop_nc', 'f_wifi_ssid', 'f_wifi_pass', 'calInfo', 'wifiInfo',
-          'btnCalNear', 'btnCalFar', 'btnCalBase', 'btnCalSave', 'btnCalReset', 'btnReboot', 'btnSave', 'btnReload',
-          'confirmOverlay', 'confirmTitle', 'confirmBody', 'confirmCancel', 'confirmOk', 'toast'],
-  },
-};
-const TAIL = '\ninit();\n</script>\n</body>\n</html>\n';
-const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
-const read = (name) => fs.readFileSync(path.join(WWW, name + '.html'), 'utf8').replace(/\r\n/g, '\n');
-const script = (html) => {
-  const i = html.indexOf("<script>\n'use strict';");
-  assert.ok(i > 0, 'inline <script> with \'use strict\' not found');
-  return html.slice(i + 8, html.lastIndexOf('</script>'));
-};
+const read = (name) => fs.readFileSync(path.join(WWW, name), 'utf8').replace(/\r\n/g, '\n');
+const scripts = (html) => [...html.matchAll(/<script>\n?([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+const IDS = [
+  // shell
+  'urlModal', 'hostInput', 'portInput', 'btnConnect', 'btnDemo', 'confirmModal', 'confirmTitle', 'confirmBody',
+  'confirmCancel', 'confirmOk', 'navConnect', 'alarmBox', 'alarmTitle', 'alarmDetail', 'sboxHv', 'sboxShutter',
+  'deviceId', 'pageTitle', 'connDot', 'connLabel', 'clockDisplay', 'toast',
+  // pages
+  'page-process', 'page-status', 'page-settings', 'page-calibration', 'page-log',
+  // process
+  'matState', 'matPos', 'matVel', 'matDist', 'matThick', 'matTemp', 'mMax', 'mAvg', 'mMin', 'mAct', 'mN', 'mPos',
+  'gaugeCanvas', 'gaugeValue', 'btnInit', 'btnHv', 'btnMeasure', 'btnTraverse', 'btnPark', 'btnService', 'btnAck',
+  'btnStop', 'ctrlHint', 'trendChart', 'distChart',
+  // status
+  'valList', 'ssCycle', 'ssPeriod', 'ssPrio', 'ssOverruns', 'ioArmed', 'ioLocal',
+  // settings
+  'f_measure_pos', 'f_maint_pos', 'f_traverse_start', 'f_traverse_end', 'f_traverse_speed', 'f_shutter_hold',
+  'f_edge_threshold', 'f_base_dist', 'f_estop_nc', 'f_interlock', 'f_cooling_flow', 'f_temp', 'f_wifi_ssid',
+  'f_wifi_pass', 'btnSave', 'btnReload', 'btnSetTemp', 'btnReboot',
+  // calibration
+  'f_calib_near_ref', 'f_calib_far_ref', 'btnCalMoveNear', 'btnCalNear', 'btnCalMoveFar', 'btnCalFar', 'btnCalSave',
+  'btnCalBase', 'btnCalReset', 'btnCalRefs', 'calibChart',
+  // log
+  'devLog', 'btnDevLog', 'logTableBody',
+];
 
-for (const [name, P] of Object.entries(PAGES)) {
-  test(name + ': markup and given helpers unchanged (everything before "// ---- TODO(' + P.tag + ')")', () => {
-    const h = read(name);
-    const i = h.indexOf('// ---- TODO(' + P.tag + ')');
-    assert.ok(i > 0, 'marker line "// ---- TODO(' + P.tag + ')" missing');
-    assert.equal(sha(h.slice(0, i)), P.head, 'the part above the TODO marker was changed – restore it from git');
-    assert.ok(h.endsWith(TAIL), 'the file must end with init(); </script></body></html> as in the skeleton');
-  });
-  test(name + ': script compiles and defines exactly the skeleton functions', () => {
-    const js = script(read(name));
-    assert.doesNotThrow(() => new vm.Script(js), 'syntax error in the inline script');
-    for (const f of P.functions) assert.match(js, new RegExp('(async )?function ' + f + '\\('), 'function ' + f + ' missing');
-    const defined = [...js.matchAll(/^(?:async )?function (\w+)\(/gm)].map((m) => m[1]);
-    const given = ['setTheme', 'toast', 'showConfirm', 'closeConfirm', 'drawChart', 'setPill'];
-    for (const f of defined) assert.ok(given.includes(f) || P.functions.includes(f), 'extra top-level function ' + f + ' – use the skeleton functions only');
-  });
-  test(name + ': all TODOs filled in', () => {
-    const js = script(read(name));
-    assert.ok(!/throw new Error\('TODO/.test(js), 'a function still throws TODO');
-  });
-  test(name + ': uses ADDAPP, no own protocol code, no external resources', () => {
-    const h = read(name), js = script(h);
-    assert.ok(!/function (crc32|frame|verify|apiBody|parseFramed)\b/.test(js), 'protocol functions belong to app.js (A.*)');
-    assert.ok(!/\bJSON\.stringify\(/.test(js), 'request bodies are built with A.apiBody only');
-    assert.ok(!/https?:\/\//.test(h), 'no http:// or https:// URL (no internet in AP mode)');
-    for (const m of h.matchAll(/\b(?:src|href)="([^"]*)"/g)) assert.ok(m[1].startsWith('/') && !m[1].startsWith('//'), 'only device paths: ' + m[1]);
-    for (const m of js.matchAll(/fetch\(\s*'([^']*)'/g)) assert.ok(['/api', '/proc?t=', '/add?t='].includes(m[1]), 'unexpected fetch target ' + m[1]);
-    assert.ok(h.length < 40000, 'page larger than 40 kB');
-  });
-  test(name + ': element ids present and unique', () => {
-    const h = read(name);
-    const ids = [...h.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
-    for (const id of P.ids) assert.ok(ids.includes(id), 'id ' + id + ' missing');
-    assert.equal(new Set(ids).size, ids.length, 'duplicate id');
-  });
-}
+test('index: embeds a byte-identical copy of app.js', () => {
+  const s = scripts(read('index.html'));
+  assert.equal(s.length, 2, 'two inline scripts: ADDAPP copy and page script');
+  const app = read('app.js').replace(/<\/script>/g, '<\\/script>');
+  assert.ok(s[0].includes(app), 'the first inline script must contain data/www/app.js unchanged – rebuild index.html');
+});
+
+test('index: scripts compile and the page script uses ADDAPP for protocol and rules', () => {
+  const s = scripts(read('index.html'));
+  for (const js of s) assert.doesNotThrow(() => new vm.Script(js), 'syntax error in an inline script');
+  const page = s[1];
+  assert.match(page, /const A = window\.ADDAPP;/);
+  assert.ok(!/function (crc32|frame|verify|parseFramed|apiBody)\b/.test(page), 'protocol functions belong to ADDAPP');
+  for (const f of ['A.parseFramed(', 'A.apiBody(', 'A.buttons(', 'A.configDiff(', 'A.checkParam(', 'A.validationBadges(']) {
+    assert.ok(page.includes(f), 'page script must use ' + f);
+  }
+});
+
+test('index: no external resources (no internet in AP mode)', () => {
+  const h = read('index.html');
+  for (const m of h.matchAll(/\b(?:src|href)="([^"]*)"/g)) assert.ok(m[1].startsWith('/') && !m[1].startsWith('//'), 'only device paths: ' + m[1]);
+  for (const m of h.matchAll(/url\('([^']*)'\)/g)) assert.ok(m[1].startsWith('/'), 'only device paths in CSS: ' + m[1]);
+  assert.ok(!/fonts\.googleapis|cdn\.|unpkg|jsdelivr/.test(h), 'no CDN');
+  // the only absolute URLs: 'http://' + HOST for a local file and the SVG namespace
+  const abs = [...h.matchAll(/https?:\/\/[^\s'"`<)]*/g)].map((m) => m[0]);
+  for (const u of abs) assert.ok(['http://', 'http://www.w3.org/2000/svg'].includes(u), 'unexpected URL ' + u);
+});
+
+test('index: device paths and endpoints', () => {
+  const page = scripts(read('index.html'))[1];
+  for (const p of ["'/api'", "'/proc?t='", "'/add'", "'/log?t='"]) assert.ok(page.includes(p), 'endpoint ' + p);
+  assert.match(page, /const ON_DEVICE = location\.protocol === 'http:' \|\| location\.protocol === 'https:';/);
+  assert.match(page, /function baseUrl\(\) \{ return HOST \? 'http:\/\/' \+ HOST : ''; \}/, 'own origin on the device');
+});
+
+test('index: rules from §5.5 are present', () => {
+  const page = scripts(read('index.html'))[1];
+  assert.match(page, /\$\('btnStop'\)\.onclick = \(\) => api\('STOP'\);/, 'STOP without dialog');
+  for (const c of ['HV_ON', 'ACK', 'REBOOT', 'CALIB_RESET']) assert.match(page, new RegExp('\\b' + c + ': \\['), 'confirmation for ' + c);
+  assert.match(page, /const POLL_MS = 500;/);
+  assert.match(page, /const HEARTBEAT_MS = 1000;/);
+  assert.match(page, /comm_armed && Date\.now\(\) - lastApi >= HEARTBEAT_MS/, 'heartbeat only while armed');
+  assert.match(page, /const tv = !hv \? 0 : !m\.valid \? null : m\.on_material \? m\.thick : 0;/, 'thickness 0 with HV off');
+  assert.ok(!/setInterval\(\s*\(\)\s*=>\s*api\(/.test(page), 'commands are never repeated automatically');
+});
+
+test('index: element ids present and unique', () => {
+  const h = read('index.html');
+  const ids = [...h.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
+  for (const id of IDS) assert.ok(ids.includes(id), 'id ' + id + ' missing');
+  assert.equal(new Set(ids).size, ids.length, 'duplicate id');
+  const page = scripts(h)[1];
+  for (const m of page.matchAll(/\$\('([^']+)'\)/g)) assert.ok(ids.includes(m[1]), 'script uses unknown id ' + m[1]);
+  assert.ok(h.length < 120000, 'page larger than 120 kB');
+});
+
+test('settings: redirects to the settings page of the single-page UI', () => {
+  const h = read('settings.html');
+  assert.match(h, /<meta http-equiv="refresh" content="0; url=\/#settings">/);
+  assert.ok(h.length < 1000);
+});

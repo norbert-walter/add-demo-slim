@@ -1,13 +1,24 @@
 # Pflichtenheft – Demoanlage ADD (Slim)
 
-**Stand:** 2026-10-17
+**Stand:** 2026-11-07
 **Autor:** Norbert Walter
-**Version:** 1.7.9 (Webserver trennt wartende Verbindungen, ADC verteilt gelesen)
+**Version:** 1.7.10 (IMS-Bedienoberfläche ersetzt die W1-Seiten)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.7.9 → V1.7.10 (Contract V1.5.26, 07.11.2026, Entscheidung Norbert Walter)
+- **Neue Weboberfläche unter `/`:** Die IMS-Bedienoberfläche (deutsch, eine Seite mit Navigation
+  links und Kopfzeile oben; Seiten Prozess, Status, Einstellungen, Kalibrierung, Log) ersetzt die
+  beiden W1-Seiten. Dieselbe Datei läuft auch lokal geöffnet (Verbindungsdialog, Demo-Modus).
+- `/settings` leitet auf `/#settings` weiter; `style.css` entfällt (CSS steckt in `index.html`).
+  Die Firmware bleibt unverändert.
+- Heartbeat jetzt jede Sekunde (vorher 2 s).
+- **Dicke 0 bei ausgeschalteter Hochspannung** (keine Strahlung, kein Messwert) – nur in der
+  Weboberfläche, `/proc` bleibt unverändert.
+- Themes entfallen (ein IMS-Farbschema); Schriften weiter vom Gerät.
 
 ### V1.7.8 → V1.7.9 (Contract V1.5.25, 17.10.2026, Gerätetest I1 Teil 2c Nr. 7–14, Entscheidung Norbert Walter)
 - **Aussetzer der REST-Verbindung behoben:** Der Webserver bedient eine Verbindung nach der
@@ -490,38 +501,36 @@ sind gesperrt (§6 Bedienvorrang).
 
 Siehe CONTRACT §5.1 (Feldreihenfolge verbindlich).
 
-### 5.7 Weboberfläche (2 Seiten, SPIFFS)
+### 5.7 Weboberfläche (IMS-Bedienoberfläche, eine Seite, SPIFFS) – ab V1.7.10
 
-**Sprache: Englisch.** Basis: ADD Dashboard Style Guide v1.0 mit **identischen
-CSS-Variablen** (Werte aus Style Guide Anhang A), Theme-Klassen `theme-dark`,
-`theme-light`, `theme-night`, `theme-bw`, localStorage-Schlüssel `add-dashboard-theme`.
-Schriften Ubuntu / Ubuntu Mono **lokal auf SPIFFS** (`/www/fonts/*.woff2`, kein CDN –
-im AP-Modus gibt es kein Internet), Fallback `sans-serif` / `monospace`.
+**Sprache: Deutsch.** IMS-Farbschema, Aufbau wie die IMS-Webseiten: links die Navigationsleiste,
+oben die Kopfzeile (Gerät, Seitentitel, Statusboxen HV und Shutter, Alarm, Verbindung, Uhr).
+Schriften Ubuntu / Ubuntu Mono **lokal auf SPIFFS** (kein CDN – im AP-Modus gibt es kein Internet).
+Eine Datei für zwei Zwecke: vom Gerät unter `/` geladen (ohne Dialog) oder lokal geöffnet
+(Verbindungsdialog mit Host/Port, Demo-Modus ohne Gerät). `/settings` leitet auf `/#settings` weiter.
 
-**Seite 1 – Process View (`/`)**
-- Statuszeile: Sicherheitszustand (READY/RUNNING/FAULT…), HV, Shutter, E-Stop, Fehlertext,
-  Badge **LOCAL** solange `local = true` (Start-Tasten dann deaktiviert, Hinweis „Operator at display has priority“)
-- Datenpanels: POS, SPEED, DIST, THICK (`---` wenn `!valid` oder nicht auf Messgut), AVG/n
-- Sicherheitsflags: INTERLOCK, COOLING, TEMP mit Farbcode `--ok/--warn/--danger`,
-  jeweils mit Kennzeichnung **SIM** (simuliert)
-- Zeitreihe DIST/THICK (Canvas, max. 100 Punkte, clientseitig)
-- Tasten: INIT, HV ON/OFF, MEASURE, TRAVERSE, STOP, ACK (ACK nur in WAIT_ACK aktiv)
-  – START-Befehle ohne Parameter → Werte aus der Konfiguration
-- Bestätigungsdialog (Style Guide 7.8) für HV ON und ACK
-- **Heartbeat:** solange `safety.comm_armed`, alle 2 s `GET_STATE`
-- Validation-Strip (Style Guide 6.10) aus `/add` → `validation.validated_by`
-- `/proc`-Polling alle 500 ms, CRC wird geprüft (bei Fehler: Statuspill „CRC error“)
-- Bei `BUSY`: keine automatische Wiederholung; nächster `/proc`-Stand entscheidet
+**Prozess (Hauptseite)**
+- Zustandsmatrix: Zustand, Position, Geschwindigkeit, Abstand, Dicke, Temperatur
+- Messanzeige (Gauge) und Statistik Max / Mittel / Min / aktuell / n
+- **Dicke:** HV aus → 0 · HV an, Shutter zu (kein gültiger Wert) → „–“ · neben dem Messgut → 0 ·
+  auf dem Messgut → Messwert
+- Tasten INIT, HV EIN/AUS, MESSEN, TRAVERSE, PARK, SERVICE, ACK, STOP; Bestätigungsdialog für
+  HV EIN, ACK, REBOOT und Kalibrierung zurücksetzen, nie für STOP
+- Zeitreihe (max. 100 Punkte) und Abstandsverlauf
 
-**Seite 2 – Settings (`/settings`)**
-- Werte beim Laden per `GET_CONFIG`
-- Messposition, Wartungsposition `maint_pos` (21 … 60 mm), Profilfahrt (Start/Ende/Geschwindigkeit), Shutter-Nachlaufzeit `shutter_hold` (V1.7.5), Kantenschwelle, `base_dist`
-- Sicherheitsflags (Toggle Interlock, Toggle Cooling, Temperatur)
-- Kalibrierung: Referenzwerte Nah/Fern (`SET calib_near_ref/far_ref`),
-  Tasten Capture Near / Capture Far / Capture Base / Save / Reset (`CALIB`)
-- WLAN: SSID, Passwort des Routers (wirksam nach Reboot), Reboot-Taste; Anzeige des Verbindungszustands
-- Not-Aus-Verdrahtung `estop_nc` (Umschalter mit Warnhinweis, nur bei stehender Achse und HV aus)
-- Jede Rückmeldung (`err`, `msg`) sichtbar als Toast
+**Status:** Zykluszeiten, Ein-/Ausgänge, ADD-Validierung aus `/add`
+
+**Einstellungen:** alle Parameter per `GET_CONFIG`/`SET` (Positionen, Profilfahrt, Shutter-Nachlauf,
+Kantenschwelle, `base_dist`, `estop_nc` mit Warnhinweis), simulierte Sicherheitsflags, Router
+SSID/Passwort (wirksam nach Reboot), Reboot-Taste. Ungültige Felder werden markiert und nicht gesendet.
+
+**Kalibrierung:** Nah/Fern anfahren und erfassen, Basis erfassen, speichern, zurücksetzen, Referenzwerte
+
+**Log:** Geräte-Log (`/log`) und Ereignistabelle der Seite
+
+**Kommunikation:** `/proc`-Polling alle 500 ms mit CRC-Prüfung (Fehler → „CRC-Fehler“, nur STOP
+bedienbar); **Heartbeat** `GET_STATE` jede Sekunde, solange `safety.comm_armed`; bei `BUSY` keine
+automatische Wiederholung; jede Rückmeldung (`err`, `msg`) als Toast.
 
 ### 5.8 Display (1 Seite, 480×320, LovyanGFX)
 
@@ -925,7 +934,7 @@ Die Zeiten der 🤖-Sprints sind Rechenzeit von Qwen lokal (ca. 18 Token/s), nic
 
 **7. Weboberfläche**
 - [ ] Live-Daten ≤ 500 ms, Zeitreihe 100 Punkte
-- [ ] 4 Themes, funktioniert ohne Internet (AP-Modus)
+- [ ] IMS-Bedienoberfläche unter `/`, funktioniert ohne Internet (AP-Modus); lokal geöffnet mit Verbindungsdialog
 - [ ] Einstellungen laden/speichern, Kalibrierung, WLAN-Konfiguration
 - [ ] Tablet über WLAN (AP)
 - [ ] Router-Verbindung: SSID/Passwort per REST setzen, REBOOT → Gerät ist im Heimnetz erreichbar (`add-demo.local`), AP bleibt erreichbar
