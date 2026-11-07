@@ -1,7 +1,7 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.26 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-07
-**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.10
+**Version:** 1.5.27 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-07
+**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.11
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
 
@@ -169,6 +169,15 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 1 | `test_hardware` crashed in `test_nvs_roundtrip` (Guru Meditation "Cache disabled but cached memory region accessed", PC in `StepperQueue::fill_i2s_buffer`). Cause in FastAccelStepper 96459ed: the I2S TX-done interrupt runs permanently with I2S_MUX and is IRAM-safe, but `fill_i2s_buffer()` and `I2sManager::i2sMuxSetBit()` were in flash; every flash operation (NVS write, SPIFFS read, OTA) crashed the board, also with the motor idle. Fix: both functions `IRAM_ATTR` (fork `norbert-walter/FastAccelStepper`, commit a64ceff on 96459ed; pull request to gin66 pending). Checked with nm/objdump: every function reachable from the interrupt is in IRAM, no literals into flash | `platformio.ini` |
 | 2 | Post-build check `scripts/check_iram.py` (all ESP32 environments): the build fails if one of the I2S interrupt functions is linked into flash (protects against library updates). Verified: fails with 96459ed, passes with a64ceff | `platformio.ini`, `scripts/` |
 | 3 | The nine native H1 tests could not see this (no flash cache on the host); the first five on-device tests were green (inputs, sensor, outputs, E-stop polarity change) | – |
+
+**Changes 1.5.27 (/doc as HTML page, 2026-11-07, decision Norbert Walter):**
+
+| # | Change | Where |
+|---|---|---|
+| 1 | `GET /doc` serves SPIFFS `/doc.html` as `text/html` (was `/doc.md`, `text/markdown`): a German page with a short description of the demo plant, the endpoints of the device and a link table to the documentation on GitHub. Missing file → 404 as before | `http_server.h/.cpp`, `data/doc.html` |
+| 2 | `test_http_server`: `/doc` expects `text/html` and the content of `/doc.html` (mutation "old route" caught). Native: 22 suites, **479/479** | `test_http_server` |
+| 3 | Sprint D1 no longer writes `data/doc.md`; the operator manual for the AI goes into the ADD document and the linked documents | D1 |
+| 4 | `fake_device.py` serves `/doc` | `scripts/fake_device.py` |
 
 **Changes 1.5.26 (IMS operator UI replaces the W1 pages, 2026-11-07, decision Norbert Walter):**
 
@@ -586,7 +595,7 @@ because of a full normal queue (§6.7).
 ### 5.4 Other endpoints
 
 `/` and `/settings` (web UI), `/add` (ADD document, `Cache-Control: no-store`),
-`/add.html` and `/llms.txt` (ADD spec §5.3/§5.4), `/doc` (Markdown), `/log`
+`/add.html` and `/llms.txt` (ADD spec §5.3/§5.4), `/doc` (HTML page with links, V1.5.27), `/log`
 (last 20 log lines). All responses carry `Access-Control-Allow-Origin: *`.
 V1.5.22: `/app.js`, `/style.css` and the four font files of the web UI (§5.5).
 V1.5.26: `/style.css` answers 404 (file removed, the CSS is part of `index.html`).

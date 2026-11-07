@@ -8,7 +8,7 @@
  *   GET  /add         -> SPIFFS /add.json  (application/json, Cache-Control: no-store)
  *   GET  /add.html    -> /add.json embedded per ADD spec §5.3
  *   GET  /llms.txt    -> generated index (ADD spec §5.4)
- *   GET  /doc         -> SPIFFS /doc.md (text/markdown)
+ *   GET  /doc         -> SPIFFS /doc.html (text/html)   V1.5.27, was /doc.md (text/markdown)
  *   V1.5.22 (web UI assets, Sprint W1):
  *   GET  /app.js      -> SPIFFS /www/app.js (application/javascript)
  *   GET  /style.css   -> SPIFFS /www/style.css (text/css)
@@ -37,7 +37,7 @@
  *    Access-Control-Allow-Methods: GET, POST, OPTIONS and Access-Control-Allow-Headers: Content-Type.
  *  - Files: if SPIFFS.exists(path): File f = SPIFFS.open(path, "r"); server.streamFile(f, type);
  *    f.close(). Missing file -> the 404 answer. Types: "/" and "/settings" text/html,
- *    "/add" application/json (+ Cache-Control: no-store), "/doc" text/markdown.
+ *    "/add" application/json (+ Cache-Control: no-store), "/doc" text/html (V1.5.27).
  *  - /add.html (from /add.json; missing -> 404): HTTP 200, Content-Type
  *    "text/html; charset=utf-8", headers Cache-Control: no-store, no-cache, must-revalidate and
  *    Pragma: no-cache. Sent in chunks (server.setContentLength(CONTENT_LENGTH_UNKNOWN);

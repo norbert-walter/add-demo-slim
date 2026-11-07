@@ -64,7 +64,7 @@ Teil der Definition of Done in `.clinerules`.
 | W1 | `data/www/app.js`, `index.html`, `settings.html` | ✅ fertig (Qwen; 2 Korrekturen Claude) | `test_app` 27/27 · `test_pages` 10/10 · Browser- und Offline-Prüfung ✅ · Gerät offen | ✅ 18.10.2026, Review_W1 |
 | IMS-UI | `data/www/index.html` (ersetzt die W1-Seiten), `settings.html` → `/#settings` | ✅ fertig (Claude, Entwurf Norbert Walter) | `test_app` + `test_pages` 34/34 · Browserprüfung Gerätemodus und lokale Datei ✅ · Gerät offen | Contract V1.5.26 |
 | A1 | Abnahme | ⬜ offen | Pflichtenheft Kapitel 10 | – |
-| D1 | `data/add.json`, `data/doc.md`, Demo-Skripte | ⬜ offen | KI-Validierung | – |
+| D1 | `data/add.json`, Demo-Skripte | ⬜ offen | KI-Validierung | – |
 
 Reihenfolge und Begründung: `docs/Sprint_Prompts_Demoanlage_ADD_Slim_V2.md`, Abschnitt
 „Sprint-Plan V3“. Die Sprint-Dateien für Cline liegen in `docs/sprints/`.

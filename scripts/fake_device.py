@@ -17,7 +17,7 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
 ROOT = os.environ.get('ADD_FAKE_ROOT') or os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
-ROUTES = {'/': ('www/index.html', 'text/html'), '/settings': ('www/settings.html', 'text/html'),
+ROUTES = {'/': ('www/index.html', 'text/html'), '/settings': ('www/settings.html', 'text/html'), '/doc': ('doc.html', 'text/html'),
           '/app.js': ('www/app.js', 'application/javascript'),
           '/font-u400.woff2': ('www/font-u400.woff2', 'font/woff2'), '/font-u700.woff2': ('www/font-u700.woff2', 'font/woff2'),
           '/font-m400.woff2': ('www/font-m400.woff2', 'font/woff2'), '/font-m700.woff2': ('www/font-m700.woff2', 'font/woff2')}

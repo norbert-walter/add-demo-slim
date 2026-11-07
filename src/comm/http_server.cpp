@@ -288,7 +288,7 @@ void httpServerInit() {
     server.on("/", HTTP_GET, []() { sendFile("/www/index.html", "text/html", false); });
     server.on("/settings", HTTP_GET, []() { sendFile("/www/settings.html", "text/html", false); });
     server.on("/add", HTTP_GET, []() { sendFile("/add.json", "application/json", true); });
-    server.on("/doc", HTTP_GET, []() { sendFile("/doc.md", "text/markdown", false); });
+    server.on("/doc", HTTP_GET, []() { sendFile("/doc.html", "text/html", false); });   // V1.5.27: HTML
     // V1.5.22: web UI assets (Sprint W1); fonts may be cached by the browser
     server.on("/app.js", HTTP_GET, []() { sendFile("/www/app.js", "application/javascript", false); });
     server.on("/style.css", HTTP_GET, []() { sendFile("/www/style.css", "text/css", false); });

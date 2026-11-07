@@ -78,7 +78,7 @@ void test_static_files_and_404() {
     shimFiles()["/www/index.html"] = "<html>index</html>";
     shimFiles()["/www/settings.html"] = "<html>settings</html>";
     shimFiles()["/add.json"] = "{\"add\":1}";
-    shimFiles()["/doc.md"] = "# Doc";
+    shimFiles()["/doc.html"] = "<html>doc</html>";
     const ShimResponse& a = request(HTTP_GET, "/");
     TEST_ASSERT_EQUAL_INT(200, a.code); TEST_ASSERT_EQUAL_STRING("text/html", a.type.c_str());
     TEST_ASSERT_EQUAL_STRING("<html>index</html>", a.body.c_str()); assertCors(a);
@@ -89,12 +89,12 @@ void test_static_files_and_404() {
     TEST_ASSERT_EQUAL_STRING("{\"add\":1}", j.body.c_str());
     TEST_ASSERT_EQUAL_STRING("no-store", j.header("Cache-Control").c_str()); assertCors(j);
     const ShimResponse& d = request(HTTP_GET, "/doc");
-    TEST_ASSERT_EQUAL_STRING("text/markdown", d.type.c_str()); TEST_ASSERT_EQUAL_STRING("# Doc", d.body.c_str());
+    TEST_ASSERT_EQUAL_STRING("text/html", d.type.c_str()); TEST_ASSERT_EQUAL_STRING("<html>doc</html>", d.body.c_str());  // V1.5.27
     TEST_ASSERT_EQUAL_INT(0, shimOpenFiles());                  // every file closed again
     const ShimResponse& n = request(HTTP_GET, "/nothing");
     TEST_ASSERT_EQUAL_INT(404, n.code); TEST_ASSERT_EQUAL_STRING("application/json", n.type.c_str());
     TEST_ASSERT_EQUAL_STRING("{\"error\":\"not found\"}", n.body.c_str()); assertCors(n);
-    shimFiles().erase("/doc.md");
+    shimFiles().erase("/doc.html");
     const ShimResponse& m = request(HTTP_GET, "/doc");          // missing file -> 404
     TEST_ASSERT_EQUAL_INT(404, m.code); TEST_ASSERT_EQUAL_STRING("{\"error\":\"not found\"}", m.body.c_str());
 }

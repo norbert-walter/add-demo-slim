@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demoanlage ADD – Dokumentation</title>
+<style>
+@font-face { font-family: 'Ubuntu'; font-weight: 400; font-display: swap; src: url('/font-u400.woff2') format('woff2'); }
+@font-face { font-family: 'Ubuntu'; font-weight: 700; font-display: swap; src: url('/font-u700.woff2') format('woff2'); }
+:root {
+  --ims-orange: #F39200; --header-bg: #004578; --page-bg: #003759; --panel-bg: #004578;
+  --panel-border: #3B6481; --panel-header-bg: #002847; --fg: #CDE6F9; --fg-dim: #6184A0;
+  --info: #00B6F8; --warn: #F0F000; --table-even: #003452;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: 'Ubuntu', system-ui, sans-serif; font-size: 14px; line-height: 1.5;
+  background: var(--page-bg); color: var(--fg); }
+header { background: var(--header-bg); border-bottom: 3px solid var(--ims-orange); padding: 14px 20px; }
+header h1 { margin: 0; font-size: 20px; }
+header p { margin: 2px 0 0; color: var(--fg-dim); font-size: 12px; }
+main { max-width: 960px; margin: 0 auto; padding: 16px; }
+.panel { background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 3px; margin-bottom: 16px; }
+.panel h2 { margin: 0; padding: 7px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; background: var(--panel-header-bg); border-bottom: 1px solid var(--panel-border); }
+.panel .body { padding: 10px 14px; }
+.panel p { margin: 6px 0; }
+ul { margin: 6px 0; padding-left: 20px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-dim);
+  background: var(--panel-header-bg); padding: 6px 10px; }
+td { padding: 7px 10px; border-top: 1px solid var(--panel-border); vertical-align: top; }
+tr:nth-child(even) td { background: var(--table-even); }
+a { color: var(--info); text-decoration: none; }
+a:hover { color: var(--ims-orange); text-decoration: underline; }
+code { font-family: ui-monospace, monospace; font-size: 12px; color: #F5FBFF; }
+.note { color: var(--warn); font-size: 12px; }
+footer { color: var(--fg-dim); font-size: 11px; text-align: center; padding: 8px 16px 20px; }
+@media (max-width: 600px) { td, th { padding: 6px; } td:nth-child(3) { display: none; } th:nth-child(3) { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Demoanlage ADD (Slim) – Dokumentation</h1>
+  <p>AI Device Description · Firmware 1.0.0 · Contract V1.5.27</p>
+</header>
+<main>
+  <section class="panel">
+    <h2>Was ist die Demoanlage?</h2>
+    <div class="body">
+      <p>Die Demoanlage ist ein verkleinertes Modell (etwa 1:5) eines <b>radiometrischen
+      Dickenmessers</b>, wie er in Walzwerken eingesetzt wird. Ein C-förmiger Messbügel fährt auf
+      einer Linearachse über einen Stufenkörper und misst dessen Dicke. Hochspannung und Shutter der
+      Röntgenquelle sind nur nachgebildet (LEDs); gemessen wird mit einem optischen
+      Abstandssensor – es entsteht keine Strahlung.</p>
+      <p>Die Anlage dient der Vorführung von <b>ADD (AI Device Description)</b>: Das Gerät beschreibt
+      sich selbst in einem maschinenlesbaren Dokument, sodass ein KI-Agent die Anlage verstehen,
+      erklären und über die REST-API sicher bedienen kann.</p>
+      <p>Hardware: Steuerboard MKS DLC32 (ESP32), Touch-Display MKS TS35-R, Schrittmotor mit
+      Treiber TMC2209, Abstandssensor Sharp GP2Y0A41SK0F. Ein einziger Mikrocontroller übernimmt
+      Regelung im 1-ms-Takt, Sicherheitslogik, Display, Webserver und WLAN.</p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Auf diesem Gerät</h2>
+    <div class="body">
+      <table>
+        <tr><th>Adresse</th><th>Inhalt</th></tr>
+        <tr><td><a href="/">/</a></td><td>Bedienoberfläche (Prozess, Status, Einstellungen, Kalibrierung, Log)</td></tr>
+        <tr><td><a href="/proc">/proc</a></td><td>Prozessabbild als JSON mit CRC32</td></tr>
+        <tr><td><code>/api</code></td><td>Befehle per POST (JSON mit CRC32)</td></tr>
+        <tr><td><a href="/add">/add</a></td><td>ADD-Dokument (JSON) für KI-Agenten</td></tr>
+        <tr><td><a href="/add.html">/add.html</a></td><td>ADD-Dokument für Cloud-KIs</td></tr>
+        <tr><td><a href="/llms.txt">/llms.txt</a></td><td>Einstieg für Sprachmodelle</td></tr>
+        <tr><td><a href="/log">/log</a></td><td>letzte 20 Logzeilen</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Weitere Dokumentation</h2>
+    <div class="body">
+      <p class="note">Die folgenden Links führen zu GitHub und brauchen Internetzugang. Im eigenen
+      WLAN der Anlage (<code>ADD-Demo</code>) gibt es kein Internet – dazu ein anderes Netz verwenden.</p>
+      <table>
+        <tr><th>Dokument</th><th>Kurzbeschreibung</th><th>Sprache</th></tr>
+        <tr><td><a href="https://github.com/norbert-walter/add-demo-slim/blob/master/docs/reference/ADD_Specification_v1_0.md">ADD-Referenz</a></td>
+          <td>Spezifikation des offenen Standards AI Device Description v1.0: Aufbau des ADD-Dokuments, Blöcke, Autonomiestufen, Sicherheitsangaben, Bereitstellung über HTTP</td><td>Englisch</td></tr>
+        <tr><td><a href="https://github.com/norbert-walter/add-demo-slim/blob/master/docs/reference/ADD_Developer_Guide_v1_0.md">ADD-Developer-Guide</a></td>
+          <td>Leitfaden für Entwickler: wie man ein ADD-Dokument für ein eigenes Gerät erstellt, prüft und ausliefert</td><td>Englisch</td></tr>
+        <tr><td><a href="https://github.com/norbert-walter/add-demo-slim/blob/master/docs/reference/ADD_Style_Guide_v1_0.md">ADD-Style-Guide</a></td>
+          <td>Gestaltungsregeln für allgemeine ADD-Dashboards: Farben, Themes, Instrumente, Piktogramme</td><td>Englisch</td></tr>
+        <tr><td><a href="https://github.com/norbert-walter/add-demo-slim/blob/master/docs/reference/ADD_Style_Guide_IMS_V1_0.md">ADD-Style-Guide IMS</a></td>
+          <td>Gestaltung eigener Webseiten im Stil dieser Bedienoberfläche, mit geprüfter Startvorlage</td><td>Englisch</td></tr>
+        <tr><td><a href="https://github.com/norbert-walter/add-demo-slim">GitHub-Repository</a></td>
+          <td>Quellcode der Firmware, Weboberfläche, Tests, Python-Werkzeuge und alle Dokumente der Demoanlage</td><td>–</td></tr>
+        <tr><td><a href="https://github.com/norbert-walter/add-demo-slim/blob/master/docs/Hardware_Dokumentation_V1_0.md">Hardware-Dokumentation</a></td>
+          <td>Sicherheitshinweise, technische Daten, Blockschaltbild, Komponenten, Anschlüsse, Motortreiber, Inbetriebnahme, Fehlersuche</td><td>Deutsch</td></tr>
+        <tr><td><a href="https://github.com/norbert-walter/add-demo-slim/blob/master/docs/Software_Dokumentation_V1_0.md">Software-Dokumentation</a></td>
+          <td>Architektur, Sicherheitslogik, Betriebsmodi, Entwicklung mit KI, PlatformIO-Befehle, API, Bedienoberflächen, Kalibrierung, ADD mit KI, Tests</td><td>Deutsch</td></tr>
+        <tr><td><a href="https://github.com/norbert-walter/add-demo-slim/blob/master/docs/REST_API_V1_0.md">Kurzübersicht API</a></td>
+          <td>Nachschlagewerk: alle Befehle mit Parametern, Bereichen und erlaubten Zuständen, Fehlercodes, Felder von <code>/proc</code></td><td>Deutsch</td></tr>
+        <tr><td><a href="https://github.com/norbert-walter/add-demo-slim/blob/master/docs/Endpoints_V1_0.md">Kurzübersicht Endpunkte</a></td>
+          <td>Nachschlagewerk: alle HTTP-Pfade mit Inhalt, Header, Statuscodes und Beispielen</td><td>Deutsch</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Sicherheit</h2>
+    <div class="body">
+      <ul>
+        <li>Die Achse kann jederzeit durch einen Befehl anlaufen – nicht in den Fahrbereich greifen.</li>
+        <li>Der Not-Aus wirkt in der Demoanlage nur über die Software.</li>
+        <li>Die REST-API hat keine Anmeldung: jeder im WLAN kann die Anlage bedienen.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+<footer>Demoanlage ADD (Slim) · Norbert Walter</footer>
+</body>
+</html>

@@ -1,6 +1,6 @@
 # HTTP-Endpunkte – Kurzübersicht
 
-**Demoanlage ADD (Slim)** · Version 1.0 · Stand 2026-11-07 · Contract V1.5.26
+**Demoanlage ADD (Slim)** · Version 1.0 · Stand 2026-11-07 · Contract V1.5.27
 Befehle für `/api`: `docs/REST_API_V1_0.md` · ausführlich: `docs/Software_Dokumentation_V1_0.md`
 Kapitel 10 · verbindlich: `src/comm/http_server.h`
 
@@ -30,7 +30,7 @@ Kapitel 10 · verbindlich: `src/comm/http_server.h`
 | GET | `/llms.txt` | Einstieg für Sprachmodelle (4 Zeilen) | `text/plain` | – | 200 |
 | GET | `/add` | ADD-Dokument, Datei `/add.json` | `application/json` | `no-store` | 200 / 404 |
 | GET | `/add.html` | ADD-Dokument in HTML eingebettet | `text/html; charset=utf-8` | `no-store, no-cache, must-revalidate` | 200 / 404 |
-| GET | `/doc` | Gerätehandbuch, Datei `/doc.md` | `text/markdown` | – | 200 / 404 |
+| GET | `/doc` | Dokumentationsseite mit Links, Datei `/doc.html` | `text/html` | – | 200 |
 | GET | `/app.js` | ADDAPP: CRC, Rahmen, Regeln für eigene Seiten | `application/javascript` | – | 200 |
 | GET | `/font-u400.woff2` `/font-u700.woff2` `/font-m400.woff2` `/font-m700.woff2` | Schriften Ubuntu / Ubuntu Mono | `font/woff2` | `max-age=86400` | 200 |
 | GET | `/style.css` | entfallen seit V1.5.26 (Datei entfernt) | `application/json` | – | 404 |
@@ -39,8 +39,8 @@ Kapitel 10 · verbindlich: `src/comm/http_server.h`
 **Für alle Antworten:** Header `Access-Control-Allow-Origin: *` – Seiten auf anderen Rechnern oder
 als lokale Datei geöffnete Seiten dürfen die Anlage abfragen.
 
-**Stand Sprint D1:** `/add.json` und `/doc.md` gibt es noch nicht; `/add`, `/add.html` und `/doc`
-antworten bis dahin mit 404.
+**Stand Sprint D1:** `/add.json` gibt es noch nicht; `/add` und `/add.html` antworten bis dahin mit
+404.
 
 ---
 
@@ -106,13 +106,13 @@ antworten bis dahin mit 404.
 - Documentation: [Device manual](/doc)
 ```
 
-### 3.6 `GET /add`, `/add.html`, `/doc` – ADD-Dokument und Handbuch
+### 3.6 `GET /add`, `/add.html`, `/doc` – ADD-Dokument und Dokumentation
 
 | Pfad | Für wen | Aufbau |
 |---|---|---|
 | `/add` | KI-Agenten mit HTTP-Zugriff | ADD-Dokument nach ADD Specification v1.0, unverändert aus `/add.json` |
 | `/add.html` | Cloud-KIs, die nur Webseiten lesen | dasselbe JSON zweimal: in `<script type="application/ld+json">` (mit `</` als `<\/`) und lesbar in `<pre>` (mit `&amp; &lt; &gt;`); in Blöcken gesendet |
-| `/doc` | Menschen und KI | Gerätehandbuch in Markdown aus `/doc.md` |
+| `/doc` | Menschen und KI | deutsche Seite aus `/doc.html`: Kurzbeschreibung der Anlage, Endpunkte, Linktabelle zu ADD-Referenz, Developer Guide, Style Guides, Repository, Hardware- und Software-Dokumentation, Kurzübersichten (Links zu GitHub, brauchen Internet) |
 
 ### 3.7 Weboberfläche und Dateien
 

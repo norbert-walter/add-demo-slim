@@ -1,7 +1,7 @@
 # Software-Dokumentation – Demoanlage ADD (Slim)
 
 **Version:** 1.0 · **Stand:** 2026-11-07 · **Autor:** Norbert Walter
-**Firmware:** `FW_VERSION` 1.0.0 · **Contract:** V1.5.26 · **Pflichtenheft:** V1.7.10
+**Firmware:** `FW_VERSION` 1.0.0 · **Contract:** V1.5.27 · **Pflichtenheft:** V1.7.11
 **Hardware:** siehe `docs/Hardware_Dokumentation_V1_0.md`
 
 ---
@@ -187,7 +187,7 @@ Inhalt des Dateisystems (SPIFFS), aufgespielt mit `pio run -e firmware -t upload
 | `www/app.js` | ADDAPP: Protokoll- und Regelfunktionen (CRC, Rahmen, Tastenregeln, Parameterprüfung) |
 | `www/font-*.woff2`, `LICENCE-ubuntu-font.txt` | Schriften Ubuntu und Ubuntu Mono |
 | `add.json` | ADD-Dokument – **folgt mit Sprint D1** |
-| `doc.md` | Gerätehandbuch für die KI – **folgt mit Sprint D1** |
+| `doc.html` | Dokumentationsseite für `/doc`: Kurzbeschreibung, Endpunkte, Links zur Dokumentation auf GitHub |
 
 ### 2.3 `test/`, `scripts/`, `docs/`
 
@@ -583,7 +583,7 @@ Pflichtenhefts.
 | W1 | Weboberfläche | JS-Tests, Browserprüfung |
 | IMS-UI | IMS-Bedienoberfläche ersetzt W1 | JS-Tests, Browserprüfung |
 | A1 | Abnahme nach Pflichtenheft Kapitel 10 | offen |
-| D1 | `add.json`, `doc.md`, Demo-Skripte | offen |
+| D1 | `add.json`, Demo-Skripte | offen |
 
 Der aktuelle Stand steht in der Statustabelle der `README.md`, die Befunde in `docs/reviews/`.
 
@@ -778,7 +778,7 @@ pio run -e firmware -t upload
 ```
 pio run -e firmware -t uploadfs
 ```
-Spielt das Dateisystem (`data/`: Weboberfläche, später `add.json`, `doc.md`) auf. Nötig nach jeder
+Spielt das Dateisystem (`data/`: Weboberfläche, `doc.html`, später `add.json`) auf. Nötig nach jeder
 Änderung in `data/`. Die Parameter im NVS bleiben erhalten.
 
 ```
@@ -1052,7 +1052,7 @@ curl -s -X POST --data '{"cmd":"HV_ON","params":{},"crc":"88F7C802"}' http://192
 | `GET /add` | ADD-Dokument (`/add.json`), `no-store` – **folgt mit D1** | application/json |
 | `GET /add.html` | ADD-Dokument eingebettet in HTML für Cloud-KIs (ADD Spec §5.3) – **folgt mit D1** | text/html |
 | `GET /llms.txt` | Index für Sprachmodelle (ADD Spec §5.4) | text/plain |
-| `GET /doc` | Gerätehandbuch (`/doc.md`) – **folgt mit D1** | text/markdown |
+| `GET /doc` | Dokumentationsseite (`/doc.html`) mit Links | text/html |
 | `GET /log` | letzte 20 Logzeilen | text/plain |
 | `GET /app.js` | ADDAPP für eigene Seiten | application/javascript |
 | `GET /font-u400.woff2` … `/font-m700.woff2` | Schriften (1 Tag Cache) | font/woff2 |
@@ -1133,7 +1133,12 @@ Einstiegspunkt für Sprachmodelle, die nur Text lesen.
 Das ADD-Dokument beschreibt die Anlage nach der ADD Specification v1.0 mit den Blöcken `autonomy`,
 `device`, `security`, `interfaces`, `actions`, `rules`, `validation` (Pflichtenheft Kapitel 7).
 `/add.html` bettet dasselbe JSON in eine HTML-Seite ein, damit Cloud-KIs mit Web-Zugriff es lesen
-können. **Der Inhalt folgt mit Sprint D1;** bis dahin antworten die Endpunkte mit 404.
+können. **Der Inhalt folgt mit Sprint D1;** bis dahin antworten `/add` und `/add.html` mit 404.
+
+`/doc` liefert eine deutsche HTML-Seite (`data/doc.html`, seit Contract V1.5.27): Kurzbeschreibung
+der Demoanlage, Endpunkte des Geräts und eine Linktabelle zu ADD-Referenz, Developer Guide, Style
+Guides, GitHub-Repository, Hardware- und Software-Dokumentation sowie den Kurzübersichten von API
+und Endpunkten. Die Links führen zu GitHub und brauchen Internetzugang.
 
 ### 10.6 Benutzung
 
@@ -1378,10 +1383,10 @@ Regeln, Autonomiestufe und Validierungsprotokoll. Live-Daten kommen aus `/proc`.
 | `GET /llms.txt` | Einstieg für Sprachmodelle |
 | `GET /add` | KI-Agenten mit HTTP-Zugriff (JSON) |
 | `GET /add.html` | Cloud-KIs, die nur Webseiten lesen |
-| `GET /doc` | ausführliches Handbuch |
+| `GET /doc` | Dokumentationsseite mit Links zu Spezifikation und Handbüchern |
 | `GET /proc`, `POST /api` | Zustand lesen, Befehle senden |
 
-> **Stand:** `add.json` und `doc.md` entstehen in Sprint D1. Bis dahin kann man einer KI dieses
+> **Stand:** `add.json` entsteht in Sprint D1. Bis dahin kann man einer KI dieses
 > Dokument, den Contract (`docs/CONTRACT.md`) und die Hardware-Dokumentation geben – die Beispiele
 > unten funktionieren damit ebenso. Die Autonomiestufe ist **Level 2** geplant: Die Demo ist
 > harmlos, modelliert aber eine Strahlenquelle; die KI soll sich so verhalten wie an der echten
@@ -1738,7 +1743,7 @@ temporären Arbeitsbaum (nur für den Reviewer; die Referenz liegt nicht im Repo
 | Eine HTTP-Verbindung zur Zeit | Laden der Weboberfläche verzögert `/api` um bis zu 1 s |
 | FastAccelStepper-Fork | Korrektur des IRAM-Fehlers; Pull Request an das Original offen |
 | `/style.css` | Route liefert 404 (Datei entfernt); kann bei der nächsten Firmware-Änderung entfallen |
-| Sprint D1 offen | `add.json`, `doc.md`, Demo-Skripte; `/add`, `/add.html`, `/doc` liefern bis dahin 404 |
+| Sprint D1 offen | `add.json`, Demo-Skripte; `/add` und `/add.html` liefern bis dahin 404 |
 | Sprint A1 offen | Abnahme nach Pflichtenheft Kapitel 10 |
 | Bedienvorrang aus | `LOCAL_HOLD_MS = 0`; einschalten mit einem Wert > 0 in `config.h` |
 
@@ -1818,4 +1823,4 @@ Anmerkungen:
 
 | Version | Datum | Änderung |
 |---|---|---|
-| 1.0 | 2026-11-07 | Erste Ausgabe (Contract V1.5.26, Pflichtenheft V1.7.10); ADD-Kapitel vorläufig bis Sprint D1. Ergänzt: Bedienwege (1.1), WLAN-Einbuchen per Konsole (10.7, 11.1), Umfang (16.4) |
+| 1.0 | 2026-11-07 | Erste Ausgabe (Contract V1.5.27, Pflichtenheft V1.7.10); ADD-Kapitel vorläufig bis Sprint D1. Ergänzt: Bedienwege (1.1), WLAN-Einbuchen per Konsole (10.7, 11.1), Umfang (16.4) |

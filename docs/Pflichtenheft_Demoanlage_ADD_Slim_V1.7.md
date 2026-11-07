@@ -2,12 +2,19 @@
 
 **Stand:** 2026-11-07
 **Autor:** Norbert Walter
-**Version:** 1.7.10 (IMS-Bedienoberfläche ersetzt die W1-Seiten)
+**Version:** 1.7.11 (/doc als HTML-Seite mit Dokumentationslinks)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.7.10 → V1.7.11 (Contract V1.5.27, 07.11.2026, Entscheidung Norbert Walter)
+- `/doc` liefert eine **HTML-Seite** (`data/doc.html`, deutsch) statt Markdown: Kurzbeschreibung der
+  Demoanlage, Endpunkte des Geräts und eine Linktabelle zu ADD-Referenz, Developer Guide, Style
+  Guides, GitHub-Repository, Hardware- und Software-Dokumentation sowie den Kurzübersichten von
+  API und Endpunkten. Die Links brauchen Internetzugang.
+- `doc.md` entfällt in Sprint D1.
 
 ### V1.7.9 → V1.7.10 (Contract V1.5.26, 07.11.2026, Entscheidung Norbert Walter)
 - **Neue Weboberfläche unter `/`:** Die IMS-Bedienoberfläche (deutsch, eine Seite mit Navigation
@@ -423,7 +430,7 @@ src/
 └── smoketest/smoketest.cpp  Sprint 0a
 test/native/<suite>/         eingefrorene Host-Tests
 test/embedded/test_hardware/ On-Target-Tests                              H1/A1
-data/                        www/ (W1), add.json, doc.md (D1)            W1/D1
+data/                        www/ (W1), doc.html, add.json (D1)          W1/D1
 scripts/                     serial_cmd.py, add_client.py
 ```
 
@@ -492,7 +499,7 @@ sind gesperrt (§6 Bedienvorrang).
 | `/llms.txt` | GET | Index (ADD Spec §5.4) |
 | `/proc` | GET | Prozessabbild (JSON + CRC, ≤ 512 Byte) |
 | `/api` | POST | Befehlskanal (JSON + CRC) |
-| `/doc` | GET | Dokumentation (Markdown) |
+| `/doc` | GET | Dokumentationsseite (HTML) mit Links (V1.7.11) |
 | `/log` | GET | letzte 20 Logzeilen |
 | `/` | GET | Prozessansicht |
 | `/settings` | GET | Einstellungen |
@@ -863,7 +870,7 @@ Abschnitt „Sprint-Plan V3“.
 | I1 | display.cpp, main.cpp, Gesamt-Build | firmware baut; erster Flash; INIT/MOVE/Not-Aus, curl | 👤 + 🤖 | 3–4 h |
 | W1 | index.html, settings.html | Sichtprüfung, Bedienung | 🤖 Qwen | 2–3 h |
 | A1 | Integration, Abnahme | Kapitel 10 | 👤 | 3–4 h |
-| D1 | add.json, doc.md, Python-Demos | KI-Validierung | 👤 + Claude | 2–3 h |
+| D1 | add.json, Python-Demos | KI-Validierung | 👤 + Claude | 2–3 h |
 
 Die Zeiten der 🤖-Sprints sind Rechenzeit von Qwen lokal (ca. 18 Token/s), nicht deine Zeit.
 

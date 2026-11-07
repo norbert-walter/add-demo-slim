@@ -1,6 +1,6 @@
 # REST-API – Kurzübersicht
 
-**Demoanlage ADD (Slim)** · Version 1.0 · Stand 2026-11-07 · Contract V1.5.26
+**Demoanlage ADD (Slim)** · Version 1.0 · Stand 2026-11-07 · Contract V1.5.27
 Ausführlich: `docs/Software_Dokumentation_V1_0.md` Kapitel 9–11, verbindlich: `docs/CONTRACT.md` §4–§5
 
 ---
@@ -202,7 +202,7 @@ Nach `ACK` bleiben HV und Shutter aus (kein automatischer Wiederanlauf).
 | `GET /llms.txt` | Einstieg für Sprachmodelle |
 | `GET /add` | ADD-Dokument (JSON) – folgt mit Sprint D1 |
 | `GET /add.html` | ADD-Dokument für Cloud-KIs – folgt mit Sprint D1 |
-| `GET /doc` | Gerätehandbuch (Markdown) – folgt mit Sprint D1 |
+| `GET /doc` | Dokumentationsseite mit Links (HTML) |
 | `GET /app.js` | ADDAPP (CRC, Rahmen, Regeln) für eigene Webseiten |
 
 ---

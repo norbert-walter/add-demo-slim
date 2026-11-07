@@ -66,7 +66,7 @@ Außerdem waren die Sprints ungleich groß: S2.4 bündelte die größte Datei (`
 | **I1** | `display/display.cpp`, `main.cpp`, Gesamt-Build | mittel | `pio run -e firmware`, erster Flash, Prüfliste am Gerät | du + Qwen |
 | **W1** | `data/www/index.html`, `settings.html` | – | Sichtprüfung im Browser | Qwen |
 | **A1** | Abnahme (Pflichtenheft Kapitel 10) | – | Abnahmeprotokoll | du |
-| **D1** | `data/add.json`, `data/doc.md`, Demo-Skripte | – | KI-Validierung | du + Claude |
+| **D1** | `data/add.json`, Demo-Skripte | – | KI-Validierung | du + Claude |
 
 Abhängigkeiten: L1 → L2 → L3 → L4 (app_logic braucht safety, measure, params, motion_seq,
 sound) → L5 → P1 (nvs_config braucht params) → P2 (http_server braucht api_parse, proc_json,
@@ -746,8 +746,8 @@ Task 1 – data/add.json (served at /add, max. 32 KB, valid JSON):
 - validation: add_version "1.0", validated_by [] (draft).
 - ui: style_guide_url, style_guide_version "1.0", theme_default "dark".
 
-Task 2 – data/doc.md: operator documentation (English, < 15 KB) with state diagram,
-error codes and their remedies, calibration procedure.
+Task 2 – (dropped in Contract V1.5.27: /doc serves data/doc.html, a German page with links to the
+documentation; no data/doc.md.)
 
 Task 3 – scripts/demo_traverse.py (stdlib only, reuse scripts/add_client.py functions):
 scenario: SET flags, INIT (wait homed), HV_ON, START_TRAVERSE, poll /proc every 200 ms
