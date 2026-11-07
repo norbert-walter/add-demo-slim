@@ -32,6 +32,7 @@ agentenbasierte Entwicklung mit code-server + Cline.
 | `scripts/fake_device.py` | simuliertes Gerät für die Webseiten (W1) |
 | `scripts/sim_device.py` | Gerät mit der echten Firmware-Logik (`src/logic`) auf dem PC, simulierte Achse, gleiche Endpunkte |
 | `scripts/acceptance_a1.py` | Abnahmeskript Sprint A1 (Pflichtenheft Kapitel 10, API-Teil) |
+| `scripts/diag_sensor.py` | prüft auf einer Stufe, ob der Abstand vom Betriebszustand abhängt (HV, Shutter, Zeit) |
 | `scripts/embed_app.py` | kopiert `data/www/app.js` in `index.html` (ADDAPP-Block) und `index.html` nach `web-ui/` – nach jeder Änderung von `app.js` |
 | `scripts/verify_reference.sh` | alle nativen Tests gegen die Referenzimplementierung (`referenz_logic.zip`, separat geliefert) in einem temporären Worktree – Nachweis, dass die eingefrorenen Tests widerspruchsfrei und erfüllbar sind |
 | `scripts/stress_api.py` | Abnahme V1.1: STOP-Latenz, Queue-Flut, parallele Anfragen, Dauerlauf, Bedienvorrang |
