@@ -665,6 +665,8 @@ body {
   font-family: 'Ubuntu Mono', monospace;
 }
 .calib-table td input:focus { outline: none; border-color: var(--info); }
+.calib-table td.cal-act { white-space: nowrap; }
+.calib-grid > div { min-width: 0; }
 
 .steps-panel { display: flex; flex-direction: column; gap: 8px; }
 .step-item {
@@ -1181,21 +1183,26 @@ html { height: 100%; }
         <div class="calib-grid">
           <div>
             <div class="panel" style="margin-bottom:12px;">
-              <div class="panel-header">Kalibrierpunkte (Referenzstufen)</div>
-              <div class="panel-body" style="padding:0;">
+              <div class="panel-header">Kalibriertabelle (6 Stufen)</div>
+              <div class="panel-body" style="padding:0;overflow-x:auto;">
                 <table class="calib-table">
-                  <thead><tr><th>Punkt</th><th>Referenz (mm)</th><th>Rohwert (mm)</th><th>Status</th></tr></thead>
+                  <thead><tr><th>Punkt</th><th>Position (mm)</th><th>Referenz (mm)</th><th>Rohwert (mm)</th><th>Aktion</th><th>Status</th></tr></thead>
                   <tbody>
-                    <tr><td>Nah</td><td><input type="number" id="f_calib_near_ref" step="0.1"></td><td id="calNearRaw">–</td><td id="calNearSt">–</td></tr>
-                    <tr><td>Fern</td><td><input type="number" id="f_calib_far_ref" step="0.1"></td><td id="calFarRaw">–</td><td id="calFarSt">–</td></tr>
+                    <tr><td>1</td><td>115</td><td><input type="number" id="f_calib_ref_1" step="0.1"></td><td id="calRaw1">–</td><td class="cal-act"><button class="btn btn-small" id="btnCalMove1">Fahren</button> <button class="btn btn-small" id="btnCalPoint1">Übernehmen</button></td><td id="calSt1">–</td></tr>
+                    <tr><td>2</td><td>135</td><td><input type="number" id="f_calib_ref_2" step="0.1"></td><td id="calRaw2">–</td><td class="cal-act"><button class="btn btn-small" id="btnCalMove2">Fahren</button> <button class="btn btn-small" id="btnCalPoint2">Übernehmen</button></td><td id="calSt2">–</td></tr>
+                    <tr><td>3</td><td>155</td><td><input type="number" id="f_calib_ref_3" step="0.1"></td><td id="calRaw3">–</td><td class="cal-act"><button class="btn btn-small" id="btnCalMove3">Fahren</button> <button class="btn btn-small" id="btnCalPoint3">Übernehmen</button></td><td id="calSt3">–</td></tr>
+                    <tr><td>4</td><td>175</td><td><input type="number" id="f_calib_ref_4" step="0.1"></td><td id="calRaw4">–</td><td class="cal-act"><button class="btn btn-small" id="btnCalMove4">Fahren</button> <button class="btn btn-small" id="btnCalPoint4">Übernehmen</button></td><td id="calSt4">–</td></tr>
+                    <tr><td>5</td><td>195</td><td><input type="number" id="f_calib_ref_5" step="0.1"></td><td id="calRaw5">–</td><td class="cal-act"><button class="btn btn-small" id="btnCalMove5">Fahren</button> <button class="btn btn-small" id="btnCalPoint5">Übernehmen</button></td><td id="calSt5">–</td></tr>
+                    <tr><td>6</td><td>215</td><td><input type="number" id="f_calib_ref_6" step="0.1"></td><td id="calRaw6">–</td><td class="cal-act"><button class="btn btn-small" id="btnCalMove6">Fahren</button> <button class="btn btn-small" id="btnCalPoint6">Übernehmen</button></td><td id="calSt6">–</td></tr>
                   </tbody>
                 </table>
               </div>
               <div class="panel-body">
                 <div class="calib-live">
                   <span>Abstand jetzt <b id="calLiveDist">–</b> mm</span>
+                  <span>Rohwert <b id="calLiveRaw">–</b> mm</span>
                   <span>Position <b id="calLivePos">–</b> mm</span>
-                  <span>Kalibrierung <b id="calValid">–</b></span>
+                  <span>Tabelle <b id="calValid">–</b></span>
                 </div>
                 <div class="save-bar">
                   <button class="btn btn-secondary btn-small" id="btnCalReset">Zurücksetzen</button>
@@ -1213,15 +1220,11 @@ html { height: 100%; }
               <div class="panel-header">Kalibrierablauf</div>
               <div class="panel-body">
                 <div class="steps-panel">
-                  <div class="step-item"><div class="step-nr">1</div><div class="step-text">Referenzfahrt (INIT) und HV aus. Achse zur Mitte der nahen Stufe fahren</div>
-                    <input type="number" class="form-control step-inp" id="calPosNear" value="215"><button class="btn" id="btnCalMoveNear">Fahren</button></div>
-                  <div class="step-item"><div class="step-nr">2</div><div class="step-text">Wert übernehmen, wenn die Achse steht und der Abstand ruhig ist (0,5 s stabil)</div>
-                    <span class="step-status dim" id="calStNear"></span><button class="btn" id="btnCalNear">Nah übernehmen</button></div>
-                  <div class="step-item"><div class="step-nr">3</div><div class="step-text">Achse zur Mitte der fernen Stufe fahren</div>
-                    <input type="number" class="form-control step-inp" id="calPosFar" value="115"><button class="btn" id="btnCalMoveFar">Fahren</button></div>
-                  <div class="step-item"><div class="step-nr">4</div><div class="step-text">Wert übernehmen</div>
-                    <span class="step-status dim" id="calStFar"></span><button class="btn" id="btnCalFar">Fern übernehmen</button></div>
-                  <div class="step-item"><div class="step-nr">5</div><div class="step-text">Referenzwerte prüfen (links) und Kalibrierung dauerhaft speichern</div>
+                  <div class="step-item"><div class="step-nr">1</div><div class="step-text">Referenzfahrt (INIT), HV aus, Stufenkörper fest. Referenzwerte der sechs Stufen prüfen (links, Werkswerte 65 … 40 mm)</div></div>
+                  <div class="step-item"><div class="step-nr">2</div><div class="step-text">Automatisch: jede Stufe anfahren, Rohwert übernehmen, am Ende speichern<br><span class="step-status dim" id="calAutoSt"></span></div>
+                    <button class="btn" id="btnCalAuto">Alle 6 Stufen automatisch</button><button class="btn btn-stop" id="btnCalStop">■ STOP</button></div>
+                  <div class="step-item"><div class="step-nr">3</div><div class="step-text">Oder von Hand: je Zeile „Fahren“, warten bis die Achse steht, „Übernehmen“</div></div>
+                  <div class="step-item"><div class="step-nr">4</div><div class="step-text">Tabelle prüfen (gültig, Kennlinie) und dauerhaft speichern</div>
                     <span class="step-status dim" id="calStSave"></span><button class="btn" id="btnCalSave">Speichern</button></div>
                 </div>
               </div>
@@ -1287,6 +1290,10 @@ html { height: 100%; }
   const TEMP_FAULT_C = 32.0;                                         // §3.2 TEMP_HIGH
   const HEARTBEAT_MS = 2000;
   const SERIES_MAX = 100;
+  /** V1.6.0 (Sprint K1): calibration table with CALIB_POINTS points; point i is measured at the axis
+   *  position CALIB_POS[i-1] = 95 + 20 * i mm (centre of a step of the demo stair body). */
+  const CALIB_POINTS = 6;
+  const CALIB_POS = [115, 135, 155, 175, 195, 215];
   /** Settings keys in display order (CONTRACT §9). type: 'num' | 'bool' | 'str'. */
   const PARAMS = [
     { key: 'measure_pos',    type: 'num', min: 61,  max: 242,  unit: 'mm' },
@@ -1297,8 +1304,12 @@ html { height: 100%; }
     { key: 'shutter_hold',   type: 'num', min: 0,   max: 10,   unit: 's' },
     { key: 'edge_threshold', type: 'num', min: 0.5, max: 100,  unit: 'mm' },
     { key: 'base_dist',      type: 'num', min: 40,  max: 300,  unit: 'mm' },
-    { key: 'calib_near_ref', type: 'num', min: 40,  max: 300,  unit: 'mm' },
-    { key: 'calib_far_ref',  type: 'num', min: 40,  max: 300,  unit: 'mm' },
+    { key: 'calib_ref_1',    type: 'num', min: 40,  max: 300,  unit: 'mm' },   // V1.6.0: table, 6 points
+    { key: 'calib_ref_2',    type: 'num', min: 40,  max: 300,  unit: 'mm' },
+    { key: 'calib_ref_3',    type: 'num', min: 40,  max: 300,  unit: 'mm' },
+    { key: 'calib_ref_4',    type: 'num', min: 40,  max: 300,  unit: 'mm' },
+    { key: 'calib_ref_5',    type: 'num', min: 40,  max: 300,  unit: 'mm' },
+    { key: 'calib_ref_6',    type: 'num', min: 40,  max: 300,  unit: 'mm' },
     { key: 'temp',           type: 'num', min: -20, max: 99.9, unit: '°C' },
     { key: 'interlock',      type: 'bool' },
     { key: 'cooling_flow',   type: 'bool' },
@@ -1628,10 +1639,28 @@ html { height: 100%; }
     return { sets: sets, errors: errors };
   }
 
-  return { ERR_NAMES, SYS_ERR_NAMES, TEMP_FAULT_C, HEARTBEAT_MS, SERIES_MAX, PARAMS,
+  // ---- K1.4: calibration table (V1.6.0, CONTRACT §7.3) ------------------------------------------
+  /** GET_CONFIG object -> 6 rows {index: 1..6, pos: CALIB_POS[index-1], raw: cfg.calib_raw_<index>,
+   *  ref: cfg.calib_ref_<index>}; a value that is missing or not a number is null; cfg null -> all null. */
+  function calibRows(cfg) {
+    // TODO(K1.4)
+  }
+  /** Same rule as calibValid() of the firmware: all raw and ref finite numbers, every ref 40 ... 300;
+   *  sorted by ref, refs AND raws rise from point to point by at least 1 mm (exactly 1.0 is valid). */
+  function calibValid(cfg) {
+    // TODO(K1.4)
+  }
+  /** Same rule as calibApply() of the firmware: invalid table -> raw unchanged. Otherwise sort the points
+   *  by raw and interpolate linearly in the segment that contains raw; below the first / above the last
+   *  point the first / last segment is extended. The storage order of the points does not matter. */
+  function calibApply(raw, cfg) {
+    // TODO(K1.4)
+  }
+
+  return { ERR_NAMES, SYS_ERR_NAMES, TEMP_FAULT_C, HEARTBEAT_MS, SERIES_MAX, PARAMS, CALIB_POINTS, CALIB_POS,
     crc32, frame, verify, parseFramed, apiBody, errName, sysErrName, fmt, replyText,
     stateClass, view, flags, buttons, confirmText, heartbeatDue, seriesPush, pill, validationBadges,
-    checkParam, configDiff };
+    checkParam, configDiff, calibRows, calibValid, calibApply };
 });
 /* ===== end of ADDAPP ===== */
 </script>
@@ -1701,7 +1730,8 @@ const CONFIRM = {
   HV_ON: ['Hochspannung einschalten?', 'Die Röntgenquelle (HV-LED) wird eingeschaltet. Der Shutter öffnet erst beim Messen.'],
   ACK: ['Fehler quittieren?', 'Die Ursache muss behoben sein. Die Anlage geht danach in READY bzw. SAFE_START.'],
   REBOOT: ['Gerät neu starten?', 'Die Anlage startet neu, die Verbindung ist einige Sekunden unterbrochen. Die HV muss aus sein.'],
-  CALIB_RESET: ['Kalibrierung zurücksetzen?', 'Die Kalibrierung wird auf die Werkswerte (40/40, 65/65) gesetzt. Gespeichert wird erst mit „Speichern“.'],
+  CALIB_RESET: ['Kalibrierung zurücksetzen?', 'Die Tabelle wird auf die Werkswerte gesetzt (Rohwert = Referenz, 65 … 40 mm). Gespeichert wird erst mit „Speichern“.'],
+  CALIB_AUTO: ['Alle 6 Stufen kalibrieren?', 'Die Achse fährt nacheinander 115, 135, 155, 175, 195 und 215 mm an (HV aus). Danach wird die Tabelle gespeichert. STOP bricht ab.'],
   ESTOP_NC: ['Not-Aus-Verdrahtung ändern?', 'Passt die Einstellung nicht zur Verdrahtung, zeigt die Anlage Dauer-Not-Aus.'],
 };
 function confirmThen(key, action) {
@@ -1850,8 +1880,8 @@ function render(p) {
   const moveOk = !!p && !p.local && (p.state === 'READY' || p.state === 'RUNNING') && p.motion.homed && p.motion.state === 'idle';
   $('btnPark').disabled = !moveOk;
   $('btnService').disabled = !moveOk;
-  $('btnCalMoveNear').disabled = !moveOk;
-  $('btnCalMoveFar').disabled = !moveOk;
+  for (let i = 1; i <= A.CALIB_POINTS; i++) { $('btnCalMove' + i).disabled = !moveOk || calAutoRun; $('btnCalPoint' + i).disabled = calAutoRun; }
+  $('btnCalAuto').disabled = calAutoRun || !moveOk || !!(p && p.safety.hv_on);
   $('ctrlHint').textContent = !p ? '' : p.local ? 'Bedienung am Display hat Vorrang' :
     (p.state === 'SAFE_START' ? 'Zuerst INIT (Referenzfahrt)' : p.state === 'READY' && !p.safety.hv_ok ? 'HV gesperrt: Sicherheitskreis, Kühlung, Temperatur oder Not-Aus' :
      p.state === 'READY' ? 'Für MESSEN/TRAVERSE zuerst HV EIN' : p.state === 'WAIT_ACK' ? 'Fehler: Ursache beheben, dann ACK' : '');
@@ -1936,6 +1966,7 @@ function render(p) {
   $('snAvg').textContent = (m.n > 0 ? f2(m.avg) + ' mm' : '–') + ' / ' + m.n;
   // calibration live values
   $('calLiveDist').textContent = m.in_range ? f2(m.dist) : 'außerhalb';
+  $('calLiveRaw').textContent = m.in_range && cfg ? f2(rawOf(m.dist)) : '–';
   $('calLivePos').textContent = f1(mo.pos);
 }
 
@@ -2004,14 +2035,13 @@ function drawCalib() {
     ctx.textAlign = 'center'; ctx.fillText(String(v), X(v), pt + h + 14 * dpr);
   }
   ctx.setLineDash([4 * dpr, 4 * dpr]); ctx.strokeStyle = '#6184A0'; ctx.beginPath(); ctx.moveTo(X(lo), Y(lo)); ctx.lineTo(X(hi), Y(hi)); ctx.stroke(); ctx.setLineDash([]);
-  const p1 = [cfg.calib_near_raw, cfg.calib_near_ref], p2 = [cfg.calib_far_raw, cfg.calib_far_ref];
-  if (Math.abs(p2[0] - p1[0]) > 0.01) {
-    const k = (p2[1] - p1[1]) / (p2[0] - p1[0]), at = (x) => p1[1] + k * (x - p1[0]);
-    ctx.strokeStyle = cfg.calib_valid ? '#00B6F8' : '#FF1010'; ctx.lineWidth = 2 * dpr;
-    ctx.beginPath(); ctx.moveTo(X(lo), Y(at(lo))); ctx.lineTo(X(hi), Y(at(hi))); ctx.stroke();
-  }
+  const pts = A.calibRows(cfg).filter((r) => r.raw !== null && r.ref !== null);
+  ctx.strokeStyle = A.calibValid(cfg) ? '#00B6F8' : '#FF1010'; ctx.lineWidth = 2 * dpr;
+  ctx.beginPath();
+  for (let x = lo; x <= hi; x += 0.5) { const y = A.calibApply(x, cfg); if (x === lo) ctx.moveTo(X(x), Y(y)); else ctx.lineTo(X(x), Y(y)); }
+  ctx.stroke();
   ctx.fillStyle = '#F39200';
-  [p1, p2].forEach(([x, yv]) => { ctx.beginPath(); ctx.arc(X(x), Y(yv), 4 * dpr, 0, Math.PI * 2); ctx.fill(); });
+  pts.forEach((r) => { ctx.beginPath(); ctx.arc(X(r.raw), Y(r.ref), 4 * dpr, 0, Math.PI * 2); ctx.fill(); });
   ctx.fillStyle = '#6184A0'; ctx.textAlign = 'left'; ctx.fillText('Rohwert (mm) →  · Referenz ↑ (gestrichelt: 1:1)', pl + 4 * dpr, pt + 10 * dpr);
 }
 
@@ -2049,42 +2079,127 @@ async function saveSettings() {
 }
 async function setNow(key, value) { await api('SET', { key, value }); await loadConfig(true); }
 
-// ---- calibration -----------------------------------------------------------------------------
+// ---- calibration (V1.6.0: table with 6 points, CONTRACT §7.3) -------------------------------------
+let calAutoRun = false;
+const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+/** raw value for a calibrated distance (inverse of A.calibApply, for the live display only) */
+function rawOf(dist) {
+  let lo = 0, hi = 400;
+  for (let k = 0; k < 40; k++) { const mid = (lo + hi) / 2; if (A.calibApply(mid, cfg) < dist) lo = mid; else hi = mid; }
+  return (lo + hi) / 2;
+}
 function renderCalib() {
   if (!cfg) return;
-  $('f_calib_near_ref').value = String(cfg.calib_near_ref);
-  $('f_calib_far_ref').value = String(cfg.calib_far_ref);
-  $('calNearRaw').textContent = f2(cfg.calib_near_raw);
-  $('calFarRaw').textContent = f2(cfg.calib_far_raw);
-  const id = Math.abs(cfg.calib_near_raw - cfg.calib_near_ref) < 0.01 && Math.abs(cfg.calib_far_raw - cfg.calib_far_ref) < 0.01;
-  $('calNearSt').textContent = id ? 'Werkswert' : 'übernommen';
-  $('calFarSt').textContent = id ? 'Werkswert' : 'übernommen';
-  $('calValid').textContent = cfg.calib_valid ? 'gültig' : 'UNGÜLTIG';
-  $('calValid').style.color = cfg.calib_valid ? 'var(--ok)' : 'var(--err)';
+  for (const r of A.calibRows(cfg)) {
+    $('f_calib_ref_' + r.index).value = r.ref === null ? '' : String(r.ref);
+    $('calRaw' + r.index).textContent = r.raw === null ? '–' : f2(r.raw);
+    const st = $('calSt' + r.index);
+    if (!st.dataset.res) st.textContent = r.raw !== null && r.ref !== null && Math.abs(r.raw - r.ref) < 0.01 ? 'Werkswert' : 'übernommen';
+  }
+  const valid = A.calibValid(cfg) && cfg.calib_valid !== false;
+  $('calValid').textContent = valid ? 'gültig' : 'UNGÜLTIG';
+  $('calValid').style.color = valid ? 'var(--ok)' : 'var(--err)';
   $('calBase').textContent = f1(cfg.base_dist);
   drawCalib();
 }
+function stepStatus(id, text, ok) {
+  const el = $(id);
+  el.textContent = text;
+  el.className = 'step-status ' + (ok === null ? 'dim' : ok ? 'ok' : 'err');
+}
+function rowStatus(i, r) {
+  const el = $('calSt' + i);
+  el.dataset.res = '1';
+  el.textContent = r && r.err === 0 ? 'OK' : r ? A.errName(r.err) : 'keine Antwort';
+  el.style.color = r && r.err === 0 ? 'var(--ok)' : 'var(--err)';
+}
+function clearRowStatus() {
+  for (let i = 1; i <= A.CALIB_POINTS; i++) { const el = $('calSt' + i); delete el.dataset.res; el.style.color = ''; }
+}
 async function calib(action, statusId) {
   const r = await api('CALIB', { action });
-  if (statusId) {
-    const el = $(statusId);
-    el.textContent = r && r.err === 0 ? 'OK' : r ? A.errName(r.err) : 'keine Antwort';
-    el.className = 'step-status ' + (r && r.err === 0 ? 'ok' : 'err');
-  }
+  if (statusId) stepStatus(statusId, r && r.err === 0 ? 'OK' : r ? A.errName(r.err) : 'keine Antwort', !!(r && r.err === 0));
+  if (action === 'reset') clearRowStatus();
   await loadConfig(true);
+  return r;
+}
+async function calibPoint(i) {
+  const r = await api('CALIB', { action: 'point', index: i });
+  rowStatus(i, r);
+  await loadConfig(true);
+  return r;
 }
 async function setRefs() {
+  const keys = A.calibRows(cfg).map((r) => 'calib_ref_' + r.index);
   const errs = [];
-  for (const k of ['calib_near_ref', 'calib_far_ref']) {
+  for (const k of keys) {
     const c = A.checkParam(k, $('f_' + k).value);
     $('f_' + k).classList.toggle('bad', !c.ok);
     if (!c.ok) errs.push(k + ' (' + c.error + ')');
   }
   if (errs.length) { toast('Ungültig: ' + errs.join(', '), true); return; }
-  const d = A.configDiff(cfg || {}, readForm(['calib_near_ref', 'calib_far_ref']));
+  const d = A.configDiff(cfg || {}, readForm(keys));
   if (!d.sets.length) { toast('Referenzen unverändert', false); return; }
   for (const s of d.sets) await api('SET', { key: s.key, value: s.value });
   await loadConfig(true);
+}
+/** Waits until the axis stands at target. Throws when the axis stops elsewhere (STOP, fault), the state
+ *  is not READY/RUNNING, the display has priority, the connection is lost or after 30 s. */
+async function waitAt(target) {
+  const t0 = Date.now();
+  let seenMoving = false;
+  for (;;) {
+    await sleep(POLL_MS);
+    const p = last;
+    if (!p) throw new Error('keine Verbindung');
+    if (p.local) throw new Error('Bedienung am Display');
+    if (p.state !== 'READY' && p.state !== 'RUNNING') throw new Error('Zustand ' + p.state);
+    const still = p.motion.state === 'idle' && p.motion.mode === 'none';
+    if (!still) seenMoving = true;
+    else if (Math.abs(p.motion.pos - target) <= 0.5) return;
+    else if (seenMoving) throw new Error('Achse steht nicht am Ziel (STOP?)');
+    if (Date.now() - t0 > 30000) throw new Error('Zeitüberschreitung');
+  }
+}
+/** "Alle 6 Stufen automatisch": for points 1..6 MOVE to CALIB_POS -> wait -> 1 s -> CALIB point
+ *  (NOT_STABLE: up to 5 retries 0.5 s apart), then CALIB save. Any other error or STOP aborts;
+ *  nothing is saved then (the points taken so far stay in RAM, "Zurücksetzen" restores the defaults). */
+async function calibAuto() {
+  if (calAutoRun) return;
+  calAutoRun = true; clearRowStatus(); render(last);
+  try {
+    for (let i = 1; i <= A.CALIB_POINTS; i++) {
+      const pos = A.CALIB_POS[i - 1];
+      stepStatus('calAutoSt', `Stufe ${i}/6: fahren auf ${pos} mm`, null);
+      let r = await api('MOVE', { pos }, true);
+      if (!r || r.err !== 0) throw new Error(`Stufe ${i}: MOVE ` + (r ? A.errName(r.err) : 'keine Antwort'));
+      await waitAt(pos);
+      stepStatus('calAutoSt', `Stufe ${i}/6: messen`, null);
+      await sleep(1000);
+      for (let k = 0; ; k++) {
+        r = await api('CALIB', { action: 'point', index: i }, true);
+        if (r && r.err === 0) break;
+        if (r && A.errName(r.err) === 'NOT_STABLE' && k < 5) { await sleep(500); continue; }
+        rowStatus(i, r);
+        throw new Error(`Stufe ${i}: ` + (r ? A.errName(r.err) : 'keine Antwort'));
+      }
+      rowStatus(i, r);
+      await loadConfig(true);
+    }
+    stepStatus('calAutoSt', 'speichern', null);
+    const r = await api('CALIB', { action: 'save' }, true);
+    if (!r || r.err !== 0) throw new Error('Speichern: ' + (r ? A.errName(r.err) : 'keine Antwort'));
+    stepStatus('calAutoSt', 'fertig: 6 Stufen übernommen und gespeichert', true);
+    addLog('ok', 'Kalibrierung: 6 Stufen übernommen und gespeichert');
+  } catch (e) {
+    stepStatus('calAutoSt', 'abgebrochen: ' + e.message, false);
+    addLog('error', 'Kalibrierung abgebrochen: ' + e.message);
+    toast('Kalibrierung abgebrochen: ' + e.message, true);
+  } finally {
+    calAutoRun = false;
+    await loadConfig(true);
+    render(last);
+  }
 }
 
 // ---- demo device (no hardware): a small simulation with the same data shapes -----------------
@@ -2093,7 +2208,8 @@ function DemoDevice() {
   const st = { state: 'SAFE_START', err: 0, hv: false, shutter: 'closed', pos: 0, target: 0, vel: 0, mode: 'none', homed: false,
     moving: false, interlock: true, cooling: true, temp: 18, n: 0, sum: 0,
     cfg: { measure_pos: 155, maint_pos: 40, traverse_start: 80, traverse_end: 240, traverse_speed: 10, shutter_hold: 3, edge_threshold: 3,
-      base_dist: 70, calib_near_raw: 40, calib_near_ref: 40, calib_far_raw: 65, calib_far_ref: 65, calib_valid: true,
+      base_dist: 70, calib_raw_1: 65, calib_ref_1: 65, calib_raw_2: 60, calib_ref_2: 60, calib_raw_3: 55, calib_ref_3: 55,
+      calib_raw_4: 50, calib_ref_4: 50, calib_raw_5: 45, calib_ref_5: 45, calib_raw_6: 40, calib_ref_6: 40, calib_valid: true,
       interlock: true, cooling_flow: true, temp: 18, estop_nc: false, wifi_ssid: '', wifi_pass_set: false } };
   let tl = Date.now();
   const step = () => {
@@ -2145,14 +2261,22 @@ function DemoDevice() {
       case 'ACK': if (st.state !== 'WAIT_ACK') return R(cmd, -5); if (st.temp > 32) return R(cmd, -6); st.err = 0; st.state = st.homed ? 'READY' : 'SAFE_START'; return R(cmd, 0);
       case 'SET':
         if (p.key === 'interlock') st.interlock = !!p.value; else if (p.key === 'cooling_flow') st.cooling = !!p.value;
-        else if (p.key === 'temp') st.temp = +p.value; else if (p.key in st.cfg) st.cfg[p.key] = p.value;
+        else if (p.key === 'temp') st.temp = +p.value;
+        else if (p.key in st.cfg && !/^calib_raw_|^calib_valid$/.test(p.key)) { st.cfg[p.key] = p.value; st.cfg.calib_valid = A.calibValid(st.cfg); }
         else if (p.key !== 'wifi_pass') return R(cmd, -4);
         return R(cmd, 0);
       case 'CALIB':
-        if (p.action === 'near') st.cfg.calib_near_raw = +(40 + (Math.random() - 0.5)).toFixed(2);
-        else if (p.action === 'far') st.cfg.calib_far_raw = +(65 + (Math.random() - 0.5)).toFixed(2);
-        else if (p.action === 'reset') { st.cfg.calib_near_raw = 40; st.cfg.calib_far_raw = 65; st.cfg.calib_near_ref = 40; st.cfg.calib_far_ref = 65; }
+        if (!idle) return R(cmd, -7);
+        if (p.action === 'point') {                       // demo: the sensor bow of the real axis plus noise
+          if (!(Number.isInteger(p.index) && p.index >= 1 && p.index <= 6)) return R(cmd, -4);
+          const bow = [0.3, 0.2, -0.2, -0.4, -0.3, 0.5][p.index - 1];
+          st.cfg['calib_raw_' + p.index] = +(70 - 5 * p.index + bow + (Math.random() - 0.5) * 0.1).toFixed(2);
+        } else if (p.action === 'reset') {
+          for (let i = 1; i <= 6; i++) { st.cfg['calib_raw_' + i] = 70 - 5 * i; st.cfg['calib_ref_' + i] = 70 - 5 * i; }
+        } else if (p.action === 'save') { if (!A.calibValid(st.cfg)) return R(cmd, -9); }
         else if (p.action === 'base') st.cfg.base_dist = 70;
+        else return R(cmd, -4);
+        st.cfg.calib_valid = A.calibValid(st.cfg);
         return R(cmd, 0);
       case 'REBOOT': return R(cmd, st.hv ? -6 : 0);
       default: return R(cmd, -3);
@@ -2233,10 +2357,12 @@ function init() {
   };
   $('btnReboot').onclick = () => confirmThen('REBOOT', () => api('REBOOT'));
   // calibration
-  $('btnCalMoveNear').onclick = () => api('MOVE', { pos: +$('calPosNear').value });
-  $('btnCalMoveFar').onclick = () => api('MOVE', { pos: +$('calPosFar').value });
-  $('btnCalNear').onclick = () => calib('near', 'calStNear');
-  $('btnCalFar').onclick = () => calib('far', 'calStFar');
+  for (let i = 1; i <= A.CALIB_POINTS; i++) {
+    $('btnCalMove' + i).onclick = () => api('MOVE', { pos: A.CALIB_POS[i - 1] });
+    $('btnCalPoint' + i).onclick = () => calibPoint(i);
+  }
+  $('btnCalAuto').onclick = () => confirmThen('CALIB_AUTO', calibAuto);
+  $('btnCalStop').onclick = () => api('STOP');                 // no dialog, as the STOP of the process page
   $('btnCalSave').onclick = () => calib('save', 'calStSave');
   $('btnCalBase').onclick = () => calib('base');
   $('btnCalReset').onclick = () => confirmThen('CALIB_RESET', () => calib('reset'));

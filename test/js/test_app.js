@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5.22) – Sprint W1 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.22, calibration table V1.6.0 / Sprint K1) – do not modify.
 // Tests the pure logic of the web UI, data/www/app.js, with node's built-in test runner:
 //   node --test test/js/
 'use strict';
@@ -61,8 +61,8 @@ test('w11 parseFramed reads a real /proc line', () => {
 test('w11 apiBody: params default to {} and are framed', () => {
   assert.equal(A.apiBody('HV_ON'), '{"cmd":"HV_ON","params":{},"crc":"88F7C802"}');
   assert.equal(A.apiBody('HV_ON', null), '{"cmd":"HV_ON","params":{},"crc":"88F7C802"}');
-  const b = A.apiBody('CALIB', { action: 'near' });
-  assert.ok(b.startsWith('{"cmd":"CALIB","params":{"action":"near"},"crc":"'));
+  const b = A.apiBody('CALIB', { action: 'point', index: 3 });
+  assert.ok(b.startsWith('{"cmd":"CALIB","params":{"action":"point","index":3},"crc":"'));
   assert.equal(A.verify(b), true);
 });
 test('w11 errName and sysErrName', () => {
@@ -252,12 +252,14 @@ test('w12 validationBadges', () => {
 // ---------------------------------------------------------------- W1.3 settings rules
 test('w13 PARAMS: keys, order and ranges of CONTRACT §9', () => {
   assert.deepEqual(A.PARAMS.map(d => d.key), ['measure_pos', 'maint_pos', 'traverse_start', 'traverse_end',
-    'traverse_speed', 'shutter_hold', 'edge_threshold', 'base_dist', 'calib_near_ref', 'calib_far_ref', 'temp',
+    'traverse_speed', 'shutter_hold', 'edge_threshold', 'base_dist', 'calib_ref_1', 'calib_ref_2', 'calib_ref_3',
+    'calib_ref_4', 'calib_ref_5', 'calib_ref_6', 'temp',
     'interlock', 'cooling_flow', 'estop_nc', 'wifi_ssid', 'wifi_pass']);
   const r = Object.fromEntries(A.PARAMS.filter(d => d.type === 'num').map(d => [d.key, [d.min, d.max]]));
   assert.deepEqual(r.maint_pos, [21, 60]);
   assert.deepEqual(r.temp, [-20, 99.9]);
   assert.deepEqual(r.edge_threshold, [0.5, 100]);
+  for (let i = 1; i <= 6; i++) assert.deepEqual(r['calib_ref_' + i], [40, 300]);
 });
 test('w13 checkParam numbers', () => {
   assert.deepEqual(A.checkParam('maint_pos', '40'), { ok: true, value: 40 });
@@ -288,12 +290,15 @@ test('w13 checkParam booleans and strings', () => {
   assert.deepEqual(A.checkParam('wifi_pass', 'p'.repeat(64)), { ok: false, error: '8 ... 63 characters' });
 });
 const CFG = { measure_pos: 155.0, maint_pos: 40.0, traverse_start: 80.0, traverse_end: 240.0, traverse_speed: 10.0,
-  shutter_hold: 3.0, edge_threshold: 3.0, base_dist: 70.0, calib_near_raw: 40.0, calib_near_ref: 40.0,
-  calib_far_raw: 65.0, calib_far_ref: 65.0, calib_valid: true, interlock: false, cooling_flow: false, temp: 18.0,
+  shutter_hold: 3.0, edge_threshold: 3.0, base_dist: 70.0,
+  calib_raw_1: 65.0, calib_ref_1: 65.0, calib_raw_2: 60.0, calib_ref_2: 60.0, calib_raw_3: 55.0, calib_ref_3: 55.0,
+  calib_raw_4: 50.0, calib_ref_4: 50.0, calib_raw_5: 45.0, calib_ref_5: 45.0, calib_raw_6: 40.0, calib_ref_6: 40.0,
+  calib_valid: true, interlock: false, cooling_flow: false, temp: 18.0,
   estop_nc: false, wifi_ssid: '', wifi_pass_set: false };
 test('w13 configDiff: unchanged form gives no SET', () => {
   const form = { measure_pos: '155.0', maint_pos: '40', traverse_start: '80.0', traverse_end: '240', traverse_speed: '10',
-    shutter_hold: '3', edge_threshold: '3.0', base_dist: '70', calib_near_ref: '40', calib_far_ref: '65', temp: '18',
+    shutter_hold: '3', edge_threshold: '3.0', base_dist: '70', calib_ref_1: '65', calib_ref_2: '60.0',
+    calib_ref_3: '55', calib_ref_4: '50', calib_ref_5: '45', calib_ref_6: '40', temp: '18',
     interlock: false, cooling_flow: 'false', estop_nc: false, wifi_ssid: '', wifi_pass: '' };
   assert.deepEqual(A.configDiff(CFG, form), { sets: [], errors: [] });
 });
@@ -308,7 +313,55 @@ test('w13 configDiff: changes in PARAMS order, errors collected, password only w
   assert.deepEqual(A.configDiff({ wifi_pass: 'secret123' }, { wifi_pass: 'secret123' }),   // a typed password is always sent
     { sets: [{ key: 'wifi_pass', value: 'secret123' }], errors: [] });
   assert.deepEqual(A.configDiff(CFG, { wifi_pass: 'short' }), { sets: [], errors: [{ key: 'wifi_pass', error: '8 ... 63 characters' }] });
-  assert.deepEqual(A.configDiff(CFG, { calib_near_raw: '1', unknown: '2' }), { sets: [], errors: [] });   // not settable: ignored
+  assert.deepEqual(A.configDiff(CFG, { calib_raw_1: '1', calib_near_ref: '50', unknown: '2' }), { sets: [], errors: [] });   // not settable: ignored
   assert.deepEqual(A.configDiff(CFG, { traverse_speed: '10.001' }), { sets: [{ key: 'traverse_speed', value: 10.001 }], errors: [] });
   assert.deepEqual(A.configDiff({}, { maint_pos: '40' }), { sets: [{ key: 'maint_pos', value: 40 }], errors: [] });   // no old value
+});
+
+// ---------------------------------------------------------------- K1 calibration table (V1.6.0)
+test('k1 CALIB_POS: point i at 95 + 20 * i mm (step centres, near first is point 6)', () => {
+  assert.equal(A.CALIB_POINTS, 6);
+  assert.deepEqual(A.CALIB_POS, [115, 135, 155, 175, 195, 215]);
+});
+test('k1 calibRows: six rows from GET_CONFIG', () => {
+  assert.deepEqual(A.calibRows(CFG), [
+    { index: 1, pos: 115, raw: 65, ref: 65 }, { index: 2, pos: 135, raw: 60, ref: 60 },
+    { index: 3, pos: 155, raw: 55, ref: 55 }, { index: 4, pos: 175, raw: 50, ref: 50 },
+    { index: 5, pos: 195, raw: 45, ref: 45 }, { index: 6, pos: 215, raw: 40, ref: 40 },
+  ]);
+  const rows = A.calibRows({ calib_raw_2: 61.25 });            // missing values -> null
+  assert.equal(rows.length, 6);
+  assert.equal(rows[1].raw, 61.25);
+  assert.equal(rows[1].ref, null);
+  assert.equal(rows[0].raw, null);
+  assert.deepEqual(A.calibRows(null).map((r) => r.raw), [null, null, null, null, null, null]);
+});
+const DEMO = Object.assign({}, CFG, { calib_raw_1: 65.3, calib_raw_2: 60.2, calib_raw_3: 54.8, calib_raw_4: 49.6,
+  calib_raw_5: 44.7, calib_raw_6: 40.5 });
+const near = (a, b, e) => assert.ok(Math.abs(a - b) <= (e || 1e-6), a + ' != ' + b);
+test('k1 calibApply: same piecewise-linear rule as the firmware (CONTRACT §7.3)', () => {
+  near(A.calibApply(52.5, CFG), 52.5);                         // defaults: identity
+  near(A.calibApply(186, CFG), 186);
+  for (let i = 1; i <= 6; i++) near(A.calibApply(DEMO['calib_raw_' + i], DEMO), DEMO['calib_ref_' + i], 1e-4);
+  near(A.calibApply((49.6 + 54.8) / 2, DEMO), 52.5, 1e-4);     // segment midpoint
+  near(A.calibApply(36, DEMO), 40 - 4.5 * 5 / 4.2, 1e-3);      // extrapolated with the end segments
+  near(A.calibApply(100, DEMO), 65 + 34.7 * 5 / 5.1, 1e-3);
+  const shuffled = { calib_raw_1: 49.6, calib_ref_1: 50, calib_raw_2: 65.3, calib_ref_2: 65, calib_raw_3: 40.5,
+    calib_ref_3: 40, calib_raw_4: 54.8, calib_ref_4: 55, calib_raw_5: 44.7, calib_ref_5: 45, calib_raw_6: 60.2, calib_ref_6: 60 };
+  for (const x of [30, 41, 47.3, 52, 57.7, 63, 70]) near(A.calibApply(x, shuffled), A.calibApply(x, DEMO), 1e-4);
+});
+test('k1 calibApply: invalid table returns raw (steps >= 1 mm, refs 40 ... 300, finite)', () => {
+  near(A.calibApply(77, Object.assign({}, DEMO, { calib_raw_3: 60.0 })), 77);   // raw step 0.2 mm
+  near(A.calibApply(77, Object.assign({}, DEMO, { calib_ref_4: 55 })), 77);     // equal refs
+  near(A.calibApply(77, Object.assign({}, DEMO, { calib_ref_6: 39.9 })), 77);
+  near(A.calibApply(77, Object.assign({}, DEMO, { calib_raw_2: 66 })), 77);     // falling
+  near(A.calibApply(77, Object.assign({}, DEMO, { calib_raw_2: undefined })), 77);
+  near(A.calibApply(77, {}), 77);
+  near(A.calibApply(77, null), 77);
+  const one = { calib_raw_1: 50, calib_ref_1: 50, calib_raw_2: 49, calib_ref_2: 49, calib_raw_3: 48, calib_ref_3: 48,
+    calib_raw_4: 47, calib_ref_4: 47, calib_raw_5: 46, calib_ref_5: 46, calib_raw_6: 45, calib_ref_6: 45 };
+  assert.equal(A.calibValid(one), true);                       // exactly 1.0 mm is valid
+  assert.equal(A.calibValid(Object.assign({}, one, { calib_raw_2: 49.01 })), false);
+  assert.equal(A.calibValid(CFG), true);
+  assert.equal(A.calibValid(DEMO), true);
 });

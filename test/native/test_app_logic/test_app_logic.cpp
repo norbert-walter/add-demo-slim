@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5.10) – speeds in mm/s – Sprint L4 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.10, CALIB point V1.6.0 / Sprint K1) – speeds in mm/s – Sprint L4 must make these pass. Do not modify.
 // Covers: src/logic/app_logic.cpp (CONTRACT §10) – complete scenarios with a
 // simulated axis (fake_axis.h) and a simulated distance sensor.
 #include <unity.h>
@@ -86,7 +86,14 @@ static ApiError setNum(const char* key, double v) {
 static ApiError setBool(const char* key, bool v) {
     Command c = mk(CmdId::SET); strcpy(c.key, key); c.vtype = ValueType::BOOL; c.b = v; return send(c);
 }
-static ApiError calib(CalibAction a) { Command c = mk(CmdId::CALIB); c.calib = a; return send(c); }
+static ApiError calib(CalibAction a, uint8_t index = 0) {
+    Command c = mk(CmdId::CALIB); c.calib = a; c.calib_index = index; return send(c);
+}
+// V1.6.0: every ref 5 mm above its raw -> calibrated distance = raw + 5 everywhere (slope 1)
+static void calibOffset5(Params& p) {
+    p.calib = CalibTable{};
+    for (int i = 0; i < CALIB_POINTS; ++i) p.calib.ref[i] = p.calib.raw[i] + 5.0f;
+}
 static ApiError traverse(float a, float b, float v) {
     Command c = mk(CmdId::START_TRAVERSE);
     c.has_start = c.has_end = c.has_speed = true; c.start = a; c.end = b; c.speed = v; return send(c);
@@ -537,22 +544,67 @@ void test_fault_beeps_once() {
 void test_calib_capture_requires_stability() {
     homeAndReady();
     S.stab = StabilityTracker{};            // fresh tracker: not stable yet
-    API(ApiError::NOT_STABLE, calib(CalibAction::NEAR));
+    API(ApiError::NOT_STABLE, calib(CalibAction::POINT, 1));
+    TEST_ASSERT_EQUAL_FLOAT(65.0f, S.params.calib.raw[0]);              // unchanged
     run(700);
-    API(ApiError::OK, calib(CalibAction::NEAR));
-    TEST_ASSERT_FLOAT_WITHIN(0.5f, 135.0f, S.params.calib.near_raw);   // at 0 mm: lower boom
+    int p = persists;
+    API(ApiError::OK, calib(CalibAction::POINT, 1));
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 135.0f, S.params.calib.raw[0]);     // at 0 mm: lower boom
+    TEST_ASSERT_EQUAL_INT(p, persists);                                  // point alone is not saved
+}
+void test_calib_point_writes_only_its_index() {
+    homeAndReady();
+    run(700);
+    for (uint8_t i = 1; i <= CALIB_POINTS; ++i) {
+        CalibTable before = S.params.calib;
+        API(ApiError::OK, calib(CalibAction::POINT, i));
+        for (int j = 0; j < CALIB_POINTS; ++j) {
+            TEST_ASSERT_EQUAL_FLOAT(before.ref[j], S.params.calib.ref[j]);      // refs never by CALIB
+            if (j == i - 1) TEST_ASSERT_FLOAT_WITHIN(0.5f, 135.0f, S.params.calib.raw[j]);
+            else TEST_ASSERT_EQUAL_FLOAT(before.raw[j], S.params.calib.raw[j]);
+        }
+    }
+}
+void test_calib_point_raw_not_calibrated() {
+    homeAndReady();
+    calibOffset5(S.params);
+    run(800);
+    API(ApiError::OK, calib(CalibAction::POINT, 4));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, S.raw_mm, S.params.calib.raw[3]);
+    TEST_ASSERT_FLOAT_WITHIN(0.6f, 135.0f, S.params.calib.raw[3]);
+}
+void test_calib_point_bad_index() {
+    homeAndReady();
+    run(700);
+    CalibTable before = S.params.calib;
+    API(ApiError::BAD_PARAM, calib(CalibAction::POINT, 0));
+    API(ApiError::BAD_PARAM, calib(CalibAction::POINT, 7));
+    API(ApiError::BAD_PARAM, calib(CalibAction::POINT, 255));
+    for (int j = 0; j < CALIB_POINTS; ++j) TEST_ASSERT_EQUAL_FLOAT(before.raw[j], S.params.calib.raw[j]);
 }
 void test_calib_save_validation_and_reset() {
     homeAndReady();
     run(700);
-    API(ApiError::OK, calib(CalibAction::NEAR));
-    API(ApiError::OK, calib(CalibAction::FAR));       // same distance -> invalid pair
+    API(ApiError::OK, calib(CalibAction::POINT, 1));
+    API(ApiError::OK, calib(CalibAction::POINT, 2));  // same distance at two points -> invalid table
     int p = persists;
     API(ApiError::CALIB_INVALID, calib(CalibAction::SAVE));
     TEST_ASSERT_EQUAL_INT(p, persists);
     API(ApiError::OK, calib(CalibAction::RESET));
+    CalibTable d;
+    for (int j = 0; j < CALIB_POINTS; ++j) {
+        TEST_ASSERT_EQUAL_FLOAT(d.raw[j], S.params.calib.raw[j]);
+        TEST_ASSERT_EQUAL_FLOAT(d.ref[j], S.params.calib.ref[j]);
+    }
     API(ApiError::OK, calib(CalibAction::SAVE));
     TEST_ASSERT_EQUAL_INT(p + 1, persists);
+}
+void test_calib_reset_restores_refs_too() {
+    homeAndReady();
+    API(ApiError::OK, setNum("calib_ref_3", 57.0));
+    TEST_ASSERT_EQUAL_FLOAT(57.0f, S.params.calib.ref[2]);
+    API(ApiError::OK, calib(CalibAction::RESET));
+    TEST_ASSERT_EQUAL_FLOAT(55.0f, S.params.calib.ref[2]);
 }
 void test_calib_base_sets_base_dist() {
     homeAndReady();
@@ -566,7 +618,7 @@ void test_calib_busy_during_motion() {
     Command m = mk(CmdId::MOVE); m.has_pos = true; m.pos = 200; m.has_speed = true; m.speed = 2;
     API(ApiError::OK, send(m));
     run(700);
-    API(ApiError::BUSY, calib(CalibAction::NEAR));
+    API(ApiError::BUSY, calib(CalibAction::POINT, 2));
 }
 void test_calib_base_needs_range() {
     homeAndReady();
@@ -996,8 +1048,7 @@ static void forceRunning(AppState& s) {          // RUNNING with HV on and all c
 }
 void test_v159_measure_chain_uses_calibrated_distance() {
     appInit(S);
-    S.params.calib.near_raw = 40; S.params.calib.near_ref = 45;     // offset +5 mm
-    S.params.calib.far_raw = 65;  S.params.calib.far_ref = 70;
+    calibOffset5(S.params);                                         // offset +5 mm
     appMeasure(S, C, mvForDist(50.0f), 1000);
     TEST_ASSERT_FLOAT_WITHIN(0.2f, 50.0f, S.raw_mm);                // uncalibrated
     TEST_ASSERT_FLOAT_WITHIN(0.2f, 55.0f, S.dist_mm);               // calibrated
@@ -1105,13 +1156,12 @@ void test_v159_driver_request_merge_equal_rank_replaces() {
 }
 void test_v159_calib_base_uses_dist_near_uses_raw() {
     homeAndReady();
-    S.params.calib.near_raw = 40; S.params.calib.near_ref = 45;     // offset +5 mm
-    S.params.calib.far_raw = 65;  S.params.calib.far_ref = 70;
+    calibOffset5(S.params);                                         // offset +5 mm
     run(800);
     API(ApiError::OK, calib(CalibAction::BASE));
     TEST_ASSERT_FLOAT_WITHIN(0.6f, S.raw_mm + 5.0f, S.params.base_dist);
-    API(ApiError::OK, calib(CalibAction::NEAR));
-    TEST_ASSERT_FLOAT_WITHIN(0.6f, 135.0f, S.params.calib.near_raw); // raw, not calibrated
+    API(ApiError::OK, calib(CalibAction::POINT, 6));
+    TEST_ASSERT_FLOAT_WITHIN(0.6f, 135.0f, S.params.calib.raw[5]);  // raw, not calibrated
 }
 void test_v159_rejected_hv_on_does_not_arm_watchdog() {
     homeAndReady();
@@ -1162,8 +1212,7 @@ void test_v159_comm_timeout_uses_config() {
 // ---- V1.5.10: review of L4.1b (appMeasure exactly as in app_logic.h) ----
 void test_v1510_in_range_uses_unfiltered_mm_not_calibrated_dist() {
     appInit(S);
-    S.params.calib.near_raw = 40; S.params.calib.near_ref = 45;     // offset +5 mm
-    S.params.calib.far_raw = 65;  S.params.calib.far_ref = 70;
+    calibOffset5(S.params);                                         // offset +5 mm
     appMeasure(S, C, mvForDist(297.0f), 1000);                      // mm 297 in range (max 300)
     TEST_ASSERT_TRUE(S.in_range);                                   // although dist 302 > max
     TEST_ASSERT_FLOAT_WITHIN(0.5f, 302.0f, S.dist_mm);
@@ -1240,7 +1289,11 @@ int main(int, char**) {
     RUN_TEST(test_local_hv_on_disarms);
     RUN_TEST(test_fault_beeps_once);
     RUN_TEST(test_calib_capture_requires_stability);
+    RUN_TEST(test_calib_point_writes_only_its_index);
+    RUN_TEST(test_calib_point_raw_not_calibrated);
+    RUN_TEST(test_calib_point_bad_index);
     RUN_TEST(test_calib_save_validation_and_reset);
+    RUN_TEST(test_calib_reset_restores_refs_too);
     RUN_TEST(test_calib_base_sets_base_dist);
     RUN_TEST(test_calib_busy_during_motion);
     RUN_TEST(test_calib_base_needs_range);

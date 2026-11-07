@@ -1,6 +1,7 @@
-// FROZEN TESTS (Contract V1.5.6) – Sprint L2 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.6, calibration V1.6.0 / Sprint K1) – Sprint L2 must make these pass. Do not modify.
 // Covers: src/logic/measure_logic.cpp (CONTRACT §7)
 #include <unity.h>
+#include <math.h>
 #include "logic/measure_logic.h"
 
 static SensorCurve C;
@@ -88,44 +89,101 @@ void test_iir_reset() {
     TEST_ASSERT_EQUAL_FLOAT(77.0f, iirUpdate(f, 77.0f));
 }
 
-// ---- calibration ------------------------------------------------------------------
-void test_calib_default_identity() {
-    CalibPoints p;
-    TEST_ASSERT_TRUE(calibValid(p));
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 123.4f, calibApply(123.4f, p));
+// ---- calibration table (V1.6.0, 6 points) -----------------------------------------
+static CalibTable tbl(const float* raw, const float* ref) {
+    CalibTable t;
+    for (int i = 0; i < CALIB_POINTS; ++i) { t.raw[i] = raw[i]; t.ref[i] = ref[i]; }
+    return t;
+}
+// measured residual shape of the demo sensor (A1, 07.11.2026): raw readings at the six steps
+static const float RAW_DEMO[6] = {65.3f, 60.2f, 54.8f, 49.6f, 44.7f, 40.5f};
+static const float REF_DEMO[6] = {65.0f, 60.0f, 55.0f, 50.0f, 45.0f, 40.0f};
+
+void test_calib_points_constant() {
+    TEST_ASSERT_EQUAL_INT(6, CALIB_POINTS);
+    TEST_ASSERT_EQUAL_FLOAT(1.0f, CALIB_MIN_STEP_MM);
 }
 void test_calib_defaults_are_demo_identity() {
-    CalibPoints p;
-    TEST_ASSERT_EQUAL_FLOAT(40.0f, p.near_ref); TEST_ASSERT_EQUAL_FLOAT(40.0f, p.near_raw);
-    TEST_ASSERT_EQUAL_FLOAT(65.0f, p.far_ref);  TEST_ASSERT_EQUAL_FLOAT(65.0f, p.far_raw);
+    CalibTable t;
+    const float d[6] = {65.0f, 60.0f, 55.0f, 50.0f, 45.0f, 40.0f};
+    for (int i = 0; i < 6; ++i) {
+        TEST_ASSERT_EQUAL_FLOAT(d[i], t.raw[i]);
+        TEST_ASSERT_EQUAL_FLOAT(d[i], t.ref[i]);
+    }
+    TEST_ASSERT_TRUE(calibValid(t));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 123.4f, calibApply(123.4f, t));   // identity, also outside the table
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 52.5f, calibApply(52.5f, t));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 10.0f, calibApply(10.0f, t));
 }
-void test_calib_offset() {
-    CalibPoints p; p.near_raw = 52; p.near_ref = 50; p.far_raw = 202; p.far_ref = 200;
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 100.0f, calibApply(102.0f, p));
+void test_calib_hits_every_point_exactly() {
+    CalibTable t = tbl(RAW_DEMO, REF_DEMO);
+    TEST_ASSERT_TRUE(calibValid(t));
+    for (int i = 0; i < 6; ++i) TEST_ASSERT_FLOAT_WITHIN(0.001f, REF_DEMO[i], calibApply(RAW_DEMO[i], t));
 }
-void test_calib_scale_and_points() {
-    CalibPoints p; p.near_raw = 60; p.near_ref = 50; p.far_raw = 180; p.far_ref = 200;
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 50.0f, calibApply(60.0f, p));
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 200.0f, calibApply(180.0f, p));
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 125.0f, calibApply(120.0f, p));
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 25.0f, calibApply(40.0f, p));   // extrapolation
+void test_calib_interpolates_each_segment() {
+    CalibTable t = tbl(RAW_DEMO, REF_DEMO);
+    // midpoint of every raw segment maps to the midpoint of the ref segment
+    for (int i = 0; i < 5; ++i) {
+        float rm = 0.5f * (RAW_DEMO[i] + RAW_DEMO[i + 1]);
+        float em = 0.5f * (REF_DEMO[i] + REF_DEMO[i + 1]);
+        TEST_ASSERT_FLOAT_WITHIN(0.001f, em, calibApply(rm, t));
+    }
+    // a quarter into segment 49.6..54.8 (ref 50..55)
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 51.25f, calibApply(49.6f + 0.25f * 5.2f, t));
+}
+void test_calib_extrapolates_with_end_segments() {
+    CalibTable t = tbl(RAW_DEMO, REF_DEMO);
+    // below: segment 40.5..44.7 -> 40..45, slope 5/4.2
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 40.0f - 4.5f * 5.0f / 4.2f, calibApply(36.0f, t));
+    // above: segment 60.2..65.3 -> 60..65, slope 5/5.1
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 65.0f + 34.7f * 5.0f / 5.1f, calibApply(100.0f, t));
+    // the lower boom beside the material (about 186 mm) stays plausible
+    float boom = calibApply(186.0f, t);
+    TEST_ASSERT_TRUE(boom > 170.0f && boom < 200.0f);
+}
+void test_calib_order_of_points_irrelevant() {
+    // the same table stored in another order gives the same result (CALIB point i can be any step)
+    const float raw[6] = {49.6f, 65.3f, 40.5f, 54.8f, 44.7f, 60.2f};
+    const float ref[6] = {50.0f, 65.0f, 40.0f, 55.0f, 45.0f, 60.0f};
+    CalibTable a = tbl(RAW_DEMO, REF_DEMO), b = tbl(raw, ref);
+    TEST_ASSERT_TRUE(calibValid(b));
+    const float xs[] = {30.0f, 40.5f, 42.0f, 47.3f, 52.0f, 57.7f, 63.0f, 70.0f, 186.0f};
+    for (float x : xs) TEST_ASSERT_FLOAT_WITHIN(0.001f, calibApply(x, a), calibApply(x, b));
+}
+void test_calib_ascending_storage_order() {
+    // stored from near to far (ascending): same result as the default far-to-near order
+    float raw[6], ref[6];
+    for (int i = 0; i < 6; ++i) { raw[i] = RAW_DEMO[5 - i]; ref[i] = REF_DEMO[5 - i]; }
+    CalibTable a = tbl(RAW_DEMO, REF_DEMO), b = tbl(raw, ref);
+    TEST_ASSERT_TRUE(calibValid(b));
+    for (float x = 35.0f; x < 70.0f; x += 0.7f) TEST_ASSERT_FLOAT_WITHIN(0.001f, calibApply(x, a), calibApply(x, b));
 }
 void test_calib_invalid_cases() {
-    CalibPoints p;
-    p.near_raw = 100; p.far_raw = 103;                 // raw span < 5
-    TEST_ASSERT_FALSE(calibValid(p));
-    TEST_ASSERT_EQUAL_FLOAT(77.0f, calibApply(77.0f, p));
-    p = CalibPoints{}; p.far_ref = 43;                 // ref span < 5
-    TEST_ASSERT_FALSE(calibValid(p));
-    p = CalibPoints{}; p.near_ref = 30;                // ref out of range
-    TEST_ASSERT_FALSE(calibValid(p));
-    p = CalibPoints{}; p.far_ref = 301;
-    TEST_ASSERT_FALSE(calibValid(p));
+    CalibTable t = tbl(RAW_DEMO, REF_DEMO);
+    t.raw[2] = 60.0f;                                   // raw of ref 55 only 0.2 mm below raw of ref 60 (< 1 mm)
+    TEST_ASSERT_FALSE(calibValid(t));
+    TEST_ASSERT_EQUAL_FLOAT(77.0f, calibApply(77.0f, t));   // invalid -> raw passes through
+    t = tbl(RAW_DEMO, REF_DEMO); t.raw[1] = 66.0f;      // ref 60 has a larger raw than ref 65 -> falling
+    TEST_ASSERT_FALSE(calibValid(t));
+    TEST_ASSERT_EQUAL_FLOAT(52.0f, calibApply(52.0f, t));
+    t = tbl(RAW_DEMO, REF_DEMO); t.ref[3] = 55.0f;      // two equal refs
+    TEST_ASSERT_FALSE(calibValid(t));
+    t = tbl(RAW_DEMO, REF_DEMO); t.ref[5] = 39.9f;      // ref out of range
+    TEST_ASSERT_FALSE(calibValid(t));
+    t = CalibTable{}; t.ref[0] = 300.1f;
+    TEST_ASSERT_FALSE(calibValid(t));
 }
-void test_calib_reversed_points_valid() {
-    CalibPoints p; p.near_raw = 200; p.near_ref = 200; p.far_raw = 50; p.far_ref = 50;
-    TEST_ASSERT_TRUE(calibValid(p));
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 100.0f, calibApply(100.0f, p));
+void test_calib_nan_and_inf_invalid() {
+    const float bad[] = {NAN, INFINITY, -INFINITY};
+    for (float v : bad) {
+        for (int i = 0; i < 6; ++i) {
+            CalibTable t; t.raw[i] = v;
+            TEST_ASSERT_FALSE(calibValid(t));
+            TEST_ASSERT_EQUAL_FLOAT(51.0f, calibApply(51.0f, t));
+            t = CalibTable{}; t.ref[i] = v;
+            TEST_ASSERT_FALSE(calibValid(t));
+        }
+    }
 }
 
 // ---- thickness / material ----------------------------------------------------------
@@ -220,14 +278,29 @@ void test_iir_uses_alpha() {
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 7.0f, iirUpdate(g, 7.0f));        // no filtering
 }
 void test_calib_boundaries() {
-    CalibPoints p; p.near_raw = 100; p.far_raw = 105; p.near_ref = 100; p.far_ref = 105;
-    TEST_ASSERT_TRUE(calibValid(p));                     // spans exactly 5 mm are valid
-    p.far_raw = 104.9f;
-    TEST_ASSERT_FALSE(calibValid(p));
-    p = CalibPoints{}; p.near_ref = 40; p.far_ref = 300; p.near_raw = 40; p.far_raw = 300;
-    TEST_ASSERT_TRUE(calibValid(p));                     // refs 40 and 300 inclusive
-    p.far_ref = 300.1f;
-    TEST_ASSERT_FALSE(calibValid(p));
+    // steps of exactly 1.0 mm (refs and raws) are valid, 0.99 mm is not
+    const float raw[6] = {50.0f, 49.0f, 48.0f, 47.0f, 46.0f, 45.0f};
+    const float ref[6] = {50.0f, 49.0f, 48.0f, 47.0f, 46.0f, 45.0f};
+    CalibTable t = tbl(raw, ref);
+    TEST_ASSERT_TRUE(calibValid(t));
+    t.raw[1] = 49.01f;                                   // raw step 50 - 49.01 = 0.99
+    TEST_ASSERT_FALSE(calibValid(t));
+    t = tbl(raw, ref); t.ref[1] = 49.01f;                // ref step 0.99
+    TEST_ASSERT_FALSE(calibValid(t));
+    // refs 40 and 300 inclusive
+    const float r2[6] = {300.0f, 250.0f, 200.0f, 150.0f, 100.0f, 40.0f};
+    t = tbl(r2, r2);
+    TEST_ASSERT_TRUE(calibValid(t));
+    t.ref[5] = 39.99f;
+    TEST_ASSERT_FALSE(calibValid(t));
+}
+void test_calib_fixes_demo_bow() {
+    // V1.6.0 reason: the 2-point fit left up to 0.87 mm; the table brings every step within 0.01 mm
+    // and a value between two steps stays within the linear interpolation
+    CalibTable t = tbl(RAW_DEMO, REF_DEMO);
+    for (int i = 0; i < 6; ++i) TEST_ASSERT_FLOAT_WITHIN(0.01f, REF_DEMO[i], calibApply(RAW_DEMO[i], t));
+    float y = calibApply(57.5f, t);
+    TEST_ASSERT_TRUE(y > 55.0f && y < 60.0f);
 }
 void test_stability_uses_struct_fields() {
     StabilityTracker s; s.window_ms = 200; s.tol_mm = 2.0f;
@@ -286,12 +359,15 @@ int main(int, char**) {
     RUN_TEST(test_iir_weighting);
     RUN_TEST(test_iir_converges);
     RUN_TEST(test_iir_reset);
-    RUN_TEST(test_calib_default_identity);
+    RUN_TEST(test_calib_points_constant);
     RUN_TEST(test_calib_defaults_are_demo_identity);
-    RUN_TEST(test_calib_offset);
-    RUN_TEST(test_calib_scale_and_points);
+    RUN_TEST(test_calib_hits_every_point_exactly);
+    RUN_TEST(test_calib_interpolates_each_segment);
+    RUN_TEST(test_calib_extrapolates_with_end_segments);
+    RUN_TEST(test_calib_order_of_points_irrelevant);
+    RUN_TEST(test_calib_ascending_storage_order);
     RUN_TEST(test_calib_invalid_cases);
-    RUN_TEST(test_calib_reversed_points_valid);
+    RUN_TEST(test_calib_nan_and_inf_invalid);
     RUN_TEST(test_thickness);
     RUN_TEST(test_on_material_strict);
     RUN_TEST(test_stability_needs_window);
@@ -306,6 +382,7 @@ int main(int, char**) {
     RUN_TEST(test_median_large_values_no_overflow);
     RUN_TEST(test_iir_uses_alpha);
     RUN_TEST(test_calib_boundaries);
+    RUN_TEST(test_calib_fixes_demo_bow);
     RUN_TEST(test_stability_uses_struct_fields);
     RUN_TEST(test_stability_tolerance_is_inclusive);
     RUN_TEST(test_stability_reference_does_not_drift);

@@ -12,7 +12,7 @@ CALIB/ACK/REBOOT answer. Test hooks (not part of the device):
     GET /fake/log            -> JSON list of every /api command received (cmd, params)
     GET /fake/set?k=v&...    -> force fields: state, err, local, estop, comm_armed, crc_error (0/1)
 """
-import json, os, sys, threading, time, zlib
+import json, os, random, sys, threading, time, zlib
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
@@ -43,6 +43,13 @@ def verify(t):
     return i >= 0 and len(t) == i + 18 and t.endswith('"}') and crc(t[:i] + '}') == t[i + 8:i + 16].upper()
 
 
+def calib_valid(cfg):
+    """Same rule as calibValid() of the firmware (CONTRACT §7.3)."""
+    pts = sorted((cfg["calib_ref_%d" % i], cfg["calib_raw_%d" % i]) for i in range(1, 7))
+    if any(not 40.0 <= r <= 300.0 for r, _ in pts): return False
+    return all(b[0] - a[0] >= 1.0 and b[1] - a[1] >= 1.0 for a, b in zip(pts, pts[1:]))
+
+
 class Sim:
     def __init__(self):
         self.lock = threading.Lock()
@@ -52,7 +59,7 @@ class Sim:
         self.estop, self.hv_on, self.shutter, self.comm_armed, self.crc_error = False, False, 'closed', False, False
         self.cfg = {"measure_pos": 155.0, "maint_pos": 40.0, "traverse_start": 80.0, "traverse_end": 240.0,
                     "traverse_speed": 10.0, "shutter_hold": 3.0, "edge_threshold": 3.0, "base_dist": 70.0,
-                    "calib_near_raw": 40.0, "calib_near_ref": 40.0, "calib_far_raw": 65.0, "calib_far_ref": 65.0,
+                    **{"calib_%s_%d" % (t, i): 70.0 - 5 * i for i in range(1, 7) for t in ("raw", "ref")},
                     "calib_valid": True, "interlock": True, "cooling_flow": True, "temp": 18.0, "estop_nc": False,
                     "wifi_ssid": "", "wifi_pass_set": False}
         self.n, self.sum, self.t0 = 0, 0.0, time.time()
@@ -139,7 +146,7 @@ class Sim:
             if k == 'wifi_pass':
                 if not isinstance(v, str) or not (v == '' or 8 <= len(v) <= 63): return -4, None
                 self.cfg['wifi_pass_set'] = v != ''; return 0, None
-            if k not in self.cfg or k.startswith('calib_') and k.endswith('_raw') or k in ('calib_valid', 'wifi_pass_set'): return -4, None
+            if k not in self.cfg or k.startswith('calib_raw_') or k in ('calib_valid', 'wifi_pass_set'): return -4, None
             if isinstance(self.cfg[k], bool):
                 if v not in (True, False, 0, 1): return -4, None
                 v = bool(v)
@@ -147,11 +154,19 @@ class Sim:
                 if not isinstance(v, (int, float)) or isinstance(v, bool): return -4, None
                 v = float(v)
             elif not isinstance(v, str): return -4, None
-            self.cfg[k] = v; return 0, None
-        if cmd == 'CALIB':
+            self.cfg[k] = v; self.cfg['calib_valid'] = calib_valid(self.cfg); return 0, None
+        if cmd == 'CALIB':                       # V1.6.0: table with 6 points
             a = params.get('action')
-            if a not in ('near', 'far', 'base', 'save', 'reset'): return -4, None
-            if a == 'reset': self.cfg.update(calib_near_raw=40.0, calib_far_raw=65.0, calib_valid=True)
+            if a not in ('point', 'base', 'save', 'reset'): return -4, None
+            if a == 'point':
+                i = params.get('index')
+                if isinstance(i, bool) or not isinstance(i, (int, float)) or i != int(i) or not 1 <= i <= 6: return -4, None
+                i = int(i)
+                self.cfg['calib_raw_%d' % i] = round(70.0 - 5 * i + random.uniform(-0.5, 0.5), 2)
+            if a == 'reset':
+                self.cfg.update({"calib_%s_%d" % (t, i): 70.0 - 5 * i for i in range(1, 7) for t in ("raw", "ref")})
+            self.cfg['calib_valid'] = calib_valid(self.cfg)
+            if a == 'save' and not self.cfg['calib_valid']: return -9, None
             return 0, None
         if cmd == 'REBOOT': return 0, None
         if cmd in ('MOVE', 'PARK', 'SERVICE', 'SHUTTER_OPEN', 'SHUTTER_CLOSE'): return 0, None

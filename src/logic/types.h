@@ -47,7 +47,7 @@ enum class ApiError : int8_t {
     PRECONDITION  = -6,  ///< Allowed in this state, but a condition is not met
     BUSY          = -7,  ///< Motion sequence active / queue full
     NOT_STABLE    = -8,  ///< Calibration capture: signal not stable
-    CALIB_INVALID = -9,  ///< Calibration points do not form a valid 2-point calibration
+    CALIB_INVALID = -9,  ///< Calibration table invalid (calibValid, V1.6.0)
     LOCAL_CONTROL = -10  ///< V1.1: operator at the display has priority (CONTRACT §6.6)
 };
 
@@ -61,7 +61,7 @@ enum class CmdId : uint8_t {
     GET_STATE,       ///< Heartbeat + short state
     GET_CONFIG,      ///< Returns all parameters
     SET,             ///< params: key, value
-    CALIB,           ///< params: action = near|far|base|save|reset
+    CALIB,           ///< params: action = point|base|save|reset, index 1..6 for point (V1.6.0)
     ACK,             ///< Acknowledge fault
     HV_ON,
     HV_OFF,
@@ -76,7 +76,8 @@ enum class CmdSource : uint8_t { API = 0, LOCAL = 1 };  ///< LOCAL = touch displ
 
 enum class MotionState : uint8_t { IDLE = 0, MOVING = 1, HOMING = 2, ERROR = 3 };
 enum class OpMode      : uint8_t { NONE = 0, MEASURE = 1, TRAVERSE = 2 };
-enum class CalibAction : uint8_t { NONE = 0, NEAR = 1, FAR = 2, BASE = 3, SAVE = 4, RESET = 5 };
+/// V1.6.0: NEAR/FAR replaced by POINT (calibration table, Command::calib_index 1..6)
+enum class CalibAction : uint8_t { NONE = 0, POINT = 1, BASE = 3, SAVE = 4, RESET = 5 };
 enum class ValueType   : uint8_t { NONE = 0, NUMBER = 1, BOOL = 2, STRING = 3 };
 
 // ---------------------------------------------------------------------------
@@ -98,6 +99,7 @@ struct Command {
     char      str[64] = {0};       ///< SET: string value
 
     CalibAction calib = CalibAction::NONE;
+    uint8_t     calib_index = 0;   ///< V1.6.0: CALIB point: 1..CALIB_POINTS (0 = none)
 
     uint32_t  t_enq_us = 0;        ///< V1.1: enqueue time (µs, set by cmdQueueSend) for latency measurement
 };
@@ -161,5 +163,5 @@ const char* motionStateName(MotionState m);   ///< "idle", "moving", "homing", "
 const char* opModeName(OpMode m);             ///< "none", "measure", "traverse"
 const char* cmdName(CmdId c);                 ///< "INIT", "START_MEASURE", ..., "PARK", "SERVICE"; NONE -> "NONE"
 CmdId       cmdFromName(const char* name);    ///< exact, case-sensitive; unknown/NULL -> NONE
-CalibAction calibActionFromName(const char* name);  ///< "near","far","base","save","reset"; else NONE
+CalibAction calibActionFromName(const char* name);  ///< "point","base","save","reset" (exact); else NONE (V1.6.0: "near"/"far" -> NONE)
 const char* apiErrorMessage(ApiError e);      ///< short English text, OK -> "ok"

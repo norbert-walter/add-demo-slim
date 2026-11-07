@@ -1,6 +1,6 @@
 /**
  * @file measure_logic.h
- * @brief Pure measurement chain (FROZEN CONTRACT V1.5.6 §7). No hardware access.
+ * @brief Pure measurement chain (FROZEN CONTRACT V1.6.0 §7). No hardware access.
  *
  * Implementation: src/logic/measure_logic.cpp (Sprint L2).
  *
@@ -53,23 +53,41 @@ struct Iir {
 float iirUpdate(Iir& f, float x);  ///< returns the new y
 void  iirReset(Iir& f);            ///< next update re-initialises
 
-/// 2-point calibration. raw = uncalibrated reading, ref = true distance of the target.
-struct CalibPoints {             ///< V1.2 defaults: identity at the demo's working range
-    float near_raw = 40.0f;
-    float near_ref = 40.0f;
-    float far_raw  = 65.0f;
-    float far_ref  = 65.0f;
+/**
+ * V1.6.0 (Sprint K1) – calibration table, one point per step of the stair body.
+ * Point i (1..CALIB_POINTS) = step centre at axis 95 + 20 * i mm (115, 135 ... 215 mm).
+ * raw[i-1] = uncalibrated reading (raw_mm) captured with CALIB point i,
+ * ref[i-1] = true distance of that step (SET calib_ref_i).
+ * Defaults: identity, raw = ref = 65, 60, 55, 50, 45, 40 mm (points 1..6).
+ * The 2-point calibration (near/far, CalibPoints) of V1.5 is gone.
+ */
+constexpr int   CALIB_POINTS      = 6;
+constexpr float CALIB_MIN_STEP_MM = 1.0f;   ///< minimum distance of neighbouring points (raw and ref)
+
+struct CalibTable {
+    float raw[CALIB_POINTS] = {65.0f, 60.0f, 55.0f, 50.0f, 45.0f, 40.0f};
+    float ref[CALIB_POINTS] = {65.0f, 60.0f, 55.0f, 50.0f, 45.0f, 40.0f};
 };
 
 /**
- * Valid if |far_raw - near_raw| >= 5 mm, |far_ref - near_ref| >= 5 mm and both
- * refs within 40..300 mm (inclusive: 40 <= ref <= 300).
+ * Valid if ALL of:
+ *  - every raw and every ref is finite,
+ *  - every ref is within 40..300 mm (inclusive),
+ *  - with the points sorted by ref ascending, the refs AND the raws are strictly increasing
+ *    and every two neighbours differ by at least CALIB_MIN_STEP_MM in raw and in ref
+ *    (exactly 1.0 mm is valid). The order of the points in the table does not matter.
+ * No heap, no static state (sort a local copy, e.g. insertion sort of 6 indices).
  */
-bool calibValid(const CalibPoints& p);
+bool calibValid(const CalibTable& t);
 
-/// Linear map through (near_raw, near_ref) and (far_raw, far_ref), extrapolates
-/// outside. If !calibValid(p) returns raw unchanged.
-float calibApply(float raw_mm, const CalibPoints& p);
+/**
+ * Piecewise linear map raw -> dist through the points sorted by raw:
+ *  - raw between two neighbouring points: linear interpolation on that segment,
+ *  - raw exactly at a point: its ref,
+ *  - raw below the smallest / above the largest point: extrapolation with the first / last segment.
+ * If !calibValid(t): returns raw_mm unchanged. No heap, no static state.
+ */
+float calibApply(float raw_mm, const CalibTable& t);
 
 /// max(0, base_dist_mm - dist_mm)
 float thickness(float dist_mm, float base_dist_mm);

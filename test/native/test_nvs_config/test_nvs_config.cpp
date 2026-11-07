@@ -1,9 +1,10 @@
-// FROZEN TESTS (Contract V1.5.14) – Sprint P1 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.14, schema ver 5 / calibration table V1.6.0 / Sprint K1). Do not modify.
 // Host test of the REAL src/system/nvs_config.cpp with the Preferences shim in
 // test/native/freertos_shim/Preferences.h (in-memory NVS, same return values as Arduino-ESP32).
 #define ADD_HOST_SHIM 1
 #include <unity.h>
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 #include "system/nvs_config.cpp"   // implementation under test
 
@@ -16,7 +17,9 @@ static Params custom() {
     Params p; paramsDefaults(p);
     p.measure_pos = 200.5f; p.maint_pos = 33.0f; p.traverse_start = 70.0f; p.traverse_end = 230.0f;
     p.traverse_speed = 12.5f; p.shutter_hold = 0.0f; p.edge_threshold = 4.5f; p.base_dist = 80.0f;
-    p.calib.near_raw = 41.5f; p.calib.near_ref = 45.0f; p.calib.far_raw = 66.0f; p.calib.far_ref = 70.0f;
+    const float raw[6] = {66.0f, 61.5f, 55.5f, 49.0f, 44.5f, 41.5f};
+    const float ref[6] = {70.0f, 64.0f, 58.0f, 52.0f, 46.0f, 45.0f};
+    for (int i = 0; i < 6; ++i) { p.calib.raw[i] = raw[i]; p.calib.ref[i] = ref[i]; }
     p.estop_nc = true; strcpy(p.wifi_ssid, "Werkstatt"); strcpy(p.wifi_pass, "geheim123");
     return p;
 }
@@ -29,10 +32,10 @@ static void assertEqualParams(const Params& a, const Params& b) {
     TEST_ASSERT_EQUAL_FLOAT(a.shutter_hold, b.shutter_hold);
     TEST_ASSERT_EQUAL_FLOAT(a.edge_threshold, b.edge_threshold);
     TEST_ASSERT_EQUAL_FLOAT(a.base_dist, b.base_dist);
-    TEST_ASSERT_EQUAL_FLOAT(a.calib.near_raw, b.calib.near_raw);
-    TEST_ASSERT_EQUAL_FLOAT(a.calib.near_ref, b.calib.near_ref);
-    TEST_ASSERT_EQUAL_FLOAT(a.calib.far_raw, b.calib.far_raw);
-    TEST_ASSERT_EQUAL_FLOAT(a.calib.far_ref, b.calib.far_ref);
+    for (int i = 0; i < CALIB_POINTS; ++i) {
+        TEST_ASSERT_EQUAL_FLOAT(a.calib.raw[i], b.calib.raw[i]);
+        TEST_ASSERT_EQUAL_FLOAT(a.calib.ref[i], b.calib.ref[i]);
+    }
     TEST_ASSERT_EQUAL(a.estop_nc, b.estop_nc);
     TEST_ASSERT_EQUAL_STRING(a.wifi_ssid, b.wifi_ssid);
     TEST_ASSERT_EQUAL_STRING(a.wifi_pass, b.wifi_pass);
@@ -63,14 +66,20 @@ void test_exact_key_set_and_types() {
     TEST_ASSERT_TRUE(nvsSaveParams(custom()));
     auto& t = shimNvs().ns[NS];
     static const char* fkeys[] = {"mpos","maint","tstart","tend","tspeed","shold","edge","base",
-                                  "cnraw","cnref","cfraw","cfref"};
+                                  "craw1","craw2","craw3","craw4","craw5","craw6",
+                                  "cref1","cref2","cref3","cref4","cref5","cref6"};
     for (const char* k : fkeys) { TEST_ASSERT_TRUE_MESSAGE(t.count(k), k); TEST_ASSERT_EQUAL_CHAR('f', t[k].type); }
     TEST_ASSERT_EQUAL_CHAR('u', t["estnc"].type);
     TEST_ASSERT_EQUAL_CHAR('s', t["ssid"].type);
     TEST_ASSERT_EQUAL_CHAR('s', t["pass"].type);
     TEST_ASSERT_EQUAL_CHAR('u', t["ver"].type);
-    TEST_ASSERT_EQUAL_INT(4, (int)(uint8_t)t["ver"].bytes[0]);
-    TEST_ASSERT_EQUAL_UINT32(16, t.size());              // no safety flags, nothing else
+    TEST_ASSERT_EQUAL_INT(5, (int)(uint8_t)t["ver"].bytes[0]);
+    TEST_ASSERT_EQUAL_UINT32(24, t.size());              // 23 keys + ver; no safety flags, no old keys
+    TEST_ASSERT_FALSE(t.count("cnraw")); TEST_ASSERT_FALSE(t.count("cfref"));
+    float r3; memcpy(&r3, t["craw3"].bytes.data(), 4);
+    TEST_ASSERT_EQUAL_FLOAT(55.5f, r3);
+    float f6; memcpy(&f6, t["cref6"].bytes.data(), 4);
+    TEST_ASSERT_EQUAL_FLOAT(45.0f, f6);
     float mp; memcpy(&mp, t["mpos"].bytes.data(), 4);
     TEST_ASSERT_EQUAL_FLOAT(200.5f, mp);
 }
@@ -79,7 +88,7 @@ void test_wrong_or_missing_version_gives_defaults() {
     putVer(3);
     Params p = custom(); nvsLoadParams(p);
     assertEqualParams(defaults(), p);
-    putVer(5);
+    putVer(6);
     nvsLoadParams(p);
     assertEqualParams(defaults(), p);
     shimNvs().ns[NS].erase("ver");
@@ -128,21 +137,64 @@ void test_invalid_strings_become_empty() {
 void test_invalid_calibration_resets_whole_calib() {
     Params a = custom();
     TEST_ASSERT_TRUE(nvsSaveParams(a));
-    putF("cfraw", 43.0f);                                 // |far_raw - near_raw| < 5 -> invalid
+    putF("craw2", 67.0f);                                 // raw of ref 64 above raw of ref 70 -> invalid
     Params p; nvsLoadParams(p);
-    CalibPoints d;
-    TEST_ASSERT_EQUAL_FLOAT(d.near_raw, p.calib.near_raw);
-    TEST_ASSERT_EQUAL_FLOAT(d.near_ref, p.calib.near_ref);
-    TEST_ASSERT_EQUAL_FLOAT(d.far_raw, p.calib.far_raw);
-    TEST_ASSERT_EQUAL_FLOAT(d.far_ref, p.calib.far_ref);
+    CalibTable d;
+    for (int i = 0; i < 6; ++i) {
+        TEST_ASSERT_EQUAL_FLOAT(d.raw[i], p.calib.raw[i]);
+        TEST_ASSERT_EQUAL_FLOAT(d.ref[i], p.calib.ref[i]);
+    }
     TEST_ASSERT_EQUAL_FLOAT(a.base_dist, p.base_dist);    // other fields untouched
-    putF("cfraw", INFINITY);                              // non-finite raw -> default raw 65
+    putF("craw2", INFINITY);                              // non-finite raw -> default raw 60 -> still valid
     nvsLoadParams(p);
-    TEST_ASSERT_EQUAL_FLOAT(65.0f, p.calib.far_raw);
-    TEST_ASSERT_EQUAL_FLOAT(41.5f, p.calib.near_raw);     // 41.5 / 45 and 65 / 70 is valid
-    putF("cnref", 30.0f);                                 // ref below 40 -> rejected by paramSet
+    TEST_ASSERT_EQUAL_FLOAT(60.0f, p.calib.raw[1]);
+    TEST_ASSERT_EQUAL_FLOAT(66.0f, p.calib.raw[0]);
+    TEST_ASSERT_EQUAL_FLOAT(41.5f, p.calib.raw[5]);
+    putF("craw2", 61.5f);
+    putF("cref6", 30.0f);                                 // ref below 40 -> rejected by paramSet, default 40
     nvsLoadParams(p);
-    TEST_ASSERT_EQUAL_FLOAT(40.0f, p.calib.near_ref);
+    TEST_ASSERT_EQUAL_FLOAT(40.0f, p.calib.ref[5]);
+    TEST_ASSERT_EQUAL_FLOAT(46.0f, p.calib.ref[4]);
+}
+// V1.6.0: a ver-4 store (2-point calibration) keeps all other values, the calibration becomes the default
+void test_version4_migrates_without_calibration() {
+    shimNvsReset();
+    putVer(4);
+    putF("mpos", 200.5f); putF("base", 80.0f); putF("edge", 4.5f);
+    putF("cnraw", 41.5f); putF("cnref", 45.0f); putF("cfraw", 66.0f); putF("cfref", 70.0f);
+    uint8_t one = 1; shimNvsPutRaw(NS, "estnc", 'u', &one, 1);
+    putS("ssid", "Werkstatt");
+    Params p = custom(); nvsLoadParams(p);
+    TEST_ASSERT_EQUAL_FLOAT(200.5f, p.measure_pos);
+    TEST_ASSERT_EQUAL_FLOAT(80.0f, p.base_dist);
+    TEST_ASSERT_EQUAL_FLOAT(4.5f, p.edge_threshold);
+    TEST_ASSERT_TRUE(p.estop_nc);
+    TEST_ASSERT_EQUAL_STRING("Werkstatt", p.wifi_ssid);
+    TEST_ASSERT_EQUAL_FLOAT(40.0f, p.maint_pos);          // missing key -> default
+    CalibTable d;
+    for (int i = 0; i < 6; ++i) {
+        TEST_ASSERT_EQUAL_FLOAT(d.raw[i], p.calib.raw[i]);
+        TEST_ASSERT_EQUAL_FLOAT(d.ref[i], p.calib.ref[i]);
+    }
+    TEST_ASSERT_EQUAL_INT(0, shimNvs().open);
+}
+void test_version4_ignores_new_calibration_keys() {
+    shimNvsReset();
+    putVer(4);
+    putF("craw1", 70.0f); putF("cref1", 75.0f);           // keys of ver 5 in a ver-4 store
+    Params p; nvsLoadParams(p);
+    TEST_ASSERT_EQUAL_FLOAT(65.0f, p.calib.raw[0]);
+    TEST_ASSERT_EQUAL_FLOAT(65.0f, p.calib.ref[0]);
+}
+void test_save_after_version4_writes_version5() {
+    shimNvsReset();
+    putVer(4); putF("cnraw", 41.5f); putF("mpos", 200.5f);
+    Params p; nvsLoadParams(p);
+    TEST_ASSERT_TRUE(nvsSaveParams(p));
+    auto& t = shimNvs().ns[NS];
+    TEST_ASSERT_EQUAL_INT(5, (int)(uint8_t)t["ver"].bytes[0]);
+    Params q = custom(); nvsLoadParams(q);
+    assertEqualParams(p, q);
 }
 void test_type_mismatch_keeps_default() {
     TEST_ASSERT_TRUE(nvsSaveParams(custom()));
@@ -156,7 +208,7 @@ void test_save_errors() {
     TEST_ASSERT_FALSE(nvsSaveParams(custom()));
     TEST_ASSERT_EQUAL_INT(0, shimNvs().open);
     shimNvsReset();
-    shimNvs().fail_put_key = "cfref";
+    shimNvs().fail_put_key = "cref6";
     TEST_ASSERT_FALSE(nvsSaveParams(custom()));
     TEST_ASSERT_EQUAL_INT(0, shimNvs().open);             // end() also after an error
     shimNvsReset();
@@ -205,6 +257,9 @@ int main(int, char**) {
     RUN_TEST(test_missing_key_keeps_default);
     RUN_TEST(test_invalid_strings_become_empty);
     RUN_TEST(test_invalid_calibration_resets_whole_calib);
+    RUN_TEST(test_version4_migrates_without_calibration);
+    RUN_TEST(test_version4_ignores_new_calibration_keys);
+    RUN_TEST(test_save_after_version4_writes_version5);
     RUN_TEST(test_type_mismatch_keeps_default);
     RUN_TEST(test_save_errors);
     RUN_TEST(test_save_with_empty_strings_succeeds);

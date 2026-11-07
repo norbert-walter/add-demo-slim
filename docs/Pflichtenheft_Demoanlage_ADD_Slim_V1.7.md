@@ -2,12 +2,29 @@
 
 **Stand:** 2026-11-07
 **Autor:** Norbert Walter
-**Version:** 1.7.12 (Hilfe-Symbol, Abgleich mit den Dokumentationen)
+**Version:** 1.7.13 (Kalibriertabelle mit 6 Stufen)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.7.12 → V1.7.13 (Contract V1.6.0, 07.11.2026, Entscheidung Norbert Walter, Sprint K1)
+- **Kalibriertabelle mit 6 Stufen statt Zweipunkt-Kalibrierung (Nah/Fern).** Grund: Die Sensorkurve
+  hinterlässt über die sechs Stufen einen S-förmigen Restfehler (+0,33 … −0,45 … +0,48 mm). Zwei
+  Punkte gleichen nur Versatz und Steigung aus; es bleiben bis 0,87 mm (bestes Paar 0,71 mm), das Ziel
+  ±0,5 mm ist so nicht erreichbar (Analyse nach dem ersten A1-Lauf).
+- Punkt *i* = Stufe bei **95 + 20·i mm** (115 … 215 mm), Referenzen ab Werk 65, 60, 55, 50, 45, 40 mm.
+  Zwischen den Punkten wird linear interpoliert, außerhalb mit dem ersten bzw. letzten Abschnitt
+  verlängert. Gültig: Referenzen 40 … 300 mm, Referenzen und Rohwerte steigen von Punkt zu Punkt um
+  mindestens 1 mm.
+- REST: `CALIB action=point index=1…6` (statt `near`/`far`), Parameter `calib_ref_1` … `calib_ref_6`
+  (statt `calib_near_ref`/`calib_far_ref`), `GET_CONFIG` mit `calib_raw_i`/`calib_ref_i`.
+- NVS Version 5; gespeicherte Daten der Version 4 bleiben erhalten, nur die Kalibrierung beginnt neu.
+- Weboberfläche, Seite Kalibrierung: Tabelle mit 6 Zeilen (Fahren, Übernehmen), Taste **„Alle 6 Stufen
+  automatisch“** (mit Bestätigung, fährt jede Stufe an, übernimmt den Rohwert und speichert am Ende;
+  STOP bricht ab), STOP-Taste auf der Seite, Kennlinie durch alle Punkte.
+- Die Messgenauigkeit (Abnahme 8, T18/T19) wird nach K1 erneut abgenommen.
 
 ### V1.7.11 → V1.7.12 (Contract V1.5.28, 07.11.2026, Entscheidung Norbert Walter)
 - **Hilfe-Symbol** (Fragezeichen) in der Navigationsleiste der Weboberfläche vor „Log“: öffnet
@@ -450,7 +467,8 @@ test/embedded/test_hardware/ On-Target-Tests                              H1/A1
 data/                        www/ (W1), doc.html, add.json (D1)          W1/D1
 scripts/                     add_client.py, stress_api.py, fake_device.py, serial_cmd.py,
                              check_iram.py, verify_reference.sh, acceptance_a1.py (A1),
-                             sim_device.py + sim/logic_sim.cpp (echte Logik auf dem PC)
+                             sim_device.py + sim/logic_sim.cpp (echte Logik auf dem PC),
+                             embed_app.py (app.js → index.html, V1.7.13)
 docs/                        CONTRACT.md, Pflichtenheft, Hardware_Dokumentation_V1_0.md,
                              Software_Dokumentation_V1_0.md, REST_API_V1_0.md,
                              Endpoints_V1_0.md, Smoketest_Protokoll.md, sprints/, reviews/,
@@ -495,7 +513,7 @@ Vollständige Definition: **CONTRACT §5**. Kurzfassung:
 | `START_MEASURE` | `pos` | RUNNING |
 | `START_TRAVERSE` | `start`, `end`, `speed` | RUNNING |
 | `STOP`, `SET`, `HV_OFF`, `SHUTTER_CLOSE`, `GET_STATE`, `GET_CONFIG` | | immer |
-| `CALIB` | `action` near/far/base/save/reset | SAFE_START, READY, RUNNING |
+| `CALIB` | `action` point (mit `index` 1 … 6)/base/save/reset (V1.7.13) | SAFE_START, READY, RUNNING |
 | `ACK` | – | WAIT_ACK (Ursache muss beseitigt sein) |
 | `HV_ON` | – | READY, RUNNING |
 | `SHUTTER_OPEN` | – | RUNNING, nur in der Wartungszone (20 < Position ≤ 60 mm) |
@@ -546,7 +564,7 @@ Eine Datei für zwei Zwecke: vom Gerät unter `/` geladen (ohne Dialog) oder lok
 - **Dicke:** HV aus → 0 · HV an, Shutter zu (kein gültiger Wert) → „–“ · neben dem Messgut → 0 ·
   auf dem Messgut → Messwert
 - Tasten INIT, HV EIN/AUS, MESSEN, TRAVERSE, PARK, SERVICE, ACK, STOP; Bestätigungsdialog für
-  HV EIN, ACK, REBOOT und Kalibrierung zurücksetzen, nie für STOP
+  HV EIN, ACK, REBOOT, Kalibrierung zurücksetzen und automatische Kalibrierung, nie für STOP
 - Zeitreihe (max. 100 Punkte) und Abstandsverlauf
 
 **Status:** Zykluszeiten, Ein-/Ausgänge, ADD-Validierung aus `/add`
@@ -555,7 +573,9 @@ Eine Datei für zwei Zwecke: vom Gerät unter `/` geladen (ohne Dialog) oder lok
 Kantenschwelle, `base_dist`, `estop_nc` mit Warnhinweis), simulierte Sicherheitsflags, Router
 SSID/Passwort (wirksam nach Reboot), Reboot-Taste. Ungültige Felder werden markiert und nicht gesendet.
 
-**Kalibrierung:** Nah/Fern anfahren und erfassen, Basis erfassen, speichern, zurücksetzen, Referenzwerte
+**Kalibrierung (V1.7.13):** Tabelle mit 6 Stufen (Position, Referenz, Rohwert, „Fahren“, „Übernehmen“,
+Status), „Alle 6 Stufen automatisch“ (anfahren, 1 s beruhigen, übernehmen, am Ende speichern; STOP bricht
+ab, dann wird nichts gespeichert), STOP, Basis erfassen, speichern, zurücksetzen, Referenzwerte, Kennlinie
 
 **Log:** Geräte-Log (`/log`) und Ereignistabelle der Seite
 
@@ -642,13 +662,13 @@ nur noch eine mögliche Handlung:
 
 16 × `analogReadMilliVolts()` alle 20 ms → 4 kleinste und 4 größte verwerfen →
 Mittelwert → `dist = 168,8 · V^-1,398` mm (angepasst an die Kalibrierpunkte, V1.7.2) → IIR α = 0,8 →
-2-Punkt-Kalibrierung → `thick = max(0, base_dist − dist)` mit `base_dist` = 70 mm
+Kalibriertabelle (6 Stufen, stückweise linear, V1.7.13) → `thick = max(0, base_dist − dist)` mit `base_dist` = 70 mm
 (virtuelle Bezugsebene an der Messgutkante, Stufen 5 … 30 mm). Der Sharp-Sensor liefert nur etwa alle 16,5 ms
 einen neuen Wert; 50 Hz Abtastung genügen.
 
-Kalibrierung (CONTRACT §7.3): Referenzabstände per `SET calib_near_ref/far_ref`,
-Messwerte per `CALIB near/far` (nur bei stabilem Signal, 500 ms innerhalb ±0,5 mm),
-`CALIB save` prüft Gültigkeit und speichert. `CALIB base` setzt `base_dist`
+Kalibrierung (CONTRACT §7.3): Referenzabstände per `SET calib_ref_1` … `calib_ref_6` (ab Werk
+65 … 40 mm), Rohwerte per `CALIB point index=i` an der Stufe bei 95 + 20·i mm (nur bei stabilem Signal,
+500 ms innerhalb ±0,5 mm), `CALIB save` prüft Gültigkeit und speichert. `CALIB base` setzt `base_dist`
 (Nullabgleich ohne Messgut).
 
 ### 5.10 Libraries
@@ -980,7 +1000,7 @@ Die Zeiten der 🤖-Sprints sind Rechenzeit von Qwen lokal (ca. 18 Token/s), nic
 **8. Betriebsmodi**
 - [ ] Stehende Messung: Mittelwert auf Treppenstufe ±0,5 mm
 - [ ] Profilfahrt: Kanten der Treppenstufen erkannt, Statistik plausibel
-- [ ] Kalibrierung gespeichert und wirksam
+- [ ] Kalibrierung (6 Stufen, auch automatisch) gespeichert und wirksam
 
 **9. ADD + KI**
 - [ ] `/add` valide nach ADD Spec v1.0 (sieben Blöcke)

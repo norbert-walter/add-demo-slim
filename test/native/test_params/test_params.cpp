@@ -1,6 +1,7 @@
-// FROZEN TESTS (Contract V1.5.6) – Sprint L2 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.6, calibration table V1.6.0 / Sprint K1) – do not modify.
 // Covers: src/logic/params.cpp (CONTRACT §9)
 #include <unity.h>
+#include <stdio.h>
 #include <string.h>
 #include "logic/params.h"
 
@@ -28,8 +29,10 @@ void test_defaults() {
     TEST_ASSERT_FALSE(p.estop_nc);                           // simple switch, active LOW
     TEST_ASSERT_EQUAL_FLOAT(3.0f, p.edge_threshold);
     TEST_ASSERT_EQUAL_FLOAT(70.0f, p.base_dist);
-    TEST_ASSERT_EQUAL_FLOAT(40.0f, p.calib.near_ref);
-    TEST_ASSERT_EQUAL_FLOAT(65.0f, p.calib.far_raw);
+    for (int i = 0; i < CALIB_POINTS; ++i) {                              // V1.6.0: identity table 65..40
+        TEST_ASSERT_EQUAL_FLOAT(65.0f - 5.0f * i, p.calib.raw[i]);
+        TEST_ASSERT_EQUAL_FLOAT(65.0f - 5.0f * i, p.calib.ref[i]);
+    }
     TEST_ASSERT_EQUAL_STRING("", p.wifi_ssid);
     SafetyFlags f;
     TEST_ASSERT_TRUE(f.interlock); TEST_ASSERT_TRUE(f.cooling_flow);     // V1.5.23: true after boot
@@ -73,7 +76,8 @@ void test_numeric_params_ranges_and_persist() {
         {"traverse_start", 61, 242}, {"traverse_end", 61, 242},
         {"traverse_speed", 1, 20}, {"shutter_hold", 0, 10},
         {"edge_threshold", 0.5, 100}, {"base_dist", 40, 300},
-        {"calib_near_ref", 40, 300}, {"calib_far_ref", 40, 300},
+        {"calib_ref_1", 40, 300}, {"calib_ref_2", 40, 300}, {"calib_ref_3", 40, 300},
+        {"calib_ref_4", 40, 300}, {"calib_ref_5", 40, 300}, {"calib_ref_6", 40, 300},
     };
     for (auto& r : rs) {
         OK(setNum(r.k, r.lo)); TEST_ASSERT_TRUE_MESSAGE(persist, r.k);
@@ -93,8 +97,15 @@ void test_values_land_in_right_fields() {
     OK(setNum("shutter_hold", 2.5)); TEST_ASSERT_EQUAL_FLOAT(2.5f, P.shutter_hold);
     OK(setNum("edge_threshold", 4.5)); TEST_ASSERT_EQUAL_FLOAT(4.5f, P.edge_threshold);
     OK(setNum("base_dist", 199)); TEST_ASSERT_EQUAL_FLOAT(199.0f, P.base_dist);
-    OK(setNum("calib_near_ref", 60)); TEST_ASSERT_EQUAL_FLOAT(60.0f, P.calib.near_ref);
-    OK(setNum("calib_far_ref", 190)); TEST_ASSERT_EQUAL_FLOAT(190.0f, P.calib.far_ref);
+    for (int i = 1; i <= 6; ++i) {                                         // each key writes its own point
+        char k[16]; snprintf(k, sizeof k, "calib_ref_%d", i);
+        Params before = P;
+        OK(setNum(k, 100 + i)); TEST_ASSERT_EQUAL_FLOAT(100.0f + i, P.calib.ref[i - 1]);
+        for (int j = 0; j < 6; ++j) {
+            TEST_ASSERT_EQUAL_FLOAT(before.calib.raw[j], P.calib.raw[j]);  // raw never via SET
+            if (j != i - 1) TEST_ASSERT_EQUAL_FLOAT(before.calib.ref[j], P.calib.ref[j]);
+        }
+    }
 }
 void test_error_changes_nothing() {
     Params before = P; SafetyFlags fb = F;
@@ -104,7 +115,7 @@ void test_error_changes_nothing() {
     TEST_ASSERT_EQUAL_FLOAT(before.measure_pos, P.measure_pos);
     TEST_ASSERT_EQUAL_FLOAT(before.traverse_speed, P.traverse_speed);
     TEST_ASSERT_EQUAL_FLOAT(before.base_dist, P.base_dist);
-    TEST_ASSERT_EQUAL_FLOAT(before.calib.near_ref, P.calib.near_ref);
+    for (int i = 0; i < 6; ++i) TEST_ASSERT_EQUAL_FLOAT(before.calib.ref[i], P.calib.ref[i]);
     TEST_ASSERT_EQUAL_STRING(before.wifi_ssid, P.wifi_ssid);
     TEST_ASSERT_EQUAL(fb.interlock, F.interlock);
     TEST_ASSERT_EQUAL(fb.cooling_flow, F.cooling_flow);
@@ -120,13 +131,21 @@ void test_unknown_key_and_null() {
     BAD(setNum("", 100));
     BAD(paramSet(P, F, nullptr, ValueType::NUMBER, 1, false, "", &persist));
     BAD(setNum("calib_near_raw", 100));   // raw values only via CALIB
+    BAD(setNum("calib_raw_1", 50));
+    // V1.6.0: the 2-point keys are gone, index outside 1..6 and odd spellings are unknown keys
+    const char* gone[] = {"calib_near_ref", "calib_far_ref", "calib_ref_0", "calib_ref_7", "calib_ref_",
+                          "calib_ref_1x", "calib_ref_10", "calib_ref_a", "calib_ref"};
+    for (const char* k : gone) {
+        persist = true; BAD(paramSet(P, F, k, ValueType::NUMBER, 50, false, "", &persist));
+        TEST_ASSERT_TRUE_MESSAGE(persist, k);                       // untouched on error
+    }
 }
 void test_nan_rejected() {
     BAD(setNum("measure_pos", 0.0 / 0.0));
     // V1.4.1: +-Inf as well, for every numeric key (SET value 1e999 arrives as +inf)
     const char* keys[] = {"temp", "measure_pos", "maint_pos", "traverse_start", "traverse_end",
-                          "traverse_speed", "shutter_hold", "edge_threshold", "base_dist", "calib_near_ref",
-                          "calib_far_ref"};
+                          "traverse_speed", "shutter_hold", "edge_threshold", "base_dist", "calib_ref_1",
+                          "calib_ref_2", "calib_ref_3", "calib_ref_4", "calib_ref_5", "calib_ref_6"};
     const double bad[] = {0.0 / 0.0, 1.0 / 0.0, -1.0 / 0.0};
     for (const char* k : keys)
         for (double v : bad) BAD(setNum(k, v));
@@ -155,8 +174,10 @@ void test_config_json_exact_defaults() {
     TEST_ASSERT_EQUAL_STRING(
         "\"config\":{\"measure_pos\":155.0,\"maint_pos\":40.0,\"traverse_start\":80.0,"
         "\"traverse_end\":240.0,\"traverse_speed\":10.0,\"shutter_hold\":3.0,\"edge_threshold\":3.0,\"base_dist\":70.0,"
-        "\"calib_near_raw\":40.0,\"calib_near_ref\":40.0,\"calib_far_raw\":65.0,"
-        "\"calib_far_ref\":65.0,\"calib_valid\":true,\"interlock\":true,"
+        "\"calib_raw_1\":65.0,\"calib_ref_1\":65.0,\"calib_raw_2\":60.0,\"calib_ref_2\":60.0,"
+        "\"calib_raw_3\":55.0,\"calib_ref_3\":55.0,\"calib_raw_4\":50.0,\"calib_ref_4\":50.0,"
+        "\"calib_raw_5\":45.0,\"calib_ref_5\":45.0,\"calib_raw_6\":40.0,\"calib_ref_6\":40.0,"
+        "\"calib_valid\":true,\"interlock\":true,"
         "\"cooling_flow\":true,\"temp\":18.0,\"estop_nc\":false,\"wifi_ssid\":\"\",\"wifi_pass_set\":false}", buf);
     TEST_ASSERT_EQUAL_INT((int)strlen(buf), n);
 }
@@ -181,8 +202,12 @@ void test_config_json_exact_all_fields() {
     OK(setNum("measure_pos", 150.5)); OK(setNum("maint_pos", 33.3)); OK(setNum("traverse_start", 70.1));
     OK(setNum("traverse_end", 230.2)); OK(setNum("traverse_speed", 12.5)); OK(setNum("shutter_hold", 7.7));
     OK(setNum("edge_threshold", 4.4)); OK(setNum("base_dist", 88.8));
-    OK(setNum("calib_near_ref", 41.1)); OK(setNum("calib_far_ref", 66.6));
-    P.calib.near_raw = 42.2f; P.calib.far_raw = 67.7f;           // raw values come from CALIB
+    const double refs[6] = {66.1, 61.2, 56.3, 51.4, 46.5, 41.6};
+    const float  raws[6] = {67.7f, 62.8f, 57.9f, 52.1f, 47.2f, 42.3f};   // raw values come from CALIB
+    for (int i = 0; i < 6; ++i) {
+        char k[16]; snprintf(k, sizeof k, "calib_ref_%d", i + 1);
+        OK(setNum(k, refs[i])); P.calib.raw[i] = raws[i];
+    }
     OK(setBool("interlock", false)); OK(setBool("cooling_flow", true)); OK(setNum("temp", -12.3)); OK(setBool("estop_nc", true));
     OK(setStr("wifi_ssid", "Net ~1"));
     char buf[600];
@@ -190,11 +215,13 @@ void test_config_json_exact_all_fields() {
     TEST_ASSERT_EQUAL_STRING(
         "\"config\":{\"measure_pos\":150.5,\"maint_pos\":33.3,\"traverse_start\":70.1,"
         "\"traverse_end\":230.2,\"traverse_speed\":12.5,\"shutter_hold\":7.7,\"edge_threshold\":4.4,\"base_dist\":88.8,"
-        "\"calib_near_raw\":42.2,\"calib_near_ref\":41.1,\"calib_far_raw\":67.7,"
-        "\"calib_far_ref\":66.6,\"calib_valid\":true,\"interlock\":false,"
+        "\"calib_raw_1\":67.7,\"calib_ref_1\":66.1,\"calib_raw_2\":62.8,\"calib_ref_2\":61.2,"
+        "\"calib_raw_3\":57.9,\"calib_ref_3\":56.3,\"calib_raw_4\":52.1,\"calib_ref_4\":51.4,"
+        "\"calib_raw_5\":47.2,\"calib_ref_5\":46.5,\"calib_raw_6\":42.3,\"calib_ref_6\":41.6,"
+        "\"calib_valid\":true,\"interlock\":false,"
         "\"cooling_flow\":true,\"temp\":-12.3,\"estop_nc\":true,\"wifi_ssid\":\"Net ~1\",\"wifi_pass_set\":false}", buf);
     TEST_ASSERT_EQUAL_INT((int)strlen(buf), n);
-    P.calib.far_raw = 43.0f;                                      // raw span < 5 -> invalid
+    P.calib.raw[0] = 43.0f;                                       // raw no longer rising with ref -> invalid
     paramsToJsonMember(P, F, buf, sizeof(buf));
     TEST_ASSERT_NOT_NULL(strstr(buf, "\"calib_valid\":false,"));
 }
@@ -218,7 +245,7 @@ void test_string_rule_boundaries() {
     TEST_ASSERT_EQUAL_STRING(p63, P.wifi_pass);
 }
 void test_persist_untouched_on_every_error() {
-    const char* typed[] = {"interlock", "cooling_flow", "estop_nc", "temp", "measure_pos", "calib_far_ref"};
+    const char* typed[] = {"interlock", "cooling_flow", "estop_nc", "temp", "measure_pos", "calib_ref_6"};
     for (const char* k : typed) {                       // wrong type: string for a bool/number key
         bool pz = true;
         BAD(paramSet(P, F, k, ValueType::STRING, 0, false, "x", &pz));
@@ -245,7 +272,7 @@ void test_range_check_in_double() {
         {"measure_pos", 61, 242}, {"maint_pos", 21, 60}, {"traverse_start", 61, 242},
         {"traverse_end", 61, 242}, {"traverse_speed", 1, 20}, {"shutter_hold", 0, 10},
         {"edge_threshold", 0.5, 100}, {"base_dist", 40, 300},
-        {"calib_near_ref", 40, 300}, {"calib_far_ref", 40, 300}, {"temp", -20, 99.9},
+        {"calib_ref_1", 40, 300}, {"calib_ref_6", 40, 300}, {"temp", -20, 99.9},
     };
     for (auto& r : rs) {
         BAD(setNum(r.k, r.lo - 1e-9));
@@ -255,6 +282,23 @@ void test_range_check_in_double() {
     }
 }
 
+// ---- V1.6.0: the longest possible member still fits the 600-byte buffer of GET_CONFIG ----
+void test_config_json_worst_case_fits_600() {
+    OK(setNum("measure_pos", 241.9)); OK(setNum("maint_pos", 59.9)); OK(setNum("traverse_start", 241.9));
+    OK(setNum("traverse_end", 241.9)); OK(setNum("traverse_speed", 19.9)); OK(setNum("shutter_hold", 9.9));
+    OK(setNum("edge_threshold", 99.9)); OK(setNum("base_dist", 299.9));
+    for (int i = 1; i <= 6; ++i) { char k[16]; snprintf(k, sizeof k, "calib_ref_%d", i); OK(setNum(k, 299.9)); }
+    for (int i = 0; i < 6; ++i) P.calib.raw[i] = -99999.9f;      // raw from the sensor can be anything finite
+    OK(setBool("interlock", false)); OK(setBool("cooling_flow", false)); OK(setNum("temp", -19.9));
+    OK(setBool("estop_nc", true));
+    char ssid[33]; memset(ssid, 'W', 32); ssid[32] = 0; OK(setStr("wifi_ssid", ssid));
+    OK(setStr("wifi_pass", "longpassword"));
+    char buf[600];
+    int n = paramsToJsonMember(P, F, buf, sizeof(buf));
+    TEST_ASSERT_TRUE(n > 0);
+    TEST_ASSERT_TRUE(n <= 599);
+    TEST_ASSERT_EQUAL_INT((int)strlen(buf), n);
+}
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_defaults);
@@ -277,5 +321,6 @@ int main(int, char**) {
     RUN_TEST(test_string_rule_boundaries);
     RUN_TEST(test_persist_untouched_on_every_error);
     RUN_TEST(test_range_check_in_double);
+    RUN_TEST(test_config_json_worst_case_fits_600);
     return UNITY_END();
 }

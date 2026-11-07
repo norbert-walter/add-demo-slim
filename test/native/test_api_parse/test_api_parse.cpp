@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5.12) – Sprint L5 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.5.12, CALIB V1.6.0 / Sprint K1) – Sprint L5 must make these pass. Do not modify.
 // Covers: src/logic/api_parse.cpp (CONTRACT §4, §5.2)
 #include <unity.h>
 #include <stdio.h>
@@ -151,12 +151,52 @@ void test_set_string_too_long() {
 
 // ---- CALIB ---------------------------------------------------------------------------------------
 void test_calib_actions() {
-    API(ApiError::OK, parse("{\"cmd\":\"CALIB\",\"params\":{\"action\":\"near\"}}"));
-    TEST_ASSERT_TRUE(Cm.calib == CalibAction::NEAR);
     API(ApiError::OK, parse("{\"cmd\":\"CALIB\",\"params\":{\"action\":\"save\"}}"));
     TEST_ASSERT_TRUE(Cm.calib == CalibAction::SAVE);
+    API(ApiError::OK, parse("{\"cmd\":\"CALIB\",\"params\":{\"action\":\"base\"}}"));
+    TEST_ASSERT_TRUE(Cm.calib == CalibAction::BASE);
+    API(ApiError::OK, parse("{\"cmd\":\"CALIB\",\"params\":{\"action\":\"reset\"}}"));
+    TEST_ASSERT_TRUE(Cm.calib == CalibAction::RESET);
     API(ApiError::BAD_PARAM, parse("{\"cmd\":\"CALIB\",\"params\":{\"action\":\"middle\"}}"));
     API(ApiError::BAD_PARAM, parse("{\"cmd\":\"CALIB\",\"params\":{}}"));
+    API(ApiError::BAD_PARAM, parse("{\"cmd\":\"CALIB\",\"params\":{\"action\":3}}"));
+}
+// V1.6.0: the 2-point actions are gone
+void test_calib_near_far_removed() {
+    API(ApiError::BAD_PARAM, parse("{\"cmd\":\"CALIB\",\"params\":{\"action\":\"near\"}}"));
+    API(ApiError::BAD_PARAM, parse("{\"cmd\":\"CALIB\",\"params\":{\"action\":\"far\"}}"));
+    API(ApiError::BAD_PARAM, parse("{\"cmd\":\"CALIB\",\"params\":{\"action\":\"far\",\"index\":6}}"));
+}
+void test_calib_point_index() {
+    for (int i = 1; i <= 6; ++i) {
+        char j[96];
+        snprintf(j, sizeof j, "{\"cmd\":\"CALIB\",\"params\":{\"action\":\"point\",\"index\":%d}}", i);
+        API(ApiError::OK, parse(j));
+        TEST_ASSERT_TRUE(Cm.calib == CalibAction::POINT);
+        TEST_ASSERT_EQUAL_INT(i, Cm.calib_index);
+    }
+    API(ApiError::OK, parse("{\"cmd\":\"CALIB\",\"params\":{\"action\":\"point\",\"index\":3.0}}"));
+    TEST_ASSERT_EQUAL_INT(3, Cm.calib_index);
+}
+void test_calib_point_bad_index() {
+    const char* bad[] = {
+        "{\"cmd\":\"CALIB\",\"params\":{\"action\":\"point\"}}",                 // missing
+        "{\"cmd\":\"CALIB\",\"params\":{\"action\":\"point\",\"index\":0}}",
+        "{\"cmd\":\"CALIB\",\"params\":{\"action\":\"point\",\"index\":7}}",
+        "{\"cmd\":\"CALIB\",\"params\":{\"action\":\"point\",\"index\":-1}}",
+        "{\"cmd\":\"CALIB\",\"params\":{\"action\":\"point\",\"index\":3.5}}",
+        "{\"cmd\":\"CALIB\",\"params\":{\"action\":\"point\",\"index\":\"3\"}}",
+        "{\"cmd\":\"CALIB\",\"params\":{\"action\":\"point\",\"index\":true}}",
+        "{\"cmd\":\"CALIB\",\"params\":{\"action\":\"point\",\"index\":null}}",
+        "{\"cmd\":\"CALIB\",\"params\":{\"action\":\"point\",\"index\":1e9}}",
+    };
+    for (const char* j : bad) API(ApiError::BAD_PARAM, parse(j));
+}
+void test_calib_index_ignored_for_other_actions() {
+    API(ApiError::OK, parse("{\"cmd\":\"CALIB\",\"params\":{\"action\":\"point\",\"index\":5}}"));
+    API(ApiError::OK, parse("{\"cmd\":\"CALIB\",\"params\":{\"action\":\"save\",\"index\":9}}"));
+    TEST_ASSERT_TRUE(Cm.calib == CalibAction::SAVE);
+    TEST_ASSERT_EQUAL_INT(0, Cm.calib_index);                // command fully reset between parses
 }
 
 // ---- reset behaviour -------------------------------------------------------------------------------
@@ -207,6 +247,10 @@ int main(int, char**) {
     RUN_TEST(test_set_errors);
     RUN_TEST(test_set_string_too_long);
     RUN_TEST(test_calib_actions);
+    RUN_TEST(test_calib_near_far_removed);
+    RUN_TEST(test_calib_point_index);
+    RUN_TEST(test_calib_point_bad_index);
+    RUN_TEST(test_calib_index_ignored_for_other_actions);
     RUN_TEST(test_command_is_reset_between_parses);
     RUN_TEST(test_v1511_set_number_keeps_double_precision);
     RUN_TEST(test_v1512_absent_numbers_stay_zero);

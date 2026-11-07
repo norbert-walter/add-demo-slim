@@ -97,8 +97,8 @@ class Shell:
   INIT  HV_ON  HV_OFF  STOP  ACK  PARK  SERVICE  SHUTTER_OPEN  SHUTTER_CLOSE  REBOOT
   START_MEASURE [pos=155]   START_TRAVERSE [start=80 end=240 speed=10]   MOVE pos=100 [speed=10]
   SET key=<name> value=<v>  (interlock, cooling_flow, temp, measure_pos, maint_pos, traverse_*,
-      shutter_hold, edge_threshold, base_dist, calib_near_ref, calib_far_ref, estop_nc, wifi_ssid, wifi_pass)
-  CALIB action=near|far|base|save|reset     GET_STATE     GET_CONFIG
+      shutter_hold, edge_threshold, base_dist, calib_ref_1 ... calib_ref_6, estop_nc, wifi_ssid, wifi_pass)
+  CALIB action=point index=1..6 | action=base|save|reset     GET_STATE     GET_CONFIG
 shell: proc [full] | watch [seconds, default 30, Ctrl+C stops] | hb [on|off] | log | get <path> | help | quit
 Heartbeat: from the start the shell sends GET_STATE every second, in the background. Commands can be
 typed at any time. A message appears when no GET_STATE answer came for 10 s and when answers resume.

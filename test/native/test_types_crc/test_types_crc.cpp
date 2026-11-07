@@ -62,13 +62,19 @@ void test_cmd_from_name_rejects_unknown_and_case() {
     TEST_ASSERT_TRUE(cmdFromName("NONE") == CmdId::NONE);
 }
 void test_calib_action_names() {
-    TEST_ASSERT_TRUE(calibActionFromName("near") == CalibAction::NEAR);
-    TEST_ASSERT_TRUE(calibActionFromName("far") == CalibAction::FAR);
+    TEST_ASSERT_TRUE(calibActionFromName("point") == CalibAction::POINT);
     TEST_ASSERT_TRUE(calibActionFromName("base") == CalibAction::BASE);
     TEST_ASSERT_TRUE(calibActionFromName("save") == CalibAction::SAVE);
     TEST_ASSERT_TRUE(calibActionFromName("reset") == CalibAction::RESET);
-    TEST_ASSERT_TRUE(calibActionFromName("NEAR") == CalibAction::NONE);
+    TEST_ASSERT_TRUE(calibActionFromName("near") == CalibAction::NONE);    // V1.6.0: removed
+    TEST_ASSERT_TRUE(calibActionFromName("far") == CalibAction::NONE);
+    TEST_ASSERT_TRUE(calibActionFromName("POINT") == CalibAction::NONE);
+    TEST_ASSERT_TRUE(calibActionFromName("") == CalibAction::NONE);
     TEST_ASSERT_TRUE(calibActionFromName(nullptr) == CalibAction::NONE);
+    TEST_ASSERT_EQUAL_INT(1, (int)CalibAction::POINT);                     // wire values kept stable
+    TEST_ASSERT_EQUAL_INT(3, (int)CalibAction::BASE);
+    TEST_ASSERT_EQUAL_INT(4, (int)CalibAction::SAVE);
+    TEST_ASSERT_EQUAL_INT(5, (int)CalibAction::RESET);
 }
 void test_api_error_messages_non_null() {
     TEST_ASSERT_EQUAL_STRING("ok", apiErrorMessage(ApiError::OK));

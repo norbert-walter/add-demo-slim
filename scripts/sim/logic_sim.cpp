@@ -107,7 +107,7 @@ static void reply(const std::string& members) {
 
 static void api(const char* body) {
     Command c;
-    char buf[1024], extra[512];
+    char buf[1024], extra[600];                // as on the device (http_server.cpp)
     ApiError e = apiParseRequest(body, strlen(body), c);
     if (e == ApiError::OK || e == ApiError::BAD_PARAM) last_rx = now;   // valid packet (CRC ok, known cmd)
     int code = (e == ApiError::BAD_CRC || e == ApiError::BAD_JSON) ? 400 : 200;

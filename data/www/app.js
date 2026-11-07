@@ -23,6 +23,10 @@
   const TEMP_FAULT_C = 32.0;                                         // §3.2 TEMP_HIGH
   const HEARTBEAT_MS = 2000;
   const SERIES_MAX = 100;
+  /** V1.6.0 (Sprint K1): calibration table with CALIB_POINTS points; point i is measured at the axis
+   *  position CALIB_POS[i-1] = 95 + 20 * i mm (centre of a step of the demo stair body). */
+  const CALIB_POINTS = 6;
+  const CALIB_POS = [115, 135, 155, 175, 195, 215];
   /** Settings keys in display order (CONTRACT §9). type: 'num' | 'bool' | 'str'. */
   const PARAMS = [
     { key: 'measure_pos',    type: 'num', min: 61,  max: 242,  unit: 'mm' },
@@ -33,8 +37,12 @@
     { key: 'shutter_hold',   type: 'num', min: 0,   max: 10,   unit: 's' },
     { key: 'edge_threshold', type: 'num', min: 0.5, max: 100,  unit: 'mm' },
     { key: 'base_dist',      type: 'num', min: 40,  max: 300,  unit: 'mm' },
-    { key: 'calib_near_ref', type: 'num', min: 40,  max: 300,  unit: 'mm' },
-    { key: 'calib_far_ref',  type: 'num', min: 40,  max: 300,  unit: 'mm' },
+    { key: 'calib_ref_1',    type: 'num', min: 40,  max: 300,  unit: 'mm' },   // V1.6.0: table, 6 points
+    { key: 'calib_ref_2',    type: 'num', min: 40,  max: 300,  unit: 'mm' },
+    { key: 'calib_ref_3',    type: 'num', min: 40,  max: 300,  unit: 'mm' },
+    { key: 'calib_ref_4',    type: 'num', min: 40,  max: 300,  unit: 'mm' },
+    { key: 'calib_ref_5',    type: 'num', min: 40,  max: 300,  unit: 'mm' },
+    { key: 'calib_ref_6',    type: 'num', min: 40,  max: 300,  unit: 'mm' },
     { key: 'temp',           type: 'num', min: -20, max: 99.9, unit: '°C' },
     { key: 'interlock',      type: 'bool' },
     { key: 'cooling_flow',   type: 'bool' },
@@ -364,8 +372,26 @@
     return { sets: sets, errors: errors };
   }
 
-  return { ERR_NAMES, SYS_ERR_NAMES, TEMP_FAULT_C, HEARTBEAT_MS, SERIES_MAX, PARAMS,
+  // ---- K1.4: calibration table (V1.6.0, CONTRACT §7.3) ------------------------------------------
+  /** GET_CONFIG object -> 6 rows {index: 1..6, pos: CALIB_POS[index-1], raw: cfg.calib_raw_<index>,
+   *  ref: cfg.calib_ref_<index>}; a value that is missing or not a number is null; cfg null -> all null. */
+  function calibRows(cfg) {
+    // TODO(K1.4)
+  }
+  /** Same rule as calibValid() of the firmware: all raw and ref finite numbers, every ref 40 ... 300;
+   *  sorted by ref, refs AND raws rise from point to point by at least 1 mm (exactly 1.0 is valid). */
+  function calibValid(cfg) {
+    // TODO(K1.4)
+  }
+  /** Same rule as calibApply() of the firmware: invalid table -> raw unchanged. Otherwise sort the points
+   *  by raw and interpolate linearly in the segment that contains raw; below the first / above the last
+   *  point the first / last segment is extended. The storage order of the points does not matter. */
+  function calibApply(raw, cfg) {
+    // TODO(K1.4)
+  }
+
+  return { ERR_NAMES, SYS_ERR_NAMES, TEMP_FAULT_C, HEARTBEAT_MS, SERIES_MAX, PARAMS, CALIB_POINTS, CALIB_POS,
     crc32, frame, verify, parseFramed, apiBody, errName, sysErrName, fmt, replyText,
     stateClass, view, flags, buttons, confirmText, heartbeatDue, seriesPush, pill, validationBadges,
-    checkParam, configDiff };
+    checkParam, configDiff, calibRows, calibValid, calibApply };
 });

@@ -1,4 +1,4 @@
-// Tests of the web pages (Contract V1.5.26, §5.5) – the IMS operator UI replaces the W1 pages.
+// Tests of the web pages (Contract V1.5.26, §5.5; calibration page V1.6.0 / Sprint K1) – the IMS operator UI.
 //   node --test test/js/test_pages.js
 // data/www/index.html is ONE file for two uses: served by the device at "/" and opened as a local
 // file (connection dialog). It embeds a byte-identical copy of data/www/app.js (ADDAPP).
@@ -31,8 +31,8 @@ const IDS = [
   'f_edge_threshold', 'f_base_dist', 'f_estop_nc', 'f_interlock', 'f_cooling_flow', 'f_temp', 'f_wifi_ssid',
   'f_wifi_pass', 'btnSave', 'btnReload', 'btnSetTemp', 'btnReboot',
   // calibration
-  'f_calib_near_ref', 'f_calib_far_ref', 'btnCalMoveNear', 'btnCalNear', 'btnCalMoveFar', 'btnCalFar', 'btnCalSave',
-  'btnCalBase', 'btnCalReset', 'btnCalRefs', 'calibChart',
+  ...[1, 2, 3, 4, 5, 6].flatMap((i) => ['f_calib_ref_' + i, 'calRaw' + i, 'calSt' + i, 'btnCalMove' + i, 'btnCalPoint' + i]),
+  'btnCalAuto', 'btnCalStop', 'calAutoSt', 'btnCalSave', 'btnCalBase', 'btnCalReset', 'btnCalRefs', 'calibChart', 'calValid',
   // log
   'devLog', 'btnDevLog', 'logTableBody',
   // help (V1.5.27)
@@ -77,7 +77,7 @@ test('index: device paths and endpoints', () => {
 test('index: rules from §5.5 are present', () => {
   const page = scripts(read('index.html'))[1];
   assert.match(page, /\$\('btnStop'\)\.onclick = \(\) => api\('STOP'\);/, 'STOP without dialog');
-  for (const c of ['HV_ON', 'ACK', 'REBOOT', 'CALIB_RESET']) assert.match(page, new RegExp('\\b' + c + ': \\['), 'confirmation for ' + c);
+  for (const c of ['HV_ON', 'ACK', 'REBOOT', 'CALIB_RESET', 'CALIB_AUTO']) assert.match(page, new RegExp('\\b' + c + ': \\['), 'confirmation for ' + c);
   assert.match(page, /const POLL_MS = 500;/);
   assert.match(page, /const HEARTBEAT_MS = 1000;/);
   assert.match(page, /comm_armed && Date\.now\(\) - lastApi >= HEARTBEAT_MS/, 'heartbeat only while armed');
@@ -100,6 +100,27 @@ test('index: help link opens /doc in a new tab (V1.5.27)', () => {
   assert.match(h, /<a class="nav-item" id="navHelp" href="\/doc" target="_blank" rel="noopener" data-tip="Hilfe">/);
   const page = scripts(h)[1];
   assert.match(page, /\$\('navHelp'\)\.href = baseUrl\(\) \+ '\/doc';/, 'own origin on the device, host when opened as a file');
+});
+
+test('calibration page: 6-point table (V1.6.0, Sprint K1)', () => {
+  const h = read('index.html');
+  const page = scripts(h)[1];
+  for (const id of ['f_calib_near_ref', 'f_calib_far_ref', 'btnCalNear', 'btnCalFar', 'calPosNear', 'calPosFar'])
+    assert.ok(!h.includes('id="' + id + '"'), 'the 2-point element ' + id + ' is gone');
+  assert.ok(!/calib_(near|far)_(raw|ref)/.test(page), 'no 2-point keys in the page script');
+  assert.ok(!/action: '(near|far)'/.test(page), 'no 2-point CALIB actions');
+  assert.match(page, /api\('CALIB', \{ action: 'point', index: i \}/, 'CALIB point with index');
+  assert.match(page, /api\('MOVE', \{ pos: A\.CALIB_POS\[i - 1\] \}\)/, 'Fahren uses the fixed step positions');
+  assert.match(page, /\$\('btnCalAuto'\)\.onclick = \(\) => confirmThen\('CALIB_AUTO', calibAuto\);/, 'automatic run only after confirmation');
+  assert.match(page, /\$\('btnCalStop'\)\.onclick = \(\) => api\('STOP'\);/, 'STOP on the calibration page, without dialog');
+  assert.match(page, /async function calibAuto\(\)/);
+  const auto = page.slice(page.indexOf('async function calibAuto()'));
+  assert.match(auto, /A\.CALIB_POINTS/);
+  assert.match(auto, /NOT_STABLE/, 'NOT_STABLE is retried');
+  assert.match(auto, /k < 5/, 'at most 5 retries');
+  assert.match(auto, /action: 'save'/, 'saved at the end');
+  assert.ok(auto.indexOf("action: 'save'") > auto.indexOf("action: 'point'"), 'save after the points');
+  for (const f of ['A.calibRows(', 'A.calibValid(', 'A.calibApply(']) assert.ok(page.includes(f), 'page script must use ' + f);
 });
 
 test('web-ui/ims-demo-ui.html is a byte-identical copy of data/www/index.html', () => {

@@ -197,10 +197,12 @@ HwOutputs appTick(AppState& s, const HwInputs& hw, const AppConfig& cfg);
  *  - SET: paramSet; persist -> out.persist.
  *    V1.3: key "estop_nc" only if seq.phase == IDLE && !safety.hv_on, else PRECONDITION.
  *  - CALIB: seq.phase != IDLE -> BUSY.
- *      NEAR/FAR: !stabilityIsStable -> NOT_STABLE; near_raw/far_raw = raw_mm.
+ *      POINT (V1.6.0): calib_index outside 1..CALIB_POINTS -> BAD_PARAM;
+ *                !stabilityIsStable -> NOT_STABLE; calib.raw[calib_index - 1] = raw_mm (uncalibrated), OK,
+ *                no persist (CALIB save persists).
  *      BASE:     !in_range -> PRECONDITION; !stable -> NOT_STABLE; base_dist = dist_mm.
  *      SAVE:     !calibValid -> CALIB_INVALID; else out.persist.
- *      RESET:    calib = CalibPoints{} (identity 40/40, 65/65), OK, no persist.
+ *      RESET:    calib = CalibTable{} (identity), OK, no persist.
  *  - ACK, HV_ON, HV_OFF, SHUTTER_OPEN, SHUTTER_CLOSE: safetyStep with the event;
  *    return its api; motor_stop handled as in appTick step 5.
  *  - REBOOT: hv_on -> PRECONDITION; else out.reboot and sound REBOOT.

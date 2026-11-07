@@ -1,6 +1,6 @@
 /**
  * @file params.h
- * @brief Parameters, simulated safety flags and the SET key table (FROZEN CONTRACT V1.5.6 §9).
+ * @brief Parameters, simulated safety flags and the SET key table (FROZEN CONTRACT V1.6.0 §9).
  *
  * Implementation: src/logic/params.cpp (Sprint L2).
  *
@@ -18,8 +18,13 @@
  *   edge_threshold  number  3.0     0.5 .. 100.0 mm      yes  (thickness threshold!)
  *   base_dist       number  70.0    40.0 .. 300.0 mm     yes  (V1.2: virtual reference plane,
  *                                                              thick = base_dist - dist; 70 mm = material edge)
- *   calib_near_ref  number  40.0    40.0 .. 300.0 mm     yes
- *   calib_far_ref   number  65.0    40.0 .. 300.0 mm     yes
+ *   calib_ref_1     number  65.0    40.0 .. 300.0 mm     yes  (V1.6.0: true distance of calibration point 1,
+ *   calib_ref_2     number  60.0    40.0 .. 300.0 mm     yes   step at 115 mm; point i at 95 + 20 * i mm.
+ *   calib_ref_3     number  55.0    40.0 .. 300.0 mm     yes   Writes calib.ref[i-1]. The table may be
+ *   calib_ref_4     number  50.0    40.0 .. 300.0 mm     yes   invalid meanwhile – calibApply then returns
+ *   calib_ref_5     number  45.0    40.0 .. 300.0 mm     yes   raw; CALIB save checks it)
+ *   calib_ref_6     number  40.0    40.0 .. 300.0 mm     yes
+ *   (calib_near_ref / calib_far_ref of V1.5 are unknown keys -> BAD_PARAM)
  *   estop_nc        bool    false   -                    yes  (V1.3: E-stop wiring, see below)
  *   wifi_ssid       string  ""      0 .. 32 chars        yes  (empty = no router connection)
  *   wifi_pass       string  ""      0 or 8 .. 63 chars   yes  (never reported back)
@@ -50,7 +55,7 @@ struct Params {
     float       shutter_hold   = 3.0f;      ///< V1.5: s, automatic shutter hold time
     float       edge_threshold = 3.0f;
     float       base_dist      = 70.0f;
-    CalibPoints calib;                  ///< near_ref/far_ref settable via SET, *_raw via CALIB
+    CalibTable  calib;                  ///< V1.6.0: ref[] settable via SET calib_ref_i, raw[] via CALIB point
     bool        estop_nc       = false; ///< V1.3: E-stop wiring (see above)
     char        wifi_ssid[33]  = {0};
     char        wifi_pass[64]  = {0};
@@ -62,7 +67,7 @@ struct SafetyFlags {
     float temp_c       = 18.0f;
 };
 
-/// Resets p to the defaults listed above (calib = identity 40/40, 65/65).
+/// Resets p to the defaults listed above (calib = CalibTable{}, identity).
 void paramsDefaults(Params& p);
 
 /**
@@ -81,13 +86,17 @@ ApiError paramSet(Params& p, SafetyFlags& f, const char* key,
  * Writes the configuration as ONE JSON member (no surrounding braces), exactly:
  *   "config":{"measure_pos":155.0,"maint_pos":40.0,"traverse_start":80.0,
  *   "traverse_end":240.0,"traverse_speed":10.0,"shutter_hold":3.0,"edge_threshold":3.0,"base_dist":70.0,
- *   "calib_near_raw":40.0,"calib_near_ref":40.0,"calib_far_raw":65.0,
- *   "calib_far_ref":65.0,"calib_valid":true,"interlock":false,
+ *   "calib_raw_1":65.0,"calib_ref_1":65.0,"calib_raw_2":60.0,"calib_ref_2":60.0,
+ *   "calib_raw_3":55.0,"calib_ref_3":55.0,"calib_raw_4":50.0,"calib_ref_4":50.0,
+ *   "calib_raw_5":45.0,"calib_ref_5":45.0,"calib_raw_6":40.0,"calib_ref_6":40.0,
+ *   "calib_valid":true,"interlock":false,
  *   "cooling_flow":false,"temp":18.0,"estop_nc":false,"wifi_ssid":"","wifi_pass_set":false}
  * (one line, no spaces).
  * Floats with one decimal. wifi_pass is never written; instead
- * "wifi_pass_set":true|false. Also contains the calibration raw values and
- * "calib_valid".
+ * "wifi_pass_set":true|false. Also contains the calibration table (V1.6.0: raw and ref of all
+ * six points, in this order) and "calib_valid" (= calibValid(p.calib)). The longest possible member
+ * (wifi_ssid 32 chars, all floats with 4 integer digits and sign) fits into 600 bytes – the
+ * buffer of the HTTP task.
  * @return length written (without NUL) or -1 if cap is too small (needs cap >= length + 1).
  */
 int paramsToJsonMember(const Params& p, const SafetyFlags& f, char* buf, size_t cap);

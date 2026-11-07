@@ -1,7 +1,7 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.5.28 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-07
-**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.12
+**Version:** 1.6.0 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-07
+**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.13
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
 
@@ -169,6 +169,27 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 1 | `test_hardware` crashed in `test_nvs_roundtrip` (Guru Meditation "Cache disabled but cached memory region accessed", PC in `StepperQueue::fill_i2s_buffer`). Cause in FastAccelStepper 96459ed: the I2S TX-done interrupt runs permanently with I2S_MUX and is IRAM-safe, but `fill_i2s_buffer()` and `I2sManager::i2sMuxSetBit()` were in flash; every flash operation (NVS write, SPIFFS read, OTA) crashed the board, also with the motor idle. Fix: both functions `IRAM_ATTR` (fork `norbert-walter/FastAccelStepper`, commit a64ceff on 96459ed; pull request to gin66 pending). Checked with nm/objdump: every function reachable from the interrupt is in IRAM, no literals into flash | `platformio.ini` |
 | 2 | Post-build check `scripts/check_iram.py` (all ESP32 environments): the build fails if one of the I2S interrupt functions is linked into flash (protects against library updates). Verified: fails with 96459ed, passes with a64ceff | `platformio.ini`, `scripts/` |
 | 3 | The nine native H1 tests could not see this (no flash cache on the host); the first five on-device tests were green (inputs, sensor, outputs, E-stop polarity change) | – |
+
+**Changes 1.5.28 → 1.6.0 (calibration table with 6 points, Sprint K1, 2026-11-07, decision Norbert Walter):**
+
+Reason (A1 first run and analysis 2026-11-07): the sensor curve `168.8 · V^-1.398` leaves an S-shaped
+residual over the six steps (+0.33 … −0.45 … +0.48 mm). A 2-point calibration (near/far) only removes
+offset and gain: up to 0.87 mm remain with the points 40/65, 0.71 mm with the best possible pair. The
+target ±0.5 mm needs a piecewise-linear table through all six steps.
+
+| # | Change | Where |
+|---|---|---|
+| 1 | `CalibPoints` (near/far) replaced by **`CalibTable`** with `CALIB_POINTS` = 6 points `raw[6]`, `ref[6]`; defaults raw = ref = 65, 60, 55, 50, 45, 40 mm (identity). Point *i* is measured at the axis position **95 + 20·i mm** (115 … 215, step centres) | §7.3, `measure_logic.h`, `params.h` |
+| 2 | `calibValid`: all values finite, every ref 40 … 300 mm; sorted by ref, refs **and** raws rise by at least `CALIB_MIN_STEP_MM` = 1.0 mm (exactly 1.0 is valid). The storage order of the points does not matter | §7.3, `measure_logic.h` |
+| 3 | `calibApply`: invalid table → raw unchanged; otherwise the points sorted by raw, linear interpolation in the segment that contains the value, below the first / above the last point the first / last segment is extended (the lower boom ≈ 186 mm stays plausible) | §7.1, §7.3, `measure_logic.h` |
+| 4 | `CALIB` actions **`point`** (with `index` 1 … 6, integer; `3.0` accepted; missing, 0, 7, 3.5, string, bool → `BAD_PARAM`), `base`, `save`, `reset`. **`near` and `far` are removed** (`BAD_PARAM`). `CalibAction::POINT` = 1, `Command::calib_index` | §5.2, §7.3, `types.h`, `api_parse.h`, `app_logic.h` |
+| 5 | `point`: index outside 1 … 6 → `BAD_PARAM`; not stable → `NOT_STABLE`; else `raw[i−1]` = current **uncalibrated** value, not persisted. `reset` → `CalibTable{}` (raws **and** refs), not persisted. `save` unchanged (`CALIB_INVALID` if the table is invalid) | §7.3, `app_logic.h` |
+| 6 | Parameters **`calib_ref_1` … `calib_ref_6`** (40 … 300 mm, persisted) replace `calib_near_ref` / `calib_far_ref` (now unknown keys → `BAD_PARAM`) | §9, `params.h` |
+| 7 | `GET_CONFIG`: `calib_raw_1`, `calib_ref_1`, … `calib_raw_6`, `calib_ref_6`, `calib_valid` instead of the four near/far members. Longest possible member 574 bytes (buffer 600 on the device) | §5.3, `params.h` |
+| 8 | NVS **schema version 5**: keys `craw1` … `craw6`, `cref1` … `cref6` (23 keys + `ver`). Version 4 is still loaded, **without** the calibration (old keys `cnraw`/`cnref`/`cfraw`/`cfref` ignored → identity table); other versions → defaults. The next save writes version 5 | §12, `nvs_config.h` |
+| 9 | Web UI page **Kalibrierung**: table with 6 rows (position, reference input, raw value, „Fahren“, „Übernehmen“, status), button **„Alle 6 Stufen automatisch“** (with confirmation: per point MOVE → wait until the axis stands at the target → 1 s → `CALIB point`, `NOT_STABLE` retried at most 5 × every 0.5 s; then `CALIB save`; any other error or STOP aborts without saving), **STOP** on the page, characteristic curve through all points. `app.js`: `CALIB_POINTS`, `CALIB_POS`, `calibRows`, `calibValid`, `calibApply` (same rules as the firmware) | §5.5, `data/www/app.js`, `data/www/index.html` |
+| 10 | Tests (frozen): measure_logic, types_crc, api_parse, params, nvs_config, app_logic; JS `test_app` (+3), `test_pages` (+1). Reference implementation: 22 suites, **495/495**, JS **41/41**; 19 mutants, 17 caught, 2 equivalent (sorting by ref instead of raw – same order for a valid table; the bool check of `index` – ArduinoJson does not report a bool as a number) | `test/native`, `test/js` |
+| 11 | Tools: `fake_device.py` and `sim_device.py` (`GET_CONFIG` buffer 600 as on the device), `add_client.py` help; new **`scripts/embed_app.py`** copies `app.js` into the ADDAPP block of `index.html` and `index.html` to `web-ui/ims-demo-ui.html` (run after every change of `app.js`) | `scripts/` |
 
 **Changes 1.5.28 (help icon in the web UI, 2026-11-07, decision Norbert Walter):**
 
@@ -582,7 +603,7 @@ because of a full normal queue (§6.7).
 | `GET_STATE` | – | all | heartbeat; reply extra `"state":"READY","sys_err":0,"local":false,"cycle_max_us":312,"period_max_us":1010,"overruns":0,"prio_lat_max_us":1450` (`stateExtraToJson`, §10) |
 | `GET_CONFIG` | – | all | reply extra `"config":{...}` (§5.3) |
 | `SET` | `key`, `value` | all | §9 |
-| `CALIB` | `action`: `near` `far` `base` `save` `reset` | SAFE_START, READY, RUNNING | §7.3 |
+| `CALIB` | `action`: `point` (with `index` 1 … 6) `base` `save` `reset` (V1.6.0) | SAFE_START, READY, RUNNING | §7.3 |
 | `ACK` | – | WAIT_ACK | acknowledge; rejected (`PRECONDITION`) while the cause persists |
 | `HV_ON` | – | READY, RUNNING | READY → RUNNING if interlock ∧ cooling_flow ∧ temp ≤ 30 ∧ ¬E-stop |
 | `HV_OFF` | – | all | RUNNING → READY |
@@ -594,9 +615,10 @@ because of a full normal queue (§6.7).
 
 ```
 "config":{"measure_pos":155.0,"maint_pos":40.0,"traverse_start":80.0,"traverse_end":240.0,
-"traverse_speed":10.0,"shutter_hold":3.0,"edge_threshold":3.0,"base_dist":70.0,"calib_near_raw":40.0,
-"calib_near_ref":40.0,"calib_far_raw":65.0,"calib_far_ref":65.0,"calib_valid":true,"interlock":true,
-"cooling_flow":true,"temp":18.0,"estop_nc":false,"wifi_ssid":"","wifi_pass_set":false}
+"traverse_speed":10.0,"shutter_hold":3.0,"edge_threshold":3.0,"base_dist":70.0,
+"calib_raw_1":65.0,"calib_ref_1":65.0,"calib_raw_2":60.0,"calib_ref_2":60.0,"calib_raw_3":55.0,"calib_ref_3":55.0,
+"calib_raw_4":50.0,"calib_ref_4":50.0,"calib_raw_5":45.0,"calib_ref_5":45.0,"calib_raw_6":40.0,"calib_ref_6":40.0,
+"calib_valid":true,"interlock":true,"cooling_flow":true,"temp":18.0,"estop_nc":false,"wifi_ssid":"","wifi_pass_set":false}
 ```
 (one line in reality; exact format in `params.h`, `paramsToJsonMember`)
 
@@ -618,7 +640,7 @@ check guard it.
 
 | File | Content |
 |---|---|
-| `index.html` | single page: left navigation (with help icon → `/doc` in a new tab, V1.5.28), header (device id, page title, status boxes HV and shutter, alarm box, connection, clock), pages **Prozess** (state matrix, gauge, statistics max/avg/min/n, buttons INIT · HV EIN/AUS · MESSEN · TRAVERSE · PARK · SERVICE · ACK · STOP, trend and distance chart), **Status** (cycle timing, I/O, ADD validation from `/add`), **Einstellungen** (all `SET` parameters, simulated safety flags, router SSID/password, REBOOT), **Kalibrierung** (move to near/far, capture near/far/base, save, reset, references), **Log** (device log `/log`, event table) |
+| `index.html` | single page: left navigation (with help icon → `/doc` in a new tab, V1.5.28), header (device id, page title, status boxes HV and shutter, alarm box, connection, clock), pages **Prozess** (state matrix, gauge, statistics max/avg/min/n, buttons INIT · HV EIN/AUS · MESSEN · TRAVERSE · PARK · SERVICE · ACK · STOP, trend and distance chart), **Status** (cycle timing, I/O, ADD validation from `/add`), **Einstellungen** (all `SET` parameters, simulated safety flags, router SSID/password, REBOOT), **Kalibrierung** (V1.6.0: table with 6 points – per point „Fahren“/„Übernehmen“, „Alle 6 Stufen automatisch“, STOP, base, save, reset, references, characteristic curve), **Log** (device log `/log`, event table) |
 | `app.js` | ADDAPP (protocol and rules, unchanged from W1); a byte-identical copy is inlined in `index.html` |
 | `settings.html` | redirect to `/#settings` |
 | fonts | Ubuntu / Ubuntu Mono (woff2) |
@@ -822,7 +844,7 @@ radiation source; HV and shutter are LEDs.
 `dist_raw = 168.8 · V^-1.398` (V in volt; **mm**; V1.4.2 fit to the six step centres measured
 in smoketest 0a with an 11 kΩ load at the sensor output: 1.972 V/65 mm … 2.777 V/40 mm,
 max. error 0.48 mm; far values only indicative – the lower boom reads ≈ 186 mm) → IIR (α = 0.8, first value
-initialises) → 2-point calibration → `thick = max(0, base_dist − dist)` →
+initialises) → calibration table (6 points, piecewise linear, V1.6.0) → `thick = max(0, base_dist − dist)` →
 `on_material = thick > edge_threshold`.
 Outside 35 … 300 mm (V1.4.2): `in_range = false`, IIR reset, thickness 0.
 
@@ -838,18 +860,33 @@ material); `edge_threshold` (thickness, default 3 mm) decides `on_material`.
 `CALIB base` still works where a surface is in range; on the demo `base_dist` is
 normally set with `SET`.
 
-### 7.3 Calibration commands
+### 7.3 Calibration table (V1.6.0)
+
+`CalibTable` with `CALIB_POINTS` = 6 points (`raw[i]`, `ref[i]`, i = 0 … 5); the API and the
+parameters count them **1 … 6**. Point *i* belongs to the step at the axis position **95 + 20·i mm**:
+
+| Point | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|
+| Axis position (step centre) | 115 | 135 | 155 | 175 | 195 | 215 mm |
+| Default ref = raw (true distance) | 65 | 60 | 55 | 50 | 45 | 40 mm |
+
+**Valid** (`calibValid`): every raw and ref finite, every ref 40 … 300 mm; sorted by ref, both the refs
+and the raws rise from point to point by at least `CALIB_MIN_STEP_MM` = 1.0 mm (exactly 1.0 is valid).
+**Applied** (`calibApply`): invalid table → raw unchanged; otherwise the points are sorted by raw and
+the value is interpolated linearly in its segment; below the first / above the last point the first /
+last segment is extended. The storage order of the points does not matter.
 
 | Action | Precondition | Effect |
 |---|---|---|
-| `near` / `far` | axis idle, signal stable 500 ms (±0.5 mm) | `calib_near_raw` / `calib_far_raw` = current uncalibrated value. The true distances are set with `SET calib_near_ref / calib_far_ref` |
+| `point` + `index` 1 … 6 | axis idle, signal stable 500 ms (±0.5 mm) | `raw[index−1]` = current **uncalibrated** value; not persisted. The true distances are set with `SET calib_ref_<index>` |
 | `base` | idle, in range, stable | `base_dist` = current calibrated distance |
-| `save` | calibration valid (raw span ≥ 5, ref span ≥ 5, refs 40…300) | persist all parameters |
-| `reset` | idle | identity calibration (40/40, 65/65), not persisted until `save` |
+| `save` | table valid | persist all parameters |
+| `reset` | idle | identity table (raw = ref = 65 … 40 mm), not persisted until `save` |
 
-Typical procedure on the demo: MOVE 215 (centre of the 40 mm step) → `CALIB near`;
-MOVE 115 (centre of the 65 mm step) → `CALIB far`; `SET calib_near_ref 40`,
-`calib_far_ref 65` (defaults); `CALIB save`. (Step centres V1.4.2; 105 and 205 are step edges.)
+Procedure on the demo (web UI „Alle 6 Stufen automatisch“ does exactly this): for *i* = 1 … 6:
+`MOVE 95 + 20·i` → wait until the axis stands at the target → 1 s → `CALIB point index=i`
+(`NOT_STABLE`: retry); then `CALIB save`. With the default references no `SET` is needed. (Step centres
+since V1.4.2; 105 and 225 are the edges of the stair body.)
 
 ---
 
@@ -889,8 +926,7 @@ switch outside homing) → force stop, reference lost, `MOTOR_FAULT`
 | `shutter_hold` | number | 3.0 | 0.0 … 10.0 s – automatic shutter hold time (V1.5) | yes |
 | `edge_threshold` | number | 3.0 | 0.5 … 100 mm (thickness) | yes |
 | `base_dist` | number | 70.0 | 40 … 300 mm (virtual reference plane) | yes |
-| `calib_near_ref` | number | 40.0 | 40 … 300 mm | yes |
-| `calib_far_ref` | number | 65.0 | 40 … 300 mm | yes |
+| `calib_ref_1` … `calib_ref_6` | number | 65.0, 60.0, 55.0, 50.0, 45.0, 40.0 | 40 … 300 mm – true distance of calibration point 1 … 6 (V1.6.0; `calib_near_ref`/`calib_far_ref` are unknown keys) | yes |
 | `estop_nc` | bool (or 0/1) | false | – | yes – E-stop wiring (§11); only while idle with HV off |
 | `wifi_ssid` | string | "" | 0 … 32 chars (empty = no router connection) | yes (effective after REBOOT) |
 | `wifi_pass` | string | "" | 0 or 8 … 63 chars | yes (never reported back) |
@@ -983,7 +1019,7 @@ never interrupts a higher one.
 ## 12. System (`src/system/*.h`, `src/comm/*.h`)
 
 - Task watchdog 10 s (ESP-IDF 5 API), control task registered.
-- NVS namespace `add_demo`, schema version 4 (V1.5: `shutter_hold`, measuring zone; older data → defaults), keys see `nvs_config.h`.
+- NVS namespace `add_demo`, schema version 5 (V1.6.0: calibration table `craw1…6`/`cref1…6`; version 4 is loaded without the calibration, older data → defaults), keys see `nvs_config.h`.
 - REBOOT: the network task calls `systemRestart()` `REBOOT_DELAY_MS` = 700 ms after
   the request (HTTP reply sent, REBOOT pattern played).
 
