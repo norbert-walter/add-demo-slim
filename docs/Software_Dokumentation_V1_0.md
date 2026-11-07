@@ -1720,13 +1720,15 @@ blockiert). Ideal, um Skripte und KI-Agenten vor dem ersten Lauf an der Anlage z
 **`acceptance_a1.py` – Abnahme Sprint A1**
 
 ```
-python3 scripts/acceptance_a1.py --host 192.168.4.1 --out docs/reviews/Abnahme_A1_automatisch.md
+python3 scripts/acceptance_a1.py --host 192.168.4.1
 ```
-Prüft 28 Abnahmepunkte aus Pflichtenheft Kapitel 10 über die REST-API (T01 … T29) und schreibt ein
-Protokoll. Sinnesprüfungen (LEDs, Summer) und Handgriffe (Not-Aus, Endschalter, Messschieber) fragt
-es an der passenden Stelle ab. **Bewegt die Achse, schaltet die HV, startet die Anlage neu.**
-Optionen: `--only T05,T18`, `--no-manual`, `--skip-soak`, `--sim` (gegen `sim_device.py`, betätigt
-Not-Aus und Endschalter über die Test-Hooks). Ablauf: `docs/sprints/A1.md`.
+Führt durch die Abnahme nach Pflichtenheft Kapitel 10: **Teil 1** Handprüfungen M01–M12 (der Prüfer
+handelt, das Skript fährt die Achse und prüft die Wirkung nach – auch jede Display-Taste), dann **Teil 2**
+automatische Prüfungen T01–T29 ohne Prüfer. Fragt den Namen des Prüfers ab. Protokoll
+`Abnahme_A1_<JJJJ-MM-TT>_<HHMM>.md` (in `docs/reviews`) mit allen Ergebnissen, einer Tabelle aller
+Messwerte und den Rohdaten. **Bewegt die Achse, schaltet die HV, startet die Anlage neu.**
+Optionen: `--only M09,T18`, `--no-manual` (nur Teil 2), `--tag <zusatz>`, `--pruefer <name>`,
+`--skip-soak`, `--sim` (gegen `sim_device.py`). Ablauf: `docs/sprints/A1.md`.
 
 **`fake_device.py` – simuliertes Gerät**
 
