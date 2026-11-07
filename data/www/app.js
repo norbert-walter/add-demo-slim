@@ -376,18 +376,64 @@
   /** GET_CONFIG object -> 6 rows {index: 1..6, pos: CALIB_POS[index-1], raw: cfg.calib_raw_<index>,
    *  ref: cfg.calib_ref_<index>}; a value that is missing or not a number is null; cfg null -> all null. */
   function calibRows(cfg) {
-    // TODO(K1.4)
+    const rows = [];
+    for (let i = 1; i <= CALIB_POINTS; i++) {
+      const raw = cfg != null && typeof cfg['calib_raw_' + i] === 'number' && isFinite(cfg['calib_raw_' + i]) ? cfg['calib_raw_' + i] : null;
+      const ref = cfg != null && typeof cfg['calib_ref_' + i] === 'number' && isFinite(cfg['calib_ref_' + i]) ? cfg['calib_ref_' + i] : null;
+      rows.push({ index: i, pos: CALIB_POS[i - 1], raw: raw, ref: ref });
+    }
+    return rows;
   }
   /** Same rule as calibValid() of the firmware: all raw and ref finite numbers, every ref 40 ... 300;
    *  sorted by ref, refs AND raws rise from point to point by at least 1 mm (exactly 1.0 is valid). */
   function calibValid(cfg) {
-    // TODO(K1.4)
+    if (!cfg || typeof cfg !== 'object') return false;
+    const raws = [];
+    const refs = [];
+    for (let i = 1; i <= CALIB_POINTS; i++) {
+      const r = cfg['calib_raw_' + i];
+      const rf = cfg['calib_ref_' + i];
+      if (typeof r !== 'number' || !isFinite(r) || typeof rf !== 'number' || !isFinite(rf)) return false;
+      if (rf < 40 || rf > 300) return false;
+      raws.push(r);
+      refs.push(rf);
+    }
+    const idx = [];
+    for (let i = 0; i < CALIB_POINTS; i++) idx.push(i);
+    idx.sort(function(a, b) { return refs[a] - refs[b]; });
+    for (var i = 1; i < idx.length; i++) {
+      var dr = refs[idx[i]] - refs[idx[i - 1]];
+      if (dr <= 0 || dr < 1.0) return false;
+    }
+    for (var i = 1; i < idx.length; i++) {
+      var drr = raws[idx[i]] - raws[idx[i - 1]];
+      if (drr <= 0 || drr < 1.0) return false;
+    }
+    return true;
   }
   /** Same rule as calibApply() of the firmware: invalid table -> raw unchanged. Otherwise sort the points
    *  by raw and interpolate linearly in the segment that contains raw; below the first / above the last
    *  point the first / last segment is extended. The storage order of the points does not matter. */
   function calibApply(raw, cfg) {
-    // TODO(K1.4)
+    if (!calibValid(cfg)) return raw;
+    var raws = [];
+    var refs = [];
+    for (var i = 1; i <= CALIB_POINTS; i++) {
+      raws.push(cfg['calib_raw_' + i]);
+      refs.push(cfg['calib_ref_' + i]);
+    }
+    var idx = [];
+    for (var i = 0; i < CALIB_POINTS; i++) idx.push(i);
+    idx.sort(function(a, b) { return raws[a] - raws[b]; });
+    var sr = [];
+    var sv = [];
+    for (var i = 0; i < idx.length; i++) { sr.push(raws[idx[i]]); sv.push(refs[idx[i]]); }
+    if (raw <= sr[0]) return sv[0] + (raw - sr[0]) * (sv[1] - sv[0]) / (sr[1] - sr[0]);
+    if (raw >= sr[sr.length - 1]) return sv[sv.length - 1] + (raw - sr[sr.length - 1]) * (sv[sv.length - 1] - sv[sv.length - 2]) / (sr[sr.length - 1] - sr[sr.length - 2]);
+    for (var i = 0; i < sr.length - 1; i++) {
+      if (raw >= sr[i] && raw <= sr[i + 1]) return sv[i] + (raw - sr[i]) * (sv[i + 1] - sv[i]) / (sr[i + 1] - sr[i]);
+    }
+    return raw;
   }
 
   return { ERR_NAMES, SYS_ERR_NAMES, TEMP_FAULT_C, HEARTBEAT_MS, SERIES_MAX, PARAMS, CALIB_POINTS, CALIB_POS,

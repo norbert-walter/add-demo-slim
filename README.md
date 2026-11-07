@@ -68,7 +68,7 @@ Teil der Definition of Done in `.clinerules`.
 | W1 | `data/www/app.js`, `index.html`, `settings.html` | ✅ fertig (Qwen; 2 Korrekturen Claude) | `test_app` 27/27 · `test_pages` 10/10 · Browser- und Offline-Prüfung ✅ · Gerät offen | ✅ 18.10.2026, Review_W1 |
 | IMS-UI | `data/www/index.html` (ersetzt die W1-Seiten), `settings.html` → `/#settings` | ✅ fertig (Claude, Entwurf Norbert Walter) | `test_app` + `test_pages` 35/35 · Browserprüfung Gerätemodus und lokale Datei ✅ · Gerät offen | Contract V1.5.28 (Hilfe-Symbol) |
 | A1 | Abnahme | 🔄 vorbereitet (`docs/sprints/A1.md`) | Pflichtenheft Kapitel 10; Skript gegen `sim_device.py` 26/26 + T21 Hand | – |
-| K1 | Kalibriertabelle mit 6 Stufen: `logic/types`, `measure_logic`, `api_parse`, `params`, `app_logic`, `system/nvs_config`, `data/www/app.js`, `index.html` | 🔄 vorbereitet (`docs/sprints/K1.md`) | Referenz 495/495 nativ, JS 41/41 · danach A1 Block 8 erneut | Contract V1.6.0 |
+| K1 | Kalibriertabelle mit 6 Stufen: `logic/types`, `measure_logic`, `api_parse`, `params`, `app_logic`, `system/nvs_config`, `data/www/app.js`, `index.html` | ✅ fertig (Qwen) | native 495/495 · JS 41/41 · Browser-Prüfung offen · Gerät offen | in Review |
 | D1 | `data/add.json`, Demo-Skripte | ⬜ offen | KI-Validierung | – |
 
 Reihenfolge und Begründung: `docs/Sprint_Prompts_Demoanlage_ADD_Slim_V2.md`, Abschnitt
