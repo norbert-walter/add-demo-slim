@@ -119,8 +119,7 @@ CmdId cmdFromName(const char* name) {
 // ---------------------------------------------------------------------------
 CalibAction calibActionFromName(const char* name) {
     if (!name) return CalibAction::NONE;
-    if (namesEqual(name, "near"))  return CalibAction::NEAR;
-    if (namesEqual(name, "far"))   return CalibAction::FAR;
+    if (namesEqual(name, "point")) return CalibAction::POINT;
     if (namesEqual(name, "base"))  return CalibAction::BASE;
     if (namesEqual(name, "save"))  return CalibAction::SAVE;
     if (namesEqual(name, "reset")) return CalibAction::RESET;

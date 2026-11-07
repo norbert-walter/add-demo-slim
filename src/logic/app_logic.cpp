@@ -3,6 +3,7 @@
  * @brief Complete application logic (Sprint L4).
  */
 #include "app_logic.h"
+#include "measure_logic.h"
 #include <string.h>
 #include <math.h>
 
@@ -402,12 +403,10 @@ ApiError appCommand(AppState& s, const Command& cmd, const HwInputs& hw, const A
         case CmdId::CALIB:
             if (s.seq.phase != SeqPhase::IDLE) { r = ApiError::BUSY; break; }
             switch (cmd.calib) {
-                case CalibAction::NEAR:
+                case CalibAction::POINT:
+                    if (cmd.calib_index < 1 || cmd.calib_index > CALIB_POINTS) { r = ApiError::BAD_PARAM; break; }
                     if (!stabilityIsStable(s.stab, now_ms)) { r = ApiError::NOT_STABLE; break; }
-                    s.params.calib.near_raw = s.raw_mm; break;
-                case CalibAction::FAR:
-                    if (!stabilityIsStable(s.stab, now_ms)) { r = ApiError::NOT_STABLE; break; }
-                    s.params.calib.far_raw = s.raw_mm; break;
+                    s.params.calib.raw[cmd.calib_index - 1] = s.raw_mm; break;
                 case CalibAction::BASE:
                     if (!s.in_range) { r = ApiError::PRECONDITION; break; }
                     if (!stabilityIsStable(s.stab, now_ms)) { r = ApiError::NOT_STABLE; break; }
@@ -415,7 +414,7 @@ ApiError appCommand(AppState& s, const Command& cmd, const HwInputs& hw, const A
                 case CalibAction::SAVE:
                     if (!calibValid(s.params.calib)) { r = ApiError::CALIB_INVALID; break; }
                     out.persist = true; break;
-                case CalibAction::RESET: s.params.calib = CalibPoints{}; break;
+                case CalibAction::RESET: s.params.calib = CalibTable{}; break;
                 default: r = ApiError::BAD_PARAM; break;
             } break;
         case CmdId::ACK: r = applySafety(s, SafetyEvent::ACK, in, hw, cfg, d, enteredFault); break;
