@@ -5,7 +5,7 @@ Das Skript schreibt das Hauptprotokoll `Abnahme_A1_<Datum>_<Uhrzeit>.md` (Teil 1
 automatisch, alle Messwerte). Dieses Blatt erfasst nur, was außerhalb des Skripts geprüft wird, und das
 Gesamtergebnis.
 
-**Prüfer:** ______________ · **Datum:** ______________ · **Hauptprotokoll:** ______________________
+**Prüfer:** Norbert Walter · **Datum:** 08.11.2026 · **Hauptprotokoll:** Abnahme_A1_2026-11-08-1519_wiederholung.md
 
 | Kriterium (Pflichtenheft Kap. 10) | Prüfung | Ergebnis | Bemerkung |
 |---|---|---|---|
@@ -19,11 +19,11 @@ Gesamtergebnis.
 
 ## Gesamtergebnis
 
-- Hauptprotokoll: ____ bestanden · ____ nicht bestanden · ____ nicht geprüft
-- Befunde und Nacharbeiten:
+- Hauptprotokoll: bestanden
+- Befunde und Nacharbeiten: siehe Unterprotokolle Abnahme_A1_2026-11-08-1519_xxx.md
 
 | Nr. | Befund | Maßnahme | Status |
 |---|---|---|---|
 | | | | |
 
-**Abnahme erteilt:** ☐ ja ☐ mit Auflagen ☐ nein  ·  Datum / Unterschrift: ______________
+**Abnahme erteilt:** x ja ☐ mit Auflagen ☐ nein  ·  Datum / Unterschrift: 08.11.2026 Norbert Walter
