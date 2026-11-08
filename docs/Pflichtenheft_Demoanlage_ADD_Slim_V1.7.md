@@ -20,6 +20,10 @@
 - **Kanten (T19):** hin und zurück nur aufzeichnen; geprüft wird nur, dass sie erkannt werden
   (105 bzw. 225 ± 10 mm).
 - **Zeitwerte (T29, Lasttests):** ≤ 3100 µs statt 3000 µs (Demoanlage, nicht kritisch).
+- **Profilfahrt (T19):** Stufenwerte in der Fahrt gelten als Einzelwerte: ±2 mm.
+- **Parallele Anfragen (T26):** Bei 8 gleichzeitigen Verbindungen lehnt der Webserver des ESP32 einzelne
+  Verbindungsaufbauten ab; sie werden bis zu dreimal wiederholt und gezählt. Fehler sind nur vertauschte
+  oder ganz verlorene Antworten.
 - **Teilläufe der Abnahme:** Der Sicherheitsblock darf nur entfallen, wenn der Prüfer zu Beginn bestätigt,
   dass er mit dem jetzigen Stand bestanden war (Hinweis: wahrheitsgemäß, aus Haftungsgründen; Name, Zeit
   und Nachweis im Protokoll). Sonst läuft er zuerst. Ein Volllauf beginnt immer mit dem Sicherheitsblock.

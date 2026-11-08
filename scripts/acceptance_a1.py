@@ -42,8 +42,8 @@ SYS_ERR = ["NONE", "ESTOP", "TEMP_HIGH", "COMM_TIMEOUT", "MOTOR_FAULT", "HOMING_
 # reaches ±2 mm for single values after the calibration (3σ ≤ 2 mm); the MEAN per step stays at ±1 mm,
 # so that a wrong calibration (up to 2.4 mm off) is still found. Values beside the material (lower boom,
 # far outside the table) are recorded only; the edges in T19 are recorded, only "found" is checked.
-TOL_MM = 1.0                # mean per step (T18, T20, step medians T19)
-SINGLE_MM = 2.0             # single values: 3σ ≤ SINGLE_MM
+TOL_MM = 1.0                # mean per step, stationary (T18, T20)
+SINGLE_MM = 2.0             # single values: 3σ ≤ SINGLE_MM; step medians of the moving profile run (T19)
 SIGMA_MAX = round(SINGLE_MM / 3, 2)
 RAW_PLAUS_MM = 7.0          # T18K: uncalibrated value against the reference (sensor / stair body plausible)
 EDGE_FOUND_MM = 10.0        # T19: edge must be found within 105 / 225 ± 10 mm in each direction
@@ -1253,7 +1253,7 @@ def traverse_run(c, start, end, speed):
     return samples, closed, p["measure"]["avg"], p["measure"]["n"]
 
 
-@test("T19", 2, "8", "Profilfahrt hin und zurück: Kanten erkannt und aufgezeichnet, Stufen ±1 mm, Shutter durchgehend offen")
+@test("T19", 2, "8", "Profilfahrt hin und zurück: Kanten erkannt und aufgezeichnet, Stufen ±2 mm (in Fahrt), Shutter durchgehend offen")
 def t19(c):
     """Decision 08.11.2026: the edges are measured in both directions and compared (the direction of travel
     shifts them – sensor spot and filter lag); the mean of both is checked against the stair body.
@@ -1279,7 +1279,7 @@ def t19(c):
         for pos, _, thick in STEPS:
             v = sorted(s_[1] for s_ in samples if abs(s_[0] - pos) <= 5.0)
             med = v[len(v) // 2] if v else float("nan")
-            st = c.val("%s: Stufe %d mm: Dicke (Median)" % (name, pos), med, "mm", nom=thick, tol=TOL_MM)
+            st = c.val("%s: Stufe %d mm: Dicke (Median)" % (name, pos), med, "mm", nom=thick, tol=SINGLE_MM)  # in motion
             c.val("%s: Stufe %d mm: Anzahl Werte" % (name, pos), len(v))
             if st == "fail": bad.append("%s %d mm" % (name, pos))
         c.val("%s: Mittelwert der Anlage" % name, avg, "mm", lo=5.0, hi=30.0, warn=False)
@@ -1346,7 +1346,7 @@ def t25(c):
     return stress(c, "flood", "--n", "200")
 
 
-@test("T26", 2, "4", "Parallele Anfragen (8 Threads, 400 Befehle): keine vertauschte Antwort")
+@test("T26", 2, "4", "Parallele Anfragen (8 Threads, 400 Befehle): keine vertauschte oder verlorene Antwort")
 def t26(c):
     if c.cache.get("quiet", "ok") != "ok":
         c.notes.append("Ruhe-Check vor Block 3: " + c.cache["quiet"])

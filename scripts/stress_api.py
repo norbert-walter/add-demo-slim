@@ -234,22 +234,35 @@ def t_parallel(host, n, threads):
     jobs = [random.choice(cases) for _ in range(n)]
 
     def one(job):
+        """V1.6.x (08.11.2026): the single-threaded HTTP server of the ESP32 refuses some connections when 8
+        clients connect at once (connect timeout). The point of this test is that no reply is MIXED UP, so
+        a timed-out request is retried (at most 3 attempts) and only counted; a request that gets no reply
+        at all is 'lost' and fails the test."""
         cmd, params, exp = job
-        r, dt = api(host, cmd, params, timeout=10.0)
-        return cmd, exp, r, dt
+        for attempt in range(3):
+            try:
+                r, dt = api(host, cmd, params, timeout=10.0)
+                return cmd, exp, r, dt, attempt
+            except (OSError, TimeoutError) as e:          # URLError is an OSError
+                last = e
+        return cmd, exp, None, 0.0, 3
 
-    bad, busy, worst = [], 0, 0.0
+    bad, busy, worst, retried, lost = [], 0, 0.0, 0, 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as ex:
-        for cmd, exp, r, dt in ex.map(one, jobs):
+        for cmd, exp, r, dt, retries in ex.map(one, jobs):
             worst = max(worst, dt)
-            if r.get("err") == BUSY:
+            retried += min(retries, 2) if r is not None else 2
+            if r is None:
+                lost += 1
+            elif r.get("err") == BUSY:
                 busy += 1
             elif r.get("cmd") != cmd or r.get("err") != exp:
                 bad.append((cmd, exp, r))
-    print(f"  {n} requests, {threads} threads: {len(bad)} mismatches, {busy} BUSY, worst {worst:.1f} ms")
+    print(f"  {n} requests, {threads} threads: {len(bad)} mismatches, {busy} BUSY, {lost} lost, "
+          f"{retried} connection timeouts retried (info), worst {worst:.1f} ms")
     for b in bad[:10]:
         print("   mismatch:", b)
-    return cycle_ok(host, base) and not bad
+    return cycle_ok(host, base) and not bad and not lost
 
 
 WEB_PATHS = ["/", "/settings", "/app.js",
