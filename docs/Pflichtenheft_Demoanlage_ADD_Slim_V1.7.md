@@ -21,6 +21,10 @@
   Shutter-Mechanik), auch bei der Kalibrierung am Stufenkörper. Dafür muss die Firmware von einer
   stehenden Messung direkt zur nächsten Stufe bzw. in die Profilfahrt wechseln können (Contract
   V1.6.4, folgt); bis dahin schließt der Shutter zwischen den Stufen kurz (das Protokoll zählt es).
+- **Abnahme in drei Blöcken:** (1) Sicherheit – Not-Aus, Shutter, Fahrtrichtung, Endlagen, danach Not-Aus
+  in Fahrt und ≤ 2 ms; (2) weitere Handprüfungen; (3) automatische Prüfungen. **Ohne bestandenen
+  Sicherheitsblock keine weitere Prüfung**; beim ersten Sicherheitsfehler bricht die Abnahme ab. Ergebnis
+  und Dauer je Block im Protokollkopf; bei Fehlern zusätzlich ein Fehlerbericht mit nur den Fehlern.
 
 ### V1.7.13 → V1.7.14 (Contract V1.6.3, 08.11.2026, Entscheidung Norbert Walter, Sprint K2)
 - **Kalibrierung unter Messbedingungen.** Der offene Shutter (am Board der Spindelausgang) verschiebt

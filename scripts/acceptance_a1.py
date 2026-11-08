@@ -1,26 +1,28 @@
 #!/usr/bin/env python3
 """acceptance_a1.py – Abnahme Sprint A1 (Pflichtenheft Kapitel 10).
 
-Ablauf:
-  Teil 1 – Handprüfungen (Prüfer an der Anlage, ca. 45 min): Summer, LEDs, Endschalter, Zollstock,
-           Messschieber, MOTOR_FAULT, Not-Aus, Display-Tasten, Weboberfläche, Oszilloskop.
-           Das Skript führt durch, fährt die Achse und prüft die Wirkung jeder Handlung selbst nach.
-  Teil 2 – automatische Prüfungen (ca. 35 min, ohne Prüfer): REST-API, Sicherheitslogik, Shutter,
-           Messung, Last- und Dauertests. Vorher alle anderen Clients (Browser, add_client shell)
-           schließen – sie würden den Watchdog-Test verfälschen.
-Ergebnis: Protokoll Abnahme_A1_<JJJJ-MM-TT>_<HHMM>[_<tag>].md mit allen Messwerten, standardmäßig in
-docs/reviews (falls vorhanden). Antworten: j = ja, n = nein, ü = nicht geprüft.
+Ablauf in drei Blöcken (Entscheidung 08.11.2026):
+  Block 1 – Sicherheit, immer zuerst und Pflicht: S01 Not-Aus im Stillstand, S02 Shutter, S03 Fahrtrichtung,
+           S04/S05 Endlagen, S06 Not-Aus in Fahrt, S07 Not-Aus ≤ 2 ms (Oszilloskop). Beim ersten Fehler
+           (auch eine unbeantwortete Frage) bricht die Abnahme ab: erst beheben, dann neu starten.
+  Block 2 – weitere Handprüfungen (Prüfer an der Anlage): Summer, LEDs, Maßband, Messschieber, Display,
+           Weboberfläche.
+  Block 3 – automatische Prüfungen (ca. 40 min, ohne Prüfer): REST-API, Sicherheitslogik, Shutter, Messung,
+           Last- und Dauertests. Vorher alle anderen Clients (Browser, add_client shell) schließen.
+Ergebnis: Abnahme_A1_<JJJJ-MM-TT>_<HHMM>[_<tag>].md mit Ergebnis und Dauer je Block und allen Messwerten;
+bei Fehlern zusätzlich Fehlerbericht_<JJJJ-MM-TT>_<HHMM>[_<tag>].md (gleicher Aufbau, nur die Fehler).
+Standardverzeichnis docs/reviews (falls vorhanden). Antworten: j = ja, n = nein, ü = nicht geprüft.
 
 ACHTUNG: Die Achse fährt über den ganzen Verfahrweg, die (simulierte) HV wird geschaltet, die Anlage
 startet zweimal neu. Fahrbereich frei, Not-Aus in Reichweite. Abbruch mit Strg+C (sendet STOP).
 
     python3 scripts/acceptance_a1.py --host 192.168.4.1
-    python3 scripts/acceptance_a1.py --host 192.168.4.1 --only T18,T19 --tag wiederholung
-    python3 scripts/acceptance_a1.py --host 192.168.4.1 --no-manual            (nur Teil 2)
-    python3 scripts/acceptance_a1.py --host localhost:8090 --sim --yes         (gegen sim_device.py)
+    python3 scripts/acceptance_a1.py --host 192.168.4.1 --only T18,T19 --tag wiederholung   (Block 1 läuft vorher)
+    python3 scripts/acceptance_a1.py --host 192.168.4.1 --no-manual          (Block 1 und 3, ohne Block 2)
+    python3 scripts/acceptance_a1.py --host localhost:8090 --sim --yes       (gegen sim_device.py)
 
 --sim: gegen scripts/sim_device.py; Not-Aus und Endschalter über die Test-Hooks, Fragen bleiben
-offen, Display- und Messwert-Eingaben werden übersprungen.
+offen, Display- und Messwert-Eingaben werden übersprungen (im Simulator sperrt ein ⏭ nicht).
 """
 import argparse, datetime, json, os, random, subprocess, sys, threading, time, urllib.error, urllib.request
 
@@ -262,7 +264,7 @@ class Ctx:
 
     @property
     def interactive(self):
-        return not (self.args.no_manual or self.args.sim)
+        return not self.args.sim               # --no-manual only leaves out block 2; the safety block always asks
 
     def val(self, name, value, unit="", eq=None, nom=None, tol=None, lo=None, hi=None, mx=None, mn=None,
             target=None, warn=True, status=None):
@@ -329,8 +331,7 @@ class Ctx:
             except ValueError: pass
 
     def need_hand(self):
-        if not self.interactive and not self.args.sim:
-            raise Skip("Handprüfung (--no-manual)")
+        pass                                   # kept for the call sites; block 2 is left out as a whole
 
 
 TESTS = []
@@ -343,35 +344,103 @@ def test(tid, part, block, title):
     return deco
 
 
-# ================================================================ Teil 1 – Handprüfungen
-@test("M01", 1, "1, 2", "Neustart: Summer lang–kurz, Startsignal kurz–lang, SAFE_START, blaue LED 0,5 Hz")
-def m01(c):
+# ====================================================== Block 1 – Sicherheit (zuerst, Pflicht)
+# Decision 08.11.2026 (Norbert Walter): the safety checks come first, in this order: emergency stop,
+# shutter, direction of travel, end positions – then the emergency stop in motion. Without a passed
+# safety block no further check runs; an error there has to be fixed first.
+
+@test("S01", 0, "2, 4, 6", "Not-Aus im Stillstand: ESTOP, HV aus, Shutter zu, Dauerton, ACK erst nach Lösen am Display (1 s)")
+def s01(c):
     d = c.d
-    c.prompt("Gleich startet die Anlage neu. Auf Summer und Display achten")
-    d.reboot()
     p = d.proc()
-    check(p["state"] == "SAFE_START", "nach Neustart %s" % p["state"])
-    check(d.count("boot: ready") >= 1, "keine Zeile 'boot: ready' im Log")
-    c.val("Zustand nach Neustart", p["state"], eq="SAFE_START")
-    c.asks(["Vor dem Neustart Summer lang–kurz?", "Nach dem Neustart Summer kurz–lang?",
-            "Display zeigt SAFE_START?", "Blaue LED blinkt gleichmäßig 1 s an / 1 s aus (10 Perioden ≈ 20 s)?"])
-    return "SAFE_START, boot: ready im Log"
+    if p["safety"]["estop"]:
+        raise Problem("Voraussetzung: Not-Aus ist schon gedrückt – lösen und neu starten")
+    if p["state"] in ("FAULT", "WAIT_ACK"):
+        d.api("ACK")
+        p = d.wait(lambda q: q["state"] not in ("FAULT", "WAIT_ACK"), 5, "Fehler quittiert", allow_fault=True)
+    if not d.still(p):
+        d.ok("STOP"); d.idle(30, "STOP")
+    c.prompt("Die Achse steht und bewegt sich in diesem Test nicht. Gleich bei 'JETZT' den NOT-AUS drücken "
+             "und gedrückt halten")
+    if c.args.sim:
+        d.hook(estop=1)
+    else:
+        now_banner("NOT-AUS drücken und gedrückt halten")
+    p = d.wait(lambda q: q["safety"]["estop"] and q["state"] in ("FAULT", "WAIT_ACK"), 60, "Not-Aus", allow_fault=True)
+    c.val("Fehler", SYS_ERR[p["err"]], eq="ESTOP")
+    c.val("HV / Shutter", "%s / %s" % ("an" if p["safety"]["hv_on"] else "aus", p["safety"]["shutter"]),
+          eq="aus / closed")
+    e = d.api("ACK")
+    c.val("ACK per API bei gedrücktem Not-Aus", ERR.get(e, e), eq="PRECONDITION")
+    c.asks(["Dauerton des Summers etwa 4 s?",
+            "Display: alle Tasten ausgeblendet, nur die ACK-Fläche, grau solange Not-Aus gedrückt?"])
+    if c.args.sim:
+        d.hook(estop=0)
+        d.wait(lambda q: not q["safety"]["estop"], 10, "Not-Aus gelöst", allow_fault=True)
+        d.ok("ACK")
+    else:
+        c.prompt("Not-Aus jetzt LÖSEN")
+        d.wait(lambda q: not q["safety"]["estop"], 60, "Not-Aus gelöst", allow_fault=True)
+        c.prompt("Finger auf die Display-Taste STOP legen und liegen lassen, dann Enter")
+        c.asks(["Quittiert der liegende Finger NICHT (ACK-Fläche bleibt)?"])
+        now_banner("ACK-Fläche auf dem Display drücken und 1 s halten")
+        t0 = time.time()
+        d.wait(lambda q: q["state"] not in ("FAULT", "WAIT_ACK"), 60, "Quittierung am Display", allow_fault=True)
+        c.val("Zeit bis Quittierung am Display", time.time() - t0, "s", mn=1.0, warn=False)
+    p = d.wait(lambda q: q["state"] in ("SAFE_START", "READY"), 3, "nach ACK")
+    check(p["err"] == 0, "nach ACK Fehler %s" % SYS_ERR[p["err"]])
+    return "ESTOP, HV aus, Shutter zu, ACK über API abgewiesen, Quittierung am Display"
 
 
-@test("M02", 1, "2, 3", "Referenzfahrt: Position 0, Endschalter frei, Summer 1 Piep")
-def m02(c):
+@test("S02", 0, "4", "Shutter im Stillstand: zu, rote LED aus, Öffnen ohne HV abgewiesen")
+def s02(c):
     d = c.d
-    c.prompt("Gleich startet die Referenzfahrt (INIT). Am Ende auf den Summer achten")
+    p = d.proc()
+    if p["safety"]["hv_on"]:
+        d.ok("HV_OFF")
+        p = d.proc()
+    c.val("Shutter laut /proc", p["safety"]["shutter"], eq="closed")
+    e = d.api("SHUTTER_OPEN")
+    c.val("SHUTTER_OPEN ohne HV", ERR.get(e, e), status="ok" if e != 0 else "fail", target="abgewiesen")
+    if e == 0:
+        d.api("SHUTTER_CLOSE")
+    c.asks(["Shutter mechanisch zu und rote LED aus?"])
+    check(p["safety"]["shutter"] == "closed" and e != 0, "Shutter offen oder Öffnen ohne HV angenommen")
+    return "Shutter zu, Öffnen ohne HV abgewiesen (%s)" % ERR.get(e, e)
+
+
+@test("S03", 0, "2, 3", "Fahrtrichtung: Referenzfahrt zum hinteren Endschalter (Parkseite), +mm weg davon, Summer 1 Piep")
+def s03(c):
+    d = c.d
+    p = d.proc()
+    c.prompt("Gleich startet die Referenzfahrt (INIT). Der Schlitten muss zur PARKSEITE (hinterer Endschalter) "
+             "fahren. Fährt er in die andere Richtung: SOFORT NOT-AUS. Hand am Not-Aus")
     t0 = time.time()
-    d.ready()
-    p = d.proc()
+    if p["state"] == "READY" and p["motion"]["homed"]:
+        d.ok("INIT")                                       # re-home on purpose: the direction is watched
+    else:
+        say("  Referenzfahrt (INIT) läuft – Hand am Not-Aus ...")
+        d.ok("INIT")
+    fwd = [False]
+
+    def done(q):
+        fwd[0] = fwd[0] or q["motion"]["limit_fwd"]
+        return q["state"] == "READY" and q["motion"]["homed"] and d.still(q)
+    d.wait(done, 120, "Referenzfahrt")
     c.val("Dauer INIT", time.time() - t0, "s")
+    c.val("vorderer Endschalter während INIT", "nein" if not fwd[0] else "ja", eq="nein")
+    p = d.proc()
     c.val("Position nach INIT", p["motion"]["pos"], "mm", nom=0.0, tol=0.05, warn=False)
-    c.asks(["Hat der Summer am Ende der Referenzfahrt einmal kurz gepiept?"])
-    return "READY, pos %.1f" % p["motion"]["pos"]
+    c.asks(["Ist der Schlitten zur Parkseite (hinterer Endschalter) gefahren?",
+            "Hat der Summer am Ende der Referenzfahrt einmal kurz gepiept?"])
+    c.prompt("Gleich fährt die Achse langsam auf 100 mm. Sie muss sich von der Parkseite WEG bewegen")
+    d.move(100, speed=10)
+    c.asks(["Ist der Schlitten von der Parkseite weg gefahren?"])
+    check(not fwd[0], "vorderer Endschalter während der Referenzfahrt – Fahrtrichtung falsch?")
+    return "INIT zur Parkseite, +mm weg davon"
 
 
-@test("M03", 1, "2", "Endschalter vorn/hinten in /proc, kein Fehler bei stehender Achse")
+@test("S04", 0, "2", "Endlagen: Endschalter vorn/hinten in /proc, kein Fehler bei stehender Achse")
 def m03(c):
     d = c.d
     c.need_hand()
@@ -390,6 +459,123 @@ def m03(c):
         check(p["state"] not in ("FAULT", "WAIT_ACK"), "Endschalter bei stehender Achse löst Fehler aus")
         c.val("%s gedrückt / losgelassen erkannt" % key, "ja", eq="ja")
     return "beide Endschalter erkannt, kein Fehler"
+
+
+@test("S05", 0, "3", "Endlagen: unerwarteter Endschalter während der Fahrt -> MOTOR_FAULT, Achse steht")
+def m08(c):
+    d = c.d
+    c.need_hand()
+    d.ready()
+    d.move(60)
+    c.prompt("Gleich fährt die Achse langsam von 60 nach 200 mm. Erst bei 'JETZT' den VORDEREN Endschalter kurz drücken")
+    d.ok("MOVE", pos=200, speed=5)
+    d.wait(lambda q: q["motion"]["state"] == "moving", 3, "Fahrt läuft")
+    if c.args.sim:
+        time.sleep(1.0); d.hook(press_fwd=1); time.sleep(0.2); d.hook(press_fwd=0)
+    else:
+        now_banner("VORDEREN Endschalter kurz drücken")
+    p = d.wait(lambda q: q["state"] in ("FAULT", "WAIT_ACK"), 40, "MOTOR_FAULT", allow_fault=True)
+    c.val("Fehler", SYS_ERR[p["err"]], eq="MOTOR_FAULT")
+    c.val("Halteposition", p["motion"]["pos"], "mm")
+    check(p["err"] == 4, "Fehler %s (erwartet MOTOR_FAULT)" % SYS_ERR[p["err"]])
+    stopped = p["motion"]["pos"]
+    time.sleep(1.0)
+    check(abs(d.proc()["motion"]["pos"] - stopped) < 1.0, "Achse fährt weiter")
+    d.ok("ACK")
+    p = d.wait(lambda q: q["state"] == "SAFE_START", 3, "SAFE_START nach ACK")
+    check(not p["motion"]["homed"], "Referenz nach MOTOR_FAULT noch gültig")
+    return "MOTOR_FAULT bei %.1f mm, nach ACK INIT nötig" % stopped
+
+
+@test("S06", 0, "2, 4, 6", "Not-Aus in Fahrt (HV an, Shutter offen): ESTOP, HV aus, Shutter zu, Referenz verloren")
+def s06(c):
+    d = c.d
+    for attempt in range(1, 4):
+        d.ready(hv=True)
+        c.prompt("Gleich startet eine Profilfahrt (80 -> 240 mm, 5 mm/s, Shutter öffnet). NICHT vorher drücken: "
+                 "erst wenn 'JETZT' erscheint (nach etwa 5 – 10 s) den NOT-AUS drücken und gedrückt halten")
+        d.ok("START_TRAVERSE", start=80, end=240, speed=5)
+        p = d.wait(lambda q: (q["motion"]["mode"] == "traverse" and q["safety"]["shutter"] == "open")
+                   or q["state"] in ("FAULT", "WAIT_ACK"), 60, "Profilfahrt läuft", allow_fault=True)
+        if p["state"] not in ("FAULT", "WAIT_ACK"):
+            break
+        say("  Not-Aus zu früh gedrückt (Profilfahrt lief noch nicht) – Versuch %d von 3" % attempt)
+        c.notes.append("Versuch %d: zu früh gedrückt" % attempt)
+        if not c.args.sim:
+            c.prompt("Not-Aus LÖSEN")
+        d.wait(lambda q: not q["safety"]["estop"], 60, "Not-Aus gelöst", allow_fault=True)
+        d.api("ACK")
+        if attempt == 3:
+            raise Problem("Not-Aus dreimal vor dem Start der Profilfahrt gedrückt")
+    if c.args.sim:
+        d.hook(estop=1)
+    else:
+        now_banner("NOT-AUS drücken und gedrückt halten")
+    p = d.wait(lambda q: q["state"] in ("FAULT", "WAIT_ACK"), 60, "Not-Aus", allow_fault=True)
+    c.val("Fehler", SYS_ERR[p["err"]], eq="ESTOP")
+    c.val("Halteposition", p["motion"]["pos"], "mm")
+    c.val("HV / Shutter", "%s / %s" % ("an" if p["safety"]["hv_on"] else "aus", p["safety"]["shutter"]),
+          eq="aus / closed")
+    check(p["err"] == 1 and p["safety"]["estop"], "Fehler %s (erwartet ESTOP)" % SYS_ERR[p["err"]])
+    check(not p["safety"]["hv_on"] and p["safety"]["shutter"] == "closed", "HV/Shutter nicht aus")
+    d.ok("SET", key="cooling_flow", value=False)
+    p2 = d.proc()
+    c.val("Fehler mit cooling_flow = false", SYS_ERR[p2["err"]], eq="ESTOP")
+    check(p2["err"] == 1, "mit cooling_flow false: Fehler %s" % SYS_ERR[p2["err"]])
+    d.expect(-6, "ACK")
+    d.ok("SET", key="cooling_flow", value=True)
+    if c.args.sim:
+        d.hook(estop=0)
+        d.wait(lambda q: not q["safety"]["estop"], 10, "Not-Aus gelöst", allow_fault=True)
+        d.ok("ACK")
+    else:
+        c.prompt("Not-Aus jetzt LÖSEN")
+        d.wait(lambda q: not q["safety"]["estop"], 60, "Not-Aus gelöst", allow_fault=True)
+        now_banner("ACK-Fläche auf dem Display drücken und 1 s halten")
+        d.wait(lambda q: q["state"] != "WAIT_ACK", 60, "Quittierung am Display", allow_fault=True)
+    p = d.wait(lambda q: q["state"] in ("SAFE_START", "READY"), 3, "nach ACK")
+    c.val("Zustand nach ACK", p["state"], eq="SAFE_START")
+    check(p["state"] == "SAFE_START" and not p["motion"]["homed"], "nach Not-Aus in Fahrt %s, homed %s" % (
+        p["state"], p["motion"]["homed"]))
+    return "ESTOP in Fahrt, HV aus, Shutter zu; mit cooling_flow false weiter ESTOP; danach INIT nötig"
+
+
+@test("S07", 0, "4", "Not-Aus stoppt die Bewegung ≤ 2 ms (Oszilloskop)")
+def m12(c):
+    d = c.d
+    c.need_hand()
+    if not c.interactive:
+        raise Skip("Oszilloskop nur von Hand")
+    d.ready()
+    d.move(2)
+    c.prompt("Oszilloskop: Kanal 1 an PROBE (GPIO 22), Kanal 2 an STEP von Treiber X, Trigger Kanal 1 fallende Flanke, "
+             "Single, 1 ms/div. Gleich fährt die Achse mit 20 mm/s nach 240 mm")
+    d.ok("MOVE", pos=240, speed=20)
+    d.wait(lambda q: q["motion"]["vel"] >= 19.0, 10, "20 mm/s erreicht")
+    now_banner("NOT-AUS drücken")
+    d.wait(lambda q: q["state"] in ("FAULT", "WAIT_ACK"), 30, "Not-Aus", allow_fault=True)
+    ms = c.number("Zeit von der Flanke (Kanal 1) bis zum letzten Schrittpuls (Kanal 2)", "ms")
+    c.val("Not-Aus -> letzter Schritt", ms, "ms", mx=2.0)
+    c.prompt("Bildschirmfoto als docs/reviews/A1_estop_oszi.png speichern. Not-Aus LÖSEN")
+    d.wait(lambda q: not q["safety"]["estop"], 60, "Not-Aus gelöst", allow_fault=True)
+    d.ok("ACK")
+    check(ms <= 2.0, "%.2f ms" % ms)
+    return "%.2f ms" % ms
+
+
+# ================================================ Block 2 – weitere Handprüfungen
+@test("M01", 1, "1, 2", "Neustart: Summer lang–kurz, Startsignal kurz–lang, SAFE_START, blaue LED 0,5 Hz")
+def m01(c):
+    d = c.d
+    c.prompt("Gleich startet die Anlage neu. Auf Summer und Display achten")
+    d.reboot()
+    p = d.proc()
+    check(p["state"] == "SAFE_START", "nach Neustart %s" % p["state"])
+    check(d.count("boot: ready") >= 1, "keine Zeile 'boot: ready' im Log")
+    c.val("Zustand nach Neustart", p["state"], eq="SAFE_START")
+    c.asks(["Vor dem Neustart Summer lang–kurz?", "Nach dem Neustart Summer kurz–lang?",
+            "Display zeigt SAFE_START?", "Blaue LED blinkt gleichmäßig 1 s an / 1 s aus (10 Perioden ≈ 20 s)?"])
+    return "SAFE_START, boot: ready im Log"
 
 
 @test("M04", 1, "2", "LED grün folgt HV, LED rot folgt Shutter")
@@ -424,9 +610,12 @@ def m05(c):
     return "TEMP_HIGH, quittiert"
 
 
-@test("M06", 1, "2", "Abstand neben dem Messgut plausibel (Zollstock, ±5 %)")
+@test("M06", 1, "2", "Abstand neben dem Messgut plausibel (Maßband, ±5 %)")
 def m06(c):
     d = c.d
+    c.prompt("M06: Die Achse fährt auf 242 mm (ganz vorn, neben dem Stufenkörper), der Sensor schaut auf den "
+             "unteren Ausleger. Danach misst du mit dem Maßband den Abstand von der Vorderkante des Sensorfensters "
+             "bis zur Oberfläche des unteren Auslegers und gibst ihn in mm ein (keinen Prozentwert)")
     d.ready(hv=True)
     d.ok("START_MEASURE", pos=242)
     d.wait(lambda q: q["motion"]["mode"] == "measure" and abs(q["motion"]["pos"] - 242) <= 0.1 and q["motion"]["vel"] == 0,
@@ -435,21 +624,29 @@ def m06(c):
     dist = d.proc()["measure"]["dist"]
     d.ok("STOP"); d.ok("HV_OFF")
     c.val("Abstand laut Anlage bei 242 mm", dist, "mm")
-    ruler = c.number("Achse bei 242 mm. Abstand Sensorfenster – unterer Ausleger mit dem Zollstock", "mm")
-    dev = (dist - ruler) / ruler * 100
-    c.val("Abstand Zollstock", ruler, "mm")
-    c.val("Abweichung", dev, "%", nom=0.0, tol=5.0)
-    check(abs(dev) <= 5.0, "Abweichung %.1f %%" % dev)
-    return "Anlage %.1f mm, Zollstock %.1f mm (%.1f %%)" % (dist, ruler, dev)
+    tape = c.number("Abstand Sensorfenster – unterer Ausleger, mit dem Maßband gemessen", "mm")
+    check(tape > 0, "Maßband-Wert muss größer 0 sein")
+    c.val("Abstand Maßband", tape, "mm")
+    tol = round(0.05 * tape, 1)
+    c.val("Abweichung Anlage – Maßband", dist - tape, "mm", nom=0.0, tol=tol, target="0 ± %.1f (5 %%)" % tol)
+    c.val("Abweichung in Prozent", (dist - tape) / tape * 100, "%")
+    check(abs(dist - tape) <= tol, "Abweichung %.1f mm (zulässig ±%.1f mm)" % (dist - tape, tol))
+    return "Anlage %.1f mm, Maßband %.1f mm" % (dist, tape)
 
 
 @test("M07", 1, "3", "MOVE ±0,1 mm, keine Schrittverluste nach 10 Fahrten (Messschieber)")
 def m07(c):
     d = c.d
     c.need_hand()
+    c.prompt("M07 prüft, ob der Antrieb Schritte verliert. Ablauf: (1) die Achse fährt auf 50 mm, du misst mit "
+             "dem Messschieber den Abstand Schlitten – fester Bezugspunkt (z. B. Rahmen) und gibst ihn ein; "
+             "(2) die Achse macht 10 Fahrten zu zufälligen Zielen zwischen 61 und 240 mm mit 5 … 20 mm/s "
+             "(ca. 2 – 3 min, Fahrbereich frei halten); (3) sie fährt zurück auf 50 mm, du misst denselben Abstand "
+             "noch einmal. Bestanden, wenn beide Werte höchstens 0,1 mm auseinander liegen")
     d.ready()
     d.move(50)
     a = c.number("Achse bei 50 mm. Abstand Schlitten – fester Bezugspunkt mit dem Messschieber", "mm")
+    say("  10 Fahrten laufen (ca. 2 – 3 min) ...")
     rnd = random.Random(1)
     targets = []
     for _ in range(10):
@@ -463,77 +660,6 @@ def m07(c):
     c.val("Fahrten (Ziel mm @ mm/s)", " ".join(targets))
     check(abs(a - b) <= 0.1, "Abweichung %.2f mm nach 10 Fahrten" % abs(a - b))
     return "Differenz %.2f mm" % abs(a - b)
-
-
-@test("M08", 1, "3", "Unerwarteter Endschalter während der Fahrt -> MOTOR_FAULT")
-def m08(c):
-    d = c.d
-    c.need_hand()
-    d.ready()
-    d.move(60)
-    c.prompt("Gleich fährt die Achse langsam von 60 nach 200 mm. Erst bei 'JETZT' den VORDEREN Endschalter kurz drücken")
-    d.ok("MOVE", pos=200, speed=5)
-    d.wait(lambda q: q["motion"]["state"] == "moving", 3, "Fahrt läuft")
-    if c.args.sim:
-        time.sleep(1.0); d.hook(press_fwd=1); time.sleep(0.2); d.hook(press_fwd=0)
-    else:
-        now_banner("VORDEREN Endschalter kurz drücken")
-    p = d.wait(lambda q: q["state"] in ("FAULT", "WAIT_ACK"), 40, "MOTOR_FAULT", allow_fault=True)
-    c.val("Fehler", SYS_ERR[p["err"]], eq="MOTOR_FAULT")
-    c.val("Halteposition", p["motion"]["pos"], "mm")
-    check(p["err"] == 4, "Fehler %s (erwartet MOTOR_FAULT)" % SYS_ERR[p["err"]])
-    stopped = p["motion"]["pos"]
-    time.sleep(1.0)
-    check(abs(d.proc()["motion"]["pos"] - stopped) < 1.0, "Achse fährt weiter")
-    d.ok("ACK")
-    p = d.wait(lambda q: q["state"] == "SAFE_START", 3, "SAFE_START nach ACK")
-    check(not p["motion"]["homed"], "Referenz nach MOTOR_FAULT noch gültig")
-    return "MOTOR_FAULT bei %.1f mm, nach ACK INIT nötig" % stopped
-
-
-@test("M09", 1, "2, 4, 6", "Not-Aus in Fahrt: ESTOP, Dauerton 4 s, Display-ACK erst nach Lösen und 1 s Halten")
-def m09(c):
-    d = c.d
-    c.need_hand()
-    d.ready(hv=True)
-    c.prompt("Gleich startet eine Profilfahrt. Erst bei 'JETZT' NOT-AUS drücken und gedrückt halten")
-    d.ok("START_TRAVERSE", start=80, end=240, speed=5)
-    d.wait(lambda q: q["motion"]["mode"] == "traverse" and q["safety"]["shutter"] == "open", 60, "Profilfahrt läuft")
-    if c.args.sim:
-        d.hook(estop=1)
-    else:
-        now_banner("NOT-AUS drücken und gedrückt halten")
-    p = d.wait(lambda q: q["state"] in ("FAULT", "WAIT_ACK"), 60, "Not-Aus", allow_fault=True)
-    c.val("Fehler", SYS_ERR[p["err"]], eq="ESTOP")
-    c.val("Halteposition", p["motion"]["pos"], "mm")
-    check(p["err"] == 1 and p["safety"]["estop"], "Fehler %s (erwartet ESTOP)" % SYS_ERR[p["err"]])
-    check(not p["safety"]["hv_on"] and p["safety"]["shutter"] == "closed", "HV/Shutter nicht aus")
-    d.ok("SET", key="cooling_flow", value=False)
-    p2 = d.proc()
-    c.val("Fehler mit cooling_flow = false", SYS_ERR[p2["err"]], eq="ESTOP")
-    check(p2["err"] == 1, "mit cooling_flow false: Fehler %s" % SYS_ERR[p2["err"]])
-    d.expect(-6, "ACK")
-    d.ok("SET", key="cooling_flow", value=True)
-    c.asks(["Dauerton des Summers etwa 4 s?",
-            "Display: alle Tasten ausgeblendet, nur die ACK-Fläche, grau solange Not-Aus gedrückt?"])
-    if c.args.sim:
-        d.hook(estop=0)
-        d.wait(lambda q: not q["safety"]["estop"], 10, "Not-Aus gelöst", allow_fault=True)
-        d.ok("ACK")
-    else:
-        c.prompt("Not-Aus jetzt LÖSEN")
-        d.wait(lambda q: not q["safety"]["estop"], 60, "Not-Aus gelöst", allow_fault=True)
-        c.prompt("Finger auf die Display-Taste STOP legen und liegen lassen, dann Enter")
-        c.asks(["Quittiert der liegende Finger NICHT (ACK-Fläche bleibt)?"])
-        now_banner("ACK-Fläche auf dem Display drücken und 1 s halten")
-        t0 = time.time()
-        d.wait(lambda q: q["state"] != "WAIT_ACK", 60, "Quittierung am Display", allow_fault=True)
-        c.val("Zeit bis Quittierung am Display", time.time() - t0, "s", mn=1.0, warn=False)
-    p = d.wait(lambda q: q["state"] in ("SAFE_START", "READY"), 3, "nach ACK")
-    c.val("Zustand nach ACK", p["state"], eq="SAFE_START")
-    check(p["state"] == "SAFE_START" and not p["motion"]["homed"], "nach Not-Aus in Fahrt %s, homed %s" % (
-        p["state"], p["motion"]["homed"]))
-    return "ESTOP in Fahrt; mit cooling_flow false weiter ESTOP; ACK bei gedrücktem Not-Aus -> PRECONDITION; danach INIT nötig"
 
 
 DISPLAY_KEYS = [
@@ -575,7 +701,9 @@ def m10(c):
 def m11(c):
     if not c.interactive:
         raise Skip("Weboberfläche nur von Hand")
-    c.prompt("Tablet mit WLAN 'ADD-Demo' (Passwort adddemo1) verbinden und http://192.168.4.1/ öffnen")
+    c.prompt("Tablet mit WLAN 'ADD-Demo' (Passwort adddemo1) verbinden und http://192.168.4.1/ öffnen. "
+             "Für die lokale Datei am PC: web-ui/ims-demo-ui.html aus dem AKTUELLEN Repository öffnen (nach git pull; "
+             "eine alte Kopie aus Downloads o. Ä. passt nicht zur Firmware), Adresse %s eingeben" % c.d.host)
     c.asks(["Seite lädt ohne Internet, Werte aktualisieren sich mindestens zweimal pro Sekunde?",
             "Verlauf auf der Prozessseite zeigt bis zu 100 Punkte?",
             "Hilfe-Symbol öffnet /doc in einem neuen Tab mit Beschreibung und Linktabelle?",
@@ -587,29 +715,6 @@ def m11(c):
                 "Router aus: Log zeigt sta: attempt 1/3 … 3/3, dann sta: backoff 120 s?",
                 "Router wieder an: Verbindung kommt von selbst zurück (sta: connected)?"])
     return "Weboberfläche geprüft"
-
-
-@test("M12", 1, "4", "Not-Aus stoppt die Bewegung ≤ 2 ms (Oszilloskop)")
-def m12(c):
-    d = c.d
-    c.need_hand()
-    if not c.interactive:
-        raise Skip("Oszilloskop nur von Hand")
-    d.ready()
-    d.move(2)
-    c.prompt("Oszilloskop: Kanal 1 an PROBE (GPIO 22), Kanal 2 an STEP von Treiber X, Trigger Kanal 1 fallende Flanke, "
-             "Single, 1 ms/div. Gleich fährt die Achse mit 20 mm/s nach 240 mm")
-    d.ok("MOVE", pos=240, speed=20)
-    d.wait(lambda q: q["motion"]["vel"] >= 19.0, 10, "20 mm/s erreicht")
-    now_banner("NOT-AUS drücken")
-    d.wait(lambda q: q["state"] in ("FAULT", "WAIT_ACK"), 30, "Not-Aus", allow_fault=True)
-    ms = c.number("Zeit von der Flanke (Kanal 1) bis zum letzten Schrittpuls (Kanal 2)", "ms")
-    c.val("Not-Aus -> letzter Schritt", ms, "ms", mx=2.0)
-    c.prompt("Bildschirmfoto als docs/reviews/A1_estop_oszi.png speichern. Not-Aus LÖSEN")
-    d.wait(lambda q: not q["safety"]["estop"], 60, "Not-Aus gelöst", allow_fault=True)
-    d.ok("ACK")
-    check(ms <= 2.0, "%.2f ms" % ms)
-    return "%.2f ms" % ms
 
 
 # ============================================================ Teil 2 – automatische Prüfungen
@@ -719,7 +824,7 @@ def t07(c):
     c.val("HV_ON mit allen Bedingungen", st, eq="RUNNING")
     check(st == "RUNNING", "-> %s" % st)
     d.ok("HV_OFF")
-    return "jede fehlende Bedingung -> PRECONDITION (Not-Aus: M09)"
+    return "jede fehlende Bedingung -> PRECONDITION (Not-Aus: S01, S06)"
 
 
 @test("T09", 2, "4", "Temperatur 31 °C -> HV aus ohne Fehler; 35 °C -> TEMP_HIGH, ACK erst nach Absenken")
@@ -1242,8 +1347,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--host", default="192.168.4.1")
     ap.add_argument("--pruefer", help="Name des Prüfers (sonst Abfrage beim Start)")
-    ap.add_argument("--only", help="z. B. M04,T18")
-    ap.add_argument("--no-manual", action="store_true", help="Teil 1 (Handprüfungen) auslassen")
+    ap.add_argument("--only", help="z. B. M04,T18 – der Sicherheitsblock S01–S07 läuft immer vorher")
+    ap.add_argument("--no-manual", action="store_true", help="Block 2 (weitere Handprüfungen) auslassen; "
+                    "der Sicherheitsblock läuft immer")
     ap.add_argument("--sim", action="store_true", help="gegen scripts/sim_device.py (Test-Hooks)")
     ap.add_argument("--yes", action="store_true", help="ohne Sicherheitsabfrage starten")
     ap.add_argument("--skip-soak", action="store_true", help="T27 (10-min-Dauertest) auslassen")
@@ -1259,8 +1365,10 @@ def main():
     if unknown:
         raise SystemExit("unbekannte Prüfung: %s (vorhanden: %s)" % (unknown, ", ".join(order)))
     if args.no_manual:
-        ids = [i for i in ids if tests[i][1] == 2]
-    ids.sort(key=order.index)
+        ids = [i for i in ids if tests[i][1] != 1]
+    # decision 08.11.2026: without the safety checks no other check may run – block 1 always comes first
+    ids = [t[0] for t in TESTS if t[1] == 0] + [i for i in ids if tests[i][1] != 0]
+    ids = sorted(set(ids), key=order.index)
 
     say("Abnahme A1 gegen http://%s/ – %d Prüfungen" % (args.host, len(ids)))
     say("ACHTUNG: Die Achse fährt über den ganzen Verfahrweg, die HV wird geschaltet, die Anlage startet neu.")
@@ -1280,17 +1388,33 @@ def main():
     except Exception as e:
         raise SystemExit("Anlage nicht erreichbar: %s" % e)
     results = []
-    part_shown = 0
+    part_shown = -1
+    block_time = {}                       # part -> [start, end]
+    blocked = ""
     try:
         for tid in ids:
             _, part, block, title, f = tests[tid]
             if part != part_shown:
+                if part_shown in block_time:
+                    block_time[part_shown][1] = time.time()
+                if part_shown == 0:
+                    bad = [r for r in results if r[1] == 0 and (r[4] in ("FAIL", "PROBLEM") or
+                                                                (r[4] == "SKIP" and not args.sim))]
+                    if bad:
+                        blocked = ", ".join(r[0] for r in bad)
+                        say("\n" + "!" * 68 + "\n  SICHERHEITSPRÜFUNG NICHT BESTANDEN (%s).\n  Keine weiteren Prüfungen – "
+                            "erst die Fehler beheben, dann neu starten.\n" % blocked + "!" * 68)
+                        break
                 part_shown = part
-                if part == 1:
-                    say("\n### Teil 1 – Handprüfungen: bitte an der Anlage bleiben ###")
+                block_time[part] = [time.time(), None]
+                if part == 0:
+                    say("\n### Block 1 – Sicherheit: Not-Aus, Shutter, Fahrtrichtung, Endlagen (bitte an der Anlage, "
+                        "Hand am Not-Aus) ###")
+                elif part == 1:
+                    say("\n### Block 2 – weitere Handprüfungen: bitte an der Anlage bleiben ###")
                 else:
-                    say("\n### Teil 2 – automatische Prüfungen (ca. 35 min) ###")
-                    if any(tests[i][1] == 1 for i in ids) and c.interactive:
+                    say("\n### Block 3 – automatische Prüfungen (ca. 40 min) ###")
+                    if c.interactive:
                         c.prompt("Handprüfungen fertig. Jetzt ALLE Browser-Tabs mit der Anlage und jede add_client "
                                  "shell schließen, Not-Aus gelöst, Fahrbereich frei. Danach läuft alles ohne dich")
             say("\n[%s] Block %s: %s" % (tid, block, title))
@@ -1322,21 +1446,44 @@ def main():
                 if any(v[1] == "warn" for v in mine):
                     status = "WARN"
                     detail += " – Achtung nah am Grenzwert: " + ", ".join(v[2] for v in mine if v[1] == "warn")
+                if part == 0 and not args.sim and any(v[1] == "skip" for v in mine):
+                    status = "SKIP"                       # a safety question left open is not passed
+                    detail += " – Frage nicht beantwortet (Sicherheit: zählt nicht als bestanden)"
             if c.notes:
                 detail += " [" + "; ".join(c.notes) + "]"
             say("  -> %s  %s  (%.0f s)" % ({"PASS": "✅", "WARN": "✅ ⚠️", "FAIL": "❌", "SKIP": "⏭", "PROBLEM": "⛔"}[status],
                                          detail, time.time() - t0))
             results.append((tid, part, block, title, status, detail, time.time() - t0))
+            if part == 0 and (status in ("FAIL", "PROBLEM") or (status == "SKIP" and not args.sim)):
+                blocked = tid                            # stop at the first safety error: nothing may move on
+                say("\n" + "!" * 68 + "\n  SICHERHEITSPRÜFUNG %s NICHT BESTANDEN.\n  Keine weiteren Prüfungen – erst den "
+                    "Fehler beheben, dann neu starten.\n" % tid + "!" * 68)
+                break
     except KeyboardInterrupt:
         say("\nabgebrochen – sende STOP und HV_OFF")
-        results.append(("–", 2, "–", "Abbruch durch den Prüfer", "FAIL", "Strg+C", 0))
+        results.append(("–", part_shown if part_shown >= 0 else 0, "–", "Abbruch durch den Prüfer", "FAIL", "Strg+C", 0))
     finally:
+        if part_shown in block_time and block_time[part_shown][1] is None:
+            block_time[part_shown][1] = time.time()
         recover(d)
         try:
             if d.proc()["motion"]["homed"]:
                 d.ok("PARK"); d.idle(60)
         except Exception:
             pass
+    t_end = time.time()
+    if 2 in block_time:
+        final_checks(c, d, args, results, start)
+    try:
+        cfg_end, log_end = d.config(), d.log()
+    except Exception:
+        cfg_end, log_end = {}, []
+    state = c.cache.get("state_end", {})
+    d.run = False
+    write_reports(c, args, results, block_time, blocked, pruefer, start, boot, cfg_start, cfg_end, log_end, state)
+
+
+def final_checks(c, d, args, results, start):
     c.tid = "T28"
     run_min = (datetime.datetime.now() - start).seconds / 60
     c.val("Laufzeit", run_min, "min"); c.val("unerwartete Neustarts", d.resets, eq=0)
@@ -1356,52 +1503,102 @@ def main():
         detail = "seit dem letzten Neustart" + (" – Simulator: Zeitwerte nicht simuliert" if args.sim else "")
     except Exception as e:
         detail = "GET_STATE: %s" % e
-    results.append(("T29", 2, "4", "Zeitwerte ≤ 3000 µs (inkl. Summer-Signale aus Teil 1)", st, detail, 0))
-    try:
-        cfg_end, log_end = d.config(), d.log()
-    except Exception:
-        cfg_end, log_end = {}, []
-    d.run = False
+    results.append(("T29", 2, "4", "Zeitwerte ≤ 3000 µs (inkl. Summer-Signale aus Block 1 und 2)", st, detail, 0))
+    c.cache["state_end"] = state
 
-    n = {s: sum(1 for r in results if r[4] == s) for s in ("PASS", "WARN", "FAIL", "SKIP", "PROBLEM")}
-    out_dir = args.out_dir or ("docs/reviews" if os.path.isdir("docs/reviews") else ".")
-    os.makedirs(out_dir, exist_ok=True)
-    name = "Abnahme_A1_%s%s.md" % (start.strftime("%Y-%m-%d_%H%M"), "_" + args.tag if args.tag else "")
-    out = os.path.join(out_dir, name)
-    mark = {"PASS": "✅ bestanden", "WARN": "✅ ⚠️ bestanden, Achtung", "FAIL": "❌ **nicht bestanden**",
-            "SKIP": "⏭ übersprungen", "PROBLEM": "⛔ **Problem**"}
-    total = "%d ✅ bestanden (davon %d mit ⚠️ Achtung) · %d ❌ nicht bestanden · %d ⛔ Problem · %d ⏭ übersprungen" % (
+
+PART_HEAD = {0: "Block 1 – Sicherheit", 1: "Block 2 – weitere Handprüfungen", 2: "Block 3 – automatische Prüfungen"}
+MARK = {"PASS": "✅ bestanden", "WARN": "✅ ⚠️ bestanden, Achtung", "FAIL": "❌ **nicht bestanden**",
+        "SKIP": "⏭ übersprungen", "PROBLEM": "⛔ **Problem**"}
+
+
+def counts(rows):
+    n = {s: sum(1 for r in rows if r[4] == s) for s in ("PASS", "WARN", "FAIL", "SKIP", "PROBLEM")}
+    return n, "%d ✅ bestanden (davon %d mit ⚠️ Achtung) · %d ❌ nicht bestanden · %d ⛔ Problem · %d ⏭ übersprungen" % (
         n["PASS"] + n["WARN"], n["WARN"], n["FAIL"], n["PROBLEM"], n["SKIP"])
-    with open(out, "w", encoding="utf-8") as fh:
-        fh.write("# Abnahme A1 – Prüfprotokoll\n\n| | |\n|---|---|\n")
+
+
+def mmss(sec):
+    return "%d:%02d min" % (sec // 60, sec % 60)
+
+
+def write_report(path, title, c, args, results, block_time, blocked, pruefer, start, boot, cfg_start, cfg_end,
+                 log_end, state, errors_only):
+    """Writes the protocol; errors_only: the same structure with only the failed checks (Fehlerbericht)."""
+    bad_ids = {r[0] for r in results if r[4] in ("FAIL", "PROBLEM")}
+    keep = (lambda r: r[0] in bad_ids) if errors_only else (lambda r: True)
+    _, total = counts(results)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("# %s\n\n| | |\n|---|---|\n" % title)
         fh.write("| Prüfer | %s |\n" % md(pruefer))
         fh.write("| Beginn / Ende | %s / %s |\n" % (start.strftime("%d.%m.%Y %H:%M"), datetime.datetime.now().strftime("%H:%M")))
         fh.write("| Gerät | http://%s/%s |\n" % (args.host, " (Simulator)" if args.sim else ""))
         fh.write("| Firmware | %s |\n| Repository | %s |\n" % (md(boot[-1] if boot else "–"), md(git_rev())))
         fh.write("| Aufruf | `%s` |\n" % md(" ".join(sys.argv[1:])))
-        fh.write("| Ergebnis | **%s** |\n\n" % total)
-        fh.write("### Symbole\n\n" + LEGEND + "\n")
-        for part, head in ((1, "Teil 1 – Handprüfungen"), (2, "Teil 2 – automatische Prüfungen")):
+        fh.write("| Ergebnis gesamt | **%s** |\n" % total)
+        for part in (0, 1, 2):
             rows = [r for r in results if r[1] == part]
+            if part in block_time:
+                t0, t1 = block_time[part]
+                fh.write("| Ergebnis %s | %s · Dauer %s |\n" % (PART_HEAD[part], counts(rows)[1], mmss((t1 or t0) - t0)))
+            else:
+                fh.write("| Ergebnis %s | nicht ausgeführt%s |\n" % (
+                    PART_HEAD[part], " – **gesperrt: Sicherheitsprüfung nicht bestanden (%s)**" % blocked if blocked
+                    else " (Aufruf)"))
+        fh.write("\n### Symbole\n\n" + LEGEND + "\n")
+        if blocked:
+            fh.write("> **Sicherheitsprüfung nicht bestanden (%s).** Alle weiteren Prüfungen wurden nicht ausgeführt. "
+                     "Erst die Fehler beheben, dann die Abnahme neu starten.\n\n" % blocked)
+        for part in (0, 1, 2):
+            rows = [r for r in results if r[1] == part and keep(r)]
             if not rows: continue
-            fh.write("## %s\n\n| ID | Block | Prüfung | Ergebnis | Bemerkung | Dauer |\n|---|---|---|---|---|---|\n" % head)
-            for tid, _, block, title, status, detail, secs in rows:
-                fh.write("| %s | %s | %s | %s | %s | %s |\n" % (tid, block, md(title), mark[status], md(detail),
+            fh.write("## %s\n\n| ID | Block | Prüfung | Ergebnis | Bemerkung | Dauer |\n|---|---|---|---|---|---|\n"
+                     % PART_HEAD[part])
+            for tid, _, block, ttl, status, detail, secs in rows:
+                fh.write("| %s | %s | %s | %s | %s | %s |\n" % (tid, block, md(ttl), MARK[status], md(detail),
                                                               "%.0f s" % secs if secs else "–"))
             fh.write("\n")
-        fh.write("## Messwerte\n\nAlle erhobenen Werte und Antworten – zum Vergleich zweier Abnahmen.\n\n"
-                 "| | ID | Größe | Wert | Einheit | Soll |\n|---|---|---|---|---|---|\n")
-        for tid, st, k, v, unit, target in c.values:
-            fh.write("| %s | %s | %s | %s | %s | %s |\n" % (SYMBOL[st], tid, md(k), md(v), md(unit), md(target)))
-        fh.write("\n## Anhang\n\n### Konfiguration zu Beginn (GET_CONFIG)\n\n```json\n%s\n```\n\n"
-                 % json.dumps(cfg_start, ensure_ascii=False, indent=1))
-        fh.write("### Konfiguration am Ende\n\n```json\n%s\n```\n\n" % json.dumps(cfg_end, ensure_ascii=False, indent=1))
+        vals = [v for v in c.values if not errors_only or v[1] in ("fail", "problem")]
+        if errors_only and not vals:
+            vals = [(None, "info", "keine Messwerte außerhalb des Solls (Fehler siehe Bemerkung oben)", "", "", "")]
+        fh.write("## Messwerte\n\n%s\n\n| | ID | Größe | Wert | Einheit | Soll |\n|---|---|---|---|---|---|\n" % (
+            "Nur die Werte außerhalb des Solls." if errors_only else
+            "Alle erhobenen Werte und Antworten – zum Vergleich zweier Abnahmen."))
+        for tid, st, k, v, unit, target in vals:
+            fh.write("| %s | %s | %s | %s | %s | %s |\n" % (SYMBOL[st], tid or "–", md(k), md(v), md(unit), md(target)))
+        fh.write("\n## Anhang\n\n")
+        if not errors_only:
+            fh.write("### Konfiguration zu Beginn (GET_CONFIG)\n\n```json\n%s\n```\n\n"
+                     % json.dumps(cfg_start, ensure_ascii=False, indent=1))
+            fh.write("### Konfiguration am Ende\n\n```json\n%s\n```\n\n" % json.dumps(cfg_end, ensure_ascii=False, indent=1))
         fh.write("### GET_STATE am Ende\n\n```json\n%s\n```\n\n" % json.dumps(state, ensure_ascii=False))
         fh.write("### /log am Ende\n\n```\n%s\n```\n\n" % "\n".join(log_end))
-        for title, text in c.raw_out:
-            fh.write("### %s\n\n```\n%s\n```\n\n" % (title, text))
+        for ttl, text in c.raw_out:
+            if errors_only and not any(ttl.startswith(i + " ") for i in bad_ids):
+                continue
+            fh.write("### %s\n\n```\n%s\n```\n\n" % (ttl, text))
+
+
+def write_reports(c, args, results, block_time, blocked, pruefer, start, boot, cfg_start, cfg_end, log_end, state):
+    n, total = counts(results)
+    out_dir = args.out_dir or ("docs/reviews" if os.path.isdir("docs/reviews") else ".")
+    os.makedirs(out_dir, exist_ok=True)
+    suffix = "%s%s.md" % (start.strftime("%Y-%m-%d_%H%M"), "_" + args.tag if args.tag else "")
+    out = os.path.join(out_dir, "Abnahme_A1_" + suffix)
+    common = (c, args, results, block_time, blocked, pruefer, start, boot, cfg_start, cfg_end, log_end, state)
+    write_report(out, "Abnahme A1 – Prüfprotokoll", *common, errors_only=False)
     say("\n%s\nProtokoll: %s" % (total, out))
-    sys.exit(1 if n["FAIL"] or n["PROBLEM"] else 0)
+    for part in (0, 1, 2):
+        if part in block_time:
+            t0, t1 = block_time[part]
+            say("  %s: %s · %s" % (PART_HEAD[part], counts([r for r in results if r[1] == part])[1], mmss((t1 or t0) - t0)))
+    if n["FAIL"] or n["PROBLEM"]:
+        err = os.path.join(out_dir, "Fehlerbericht_" + suffix)
+        write_report(err, "Abnahme A1 – Fehlerbericht", *common, errors_only=True)
+        say("Fehlerbericht: %s" % err)
+    if blocked:
+        say("SICHERHEITSPRÜFUNG NICHT BESTANDEN (%s) – weitere Prüfungen gesperrt." % blocked)
+    sys.exit(1 if n["FAIL"] or n["PROBLEM"] or blocked else 0)
 
 
 if __name__ == "__main__":
