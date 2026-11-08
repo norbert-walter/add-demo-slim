@@ -2,12 +2,18 @@
 
 **Stand:** 2026-11-08
 **Autor:** Norbert Walter
-**Version:** 1.7.17 (ADD-Dokument und OpenAPI als Erweiterung, Sprint D1)
+**Version:** 1.7.18 (schnelle ADD-Seite, gzip, Sprint D1.2)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.7.17 → V1.7.18 (08.11.2026, Entscheidung Norbert Walter, Sprint D1.2)
+- `/add.html` brauchte am Gerät rund 24 s (Laufzeit-Erzeugung in 64-Byte-Blöcken). Jetzt eine fertige
+  Datei, erzeugt mit `scripts/build_data.py`; Anforderung: **unter 3 s** (`check_add.py`).
+- **gzip:** Die größeren Textdateien liegen zusätzlich komprimiert vor und werden an Clients mit
+  `Accept-Encoding: gzip` komprimiert gesendet (Weboberfläche 118 → 31 kB, ADD-Seite 69 → 17 kB).
 
 ### V1.7.16 → V1.7.17 (08.11.2026, Entscheidung Norbert Walter, Sprint D1)
 - **ADD-Dokument** `data/add.json` erstellt (Kapitel 7): Level 2, Internetadresse

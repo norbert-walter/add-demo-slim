@@ -1,7 +1,7 @@
 # Software-Dokumentation – Demoanlage ADD (Slim)
 
-**Version:** 1.2 · **Stand:** 2026-11-08 · **Autor:** Norbert Walter
-**Firmware:** `FW_VERSION` 1.0.0 · **Contract:** V1.6.4 · **Pflichtenheft:** V1.7.17
+**Version:** 1.3 · **Stand:** 2026-11-08 · **Autor:** Norbert Walter
+**Firmware:** `FW_VERSION` 1.0.0 · **Contract:** V1.6.5 · **Pflichtenheft:** V1.7.18
 **Hardware:** siehe `docs/Hardware_Dokumentation_V1_0.md`
 
 ---
@@ -188,6 +188,7 @@ Inhalt des Dateisystems (SPIFFS), aufgespielt mit `pio run -e firmware -t upload
 | `www/font-*.woff2`, `LICENCE-ubuntu-font.txt` | Schriften Ubuntu und Ubuntu Mono |
 | `add.json` | ADD-Dokument (Sprint D1, Level 2, Entwurf bis zur KI-Validierung) |
 | `openapi.json` | OpenAPI 3.1 der HTTP-API – Erweiterung zu ADD, technische Referenz (Sprint D1) |
+| `add.html`, `*.gz` | erzeugt mit `scripts/build_data.py`: ADD-Seite für Cloud-KIs und gzip-Kopien der größeren Textdateien (V1.6.5) |
 | `doc.html` | Dokumentationsseite für `/doc`: Kurzbeschreibung, Endpunkte, Links zur Dokumentation auf GitHub |
 
 ### 2.3 `test/`, `scripts/`, `docs/`
@@ -1139,6 +1140,14 @@ Das ADD-Dokument beschreibt die Anlage nach der ADD Specification v1.0 mit den B
 den optionalen Block `ui`. `/add.html` bettet dasselbe JSON in eine HTML-Seite ein, damit Cloud-KIs
 mit Web-Zugriff es lesen können. Inhalt und Begründungen: Kapitel 13.
 
+Seit V1.6.5 ist `/add.html` eine fertige Datei, die `scripts/build_data.py` aus `add.json` erzeugt. Vorher
+setzte die Firmware die Seite zur Laufzeit in 64-Byte-Blöcken zusammen – jeder Block ein eigener
+TCP-Schreibvorgang, für 34 kB rund 24 s. Dazu liefern alle Datei-Routen außer den Schriften eine
+gzip-Kopie (`<Datei>.gz`, `Content-Encoding: gzip`), wenn der Client sie annimmt; `/add.html` sind dann
+17 statt 69 kB, die Weboberfläche 31 statt 118 kB. Nach jeder Änderung an `add.json`, `openapi.json`,
+`doc.html`, `app.js` oder `index.html`: `python3 scripts/build_data.py` (ruft `embed_app.py` selbst auf),
+dann `uploadfs`. `test_add.js` meldet veraltete Dateien.
+
 `/openapi.json` (Contract V1.6.4) beschreibt dieselbe HTTP-API als OpenAPI 3.1 – für Werkzeuge,
 Code-Generatoren und Entwickler. Das ist eine **eigene Erweiterung**, nicht Teil des ADD-Standards
 (der Standard erlaubt sinnvolle Erweiterungen). Für KI-Agenten bleibt das ADD-Dokument verbindlich:
@@ -1439,8 +1448,8 @@ starten** – sonst würde sie die Bestätigungspflicht umgehen.
 
 **Validierung.** `validation.validated_by` ist leer, solange keine KI das Dokument nach ADD Spec §13
 am Gerät geprüft hat; die Statusseite zeigt dann „not validated“. Read-only-Prüfung der Endpunkte:
-`python3 scripts/check_add.py --base http://<IP>` (mit `--user` über die Internetadresse; das
-Passwort wird abgefragt und nirgends gespeichert).
+`python3 scripts/check_add.py --base http://<IP>` (mit `--auth` über die Internetadresse; Benutzer und
+Passwort werden abgefragt und nirgends gespeichert).
 
 ### 13.2 Regeln für KI-Agenten
 
@@ -1908,4 +1917,5 @@ Anmerkungen:
 |---|---|---|
 | 1.0 | 2026-11-07 | Erste Ausgabe (Contract V1.5.27, Pflichtenheft V1.7.10); ADD-Kapitel vorläufig bis Sprint D1. Ergänzt: Bedienwege (1.1), WLAN-Einbuchen per Konsole (10.7, 11.1), Umfang (16.4) |
 | 1.1 | 2026-11-08 | Kalibriertabelle mit 6 Stufen, unter Messbedingungen (Contract V1.6.3, Sprints K1/K2): Messkette 3.4, Befehle, Parameter, `GET_CONFIG`, NVS Version 5, Kapitel 12.3 neu, Testzahlen |
+| 1.3 | 2026-11-08 | `/add.html` als Datei, gzip-Kopien (Contract V1.6.5, Sprint D1.2): 2.2, 10.5 |
 | 1.2 | 2026-11-08 | ADD-Dokument und OpenAPI (Contract V1.6.4, Sprint D1): 2.2, 10.1, 10.4, 10.5, 13.1 (Einstufung, Bestätigungen, KI und Skripte, Validierung), 13.2 |

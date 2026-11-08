@@ -8,15 +8,17 @@ Checks what an AI agent sees, without moving anything and without changing any s
   4. /proc and the replies to GET_STATE and GET_CONFIG validate against the OpenAPI schemas,
      and their CRC frames verify
   5. the device rejects a wrong CRC (-1, HTTP 400) and an out-of-range SET (-4) – nothing is changed
+  6. V1.6.5: /, /add, /add.html, /openapi.json, /doc with "Accept-Encoding: gzip" come compressed and
+     unpack to the same bytes; the load time of each is printed (/add.html must take < 3 s)
 
     python3 scripts/check_add.py --base http://192.168.1.120
-    python3 scripts/check_add.py --base https://test.norbert-walter.dnshome.de --user <name>
+    python3 scripts/check_add.py --base https://test.norbert-walter.dnshome.de --auth
 
-With --user the password is asked for (or taken from the environment variable ADD_PASS); it is
-never printed or stored. Needs: pip install jsonschema (only for step 4; without it the step is
+With --auth user and password of the reverse proxy are asked for (or taken from the environment
+variables ADD_USER / ADD_PASS); they are never printed or stored. --user NAME asks only for the password. Needs: pip install jsonschema (only for step 4; without it the step is
 skipped with a note).
 """
-import argparse, base64, getpass, json, os, re, sys, time, urllib.error, urllib.request, zlib
+import argparse, base64, getpass, gzip, json, os, re, sys, time, urllib.error, urllib.request, zlib
 
 OK, BAD = 'ok  ', 'FAIL'
 results = []
@@ -48,18 +50,26 @@ class Dev:
         if user:
             self.auth = 'Basic ' + base64.b64encode(('%s:%s' % (user, password)).encode()).decode()
 
-    def req(self, path, data=None):
+    def raw(self, path, data=None, gz=False):
+        """-> (status, headers, body bytes, seconds)"""
         sep = '&' if '?' in path else '?'
         url = self.base + path + ('' if data else '%st=%d' % (sep, time.time()))
         r = urllib.request.Request(url, data=data.encode() if data else None, method='POST' if data else 'GET',
                                    headers={'Content-Type': 'text/plain'} if data else {})
+        if gz:
+            r.add_header('Accept-Encoding', 'gzip')
         if self.auth:
             r.add_header('Authorization', self.auth)
+        t0 = time.time()
         try:
-            with urllib.request.urlopen(r, timeout=8) as resp:
-                return resp.status, resp.headers.get('Content-Type', ''), resp.read().decode('utf-8')
+            with urllib.request.urlopen(r, timeout=60) as resp:
+                return resp.status, resp.headers, resp.read(), time.time() - t0
         except urllib.error.HTTPError as e:
-            return e.code, e.headers.get('Content-Type', ''), e.read().decode('utf-8', 'replace')
+            return e.code, e.headers, e.read(), time.time() - t0
+
+    def req(self, path, data=None):
+        st, h, b, _ = self.raw(path, data)
+        return st, h.get('Content-Type', ''), b.decode('utf-8', 'replace')
 
     def api(self, cmd, **params):
         return self.req('/api', frame({'cmd': cmd, 'params': params}))
@@ -68,8 +78,11 @@ class Dev:
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--base', required=True, help='e.g. http://192.168.1.120 or https://host')
-    ap.add_argument('--user', help='Basic Auth user of the reverse proxy (password: prompt or ADD_PASS)')
+    ap.add_argument('--auth', action='store_true', help='ask for Basic Auth user and password of the reverse proxy')
+    ap.add_argument('--user', help='Basic Auth user (the password is asked for, or ADD_PASS)')
     a = ap.parse_args()
+    if a.auth and not a.user:
+        a.user = os.environ.get('ADD_USER') or input('user: ').strip()
     pw = (os.environ.get('ADD_PASS') or getpass.getpass('password: ')) if a.user else None
     d = Dev(a.base, a.user, pw)
 
@@ -129,6 +142,16 @@ def main():
     st, _, t = d.api('SET', key='measure_pos', value=999)
     r = json.loads(t)
     check(st == 200 and r.get('err') == -4 and valid('ApiResponse', r), 'SET measure_pos 999 -> err -4 (nothing changed)')
+
+    for p in ('/', '/add', '/add.html', '/openapi.json', '/doc'):     # V1.6.5: gzip copies
+        st, h, plain, t1 = d.raw(p)
+        st2, h2, packed, t2 = d.raw(p, gz=True)
+        enc = h2.get('Content-Encoding', '')
+        body = gzip.decompress(packed) if enc == 'gzip' else packed
+        check(st == st2 == 200 and enc == 'gzip' and body == plain,
+              '%-14s gzip %6d of %6d bytes  %.1f s (plain %.1f s)' % (p, len(packed), len(plain), t2, t1))
+        if p == '/add.html':
+            check(t2 < 3.0 and t1 < 3.0, '/add.html loads in < 3 s')
     return finish()
 
 

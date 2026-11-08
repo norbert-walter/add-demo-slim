@@ -38,9 +38,15 @@ static void ctrlLoop() {
     }
 }
 static WebServer& srv() { return *shimServer(); }
-static const ShimResponse& request(HTTPMethod m, const char* uri, const std::string* body = nullptr) {
+// V1.6.5: marker for "no valid /api packet"; was 7, which millis() (ms since the test start) can reach
+// exactly when the suite runs fast -> flaky. This value is never reached in a test run.
+static const uint32_t RX_MARK = 0xFFFFFF00u;
+static const ShimResponse& request(HTTPMethod m, const char* uri, const std::string* body = nullptr,
+                                   const char* acceptEncoding = nullptr) {
     size_t before = srv().responses.size();
-    srv().shimQueue(m, uri, body);
+    std::vector<std::pair<std::string, std::string>> h;
+    if (acceptEncoding) h.push_back({"Accept-Encoding", acceptEncoding});
+    srv().shimQueue(m, uri, body, h);
     httpServerLoop();
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(before + 1, srv().responses.size(), "exactly one response per request");
     return srv().responses.back();
@@ -122,31 +128,98 @@ void test_v1522_web_assets() {
     TEST_ASSERT_EQUAL_INT(404, request(HTTP_GET, "/font-m400.woff2").code);
     TEST_ASSERT_EQUAL_INT(404, request(HTTP_GET, "/www/app.js").code);   // only the listed routes
 }
-void test_add_html_embeds_and_escapes() {
-    std::string json = "{\"name\":\"a<b & c>d\",\"x\":\"</script>\"}";
-    std::string big; for (int i = 0; i < 40; ++i) big += "{\"k\":\"</x><&>\"},";      // > 256 bytes: chunks
-    json = "[" + big + json + "]";
-    shimFiles()["/add.json"] = json;
+void test_v165_add_html_is_a_file() {
+    // V1.6.5: /add.html is the file /add.html (generated from add.json by scripts/build_data.py and
+    // checked by test/js/test_add.js), streamed in one piece; until V1.6.4 it was built at runtime in
+    // 64-byte chunks, which took about 24 s for a 34 kB ADD document on the device.
+    std::string html = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>ADD</title>\n<pre>&lt;x&gt;</pre>";
+    shimFiles()["/add.json"] = "{\"add\":1}";
+    shimFiles()["/add.html"] = html;
     const ShimResponse& r = request(HTTP_GET, "/add.html");
     TEST_ASSERT_EQUAL_INT(200, r.code);
     TEST_ASSERT_EQUAL_STRING("text/html; charset=utf-8", r.type.c_str());
-    TEST_ASSERT_EQUAL_STRING("no-store, no-cache, must-revalidate", r.header("Cache-Control").c_str());
+    TEST_ASSERT_EQUAL_STRING("no-store, no-cache, must-revalidate", r.header("Cache-Control").c_str());  // ADD spec §5.3
     TEST_ASSERT_EQUAL_STRING("no-cache", r.header("Pragma").c_str());
+    TEST_ASSERT_EQUAL_STRING("Accept-Encoding", r.header("Vary").c_str());
+    TEST_ASSERT_EQUAL_STRING("<none>", r.header("Content-Encoding").c_str());
     assertCors(r);
-    std::string script, pre;                                    // expected: "</" -> "<\/" in the script
-    for (size_t i = 0; i < json.size(); ++i) {
-        if (json[i] == '<' && i + 1 < json.size() && json[i + 1] == '/') { script += "<\\/"; ++i; } else script += json[i];
-    }
-    for (char c : json) { if (c == '&') pre += "&amp;"; else if (c == '<') pre += "&lt;"; else if (c == '>') pre += "&gt;"; else pre += c; }
-    std::string exp = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>ADD</title>\n"
-                      "<script type=\"application/ld+json\">\n" + script + "\n</script></head><body><pre>\n" +
-                      pre + "\n</pre></body></html>\n";
-    TEST_ASSERT_EQUAL_STRING(exp.c_str(), r.body.c_str());
-    TEST_ASSERT_TRUE(r.chunked);
-    TEST_ASSERT_TRUE(r.chunk_end);                              // sendContent("") at the end
+    TEST_ASSERT_EQUAL_STRING(html.c_str(), r.body.c_str());   // byte for byte, nothing generated
+    TEST_ASSERT_FALSE(r.chunked);
+    TEST_ASSERT_EQUAL_INT(0, r.chunks);                       // streamFile, no sendContent
     TEST_ASSERT_EQUAL_INT(0, shimOpenFiles());
+    shimFiles().erase("/add.html");                           // add.json alone is not enough any more
+    const ShimResponse& m = request(HTTP_GET, "/add.html");
+    TEST_ASSERT_EQUAL_INT(404, m.code);
+    TEST_ASSERT_EQUAL_STRING("<none>", m.header("Pragma").c_str());   // no headers of the file answer
     shimFiles().erase("/add.json");
-    TEST_ASSERT_EQUAL_INT(404, request(HTTP_GET, "/add.html").code);
+}
+void test_v165_gzip_copy_when_accepted() {
+    TEST_ASSERT_TRUE_MESSAGE(srv().collected_before_begin, "collectHeaders(Accept-Encoding) before begin()");
+    struct R { const char* uri; const char* file; const char* type; const char* cache; };
+    const R rs[] = {{"/", "/www/index.html", "text/html", "<none>"},
+                    {"/add", "/add.json", "application/json", "no-store"},
+                    {"/add.html", "/add.html", "text/html; charset=utf-8", "no-store, no-cache, must-revalidate"},
+                    {"/openapi.json", "/openapi.json", "application/json", "no-store"},
+                    {"/doc", "/doc.html", "text/html", "<none>"},
+                    {"/app.js", "/www/app.js", "application/javascript", "<none>"}};
+    for (const R& x : rs) {
+        const std::string plain = std::string("plain ") + x.file, gz = std::string("\x1f\x8b gz ") + x.file;
+        shimFiles()[x.file] = plain;
+        shimFiles()[std::string(x.file) + ".gz"] = gz;
+        const char* accepts[] = {"gzip, deflate, br", "br;q=1.0, gzip;q=0.8"};
+        for (int i = 0; i < 2; ++i) {                          // the usual browser and agent headers
+            const ShimResponse& r = request(HTTP_GET, x.uri, nullptr, accepts[i]);
+            TEST_ASSERT_EQUAL_INT_MESSAGE(200, r.code, x.uri);
+            TEST_ASSERT_EQUAL_STRING_MESSAGE(gz.c_str(), r.body.c_str(), x.uri);
+            TEST_ASSERT_EQUAL_STRING_MESSAGE("gzip", r.header("Content-Encoding").c_str(), x.uri);
+            int ce = 0; for (auto& h : r.headers) ce += (h.first == "Content-Encoding");
+            TEST_ASSERT_EQUAL_INT_MESSAGE(1, ce, "Content-Encoding once (streamFile adds it itself)");
+            TEST_ASSERT_EQUAL_STRING_MESSAGE(x.type, r.type.c_str(), x.uri);           // type of the content, not x-gzip
+            TEST_ASSERT_EQUAL_STRING_MESSAGE(x.cache, r.header("Cache-Control").c_str(), x.uri);
+            TEST_ASSERT_EQUAL_STRING_MESSAGE("Accept-Encoding", r.header("Vary").c_str(), x.uri);
+            assertCors(r);
+        }
+        const char* plainAccepts[] = {nullptr, "identity", "deflate, br"};
+        for (const char* a : plainAccepts) {                   // no gzip accepted -> the plain file
+            const ShimResponse& r = request(HTTP_GET, x.uri, nullptr, a);
+            TEST_ASSERT_EQUAL_INT_MESSAGE(200, r.code, x.uri);
+            TEST_ASSERT_EQUAL_STRING_MESSAGE(plain.c_str(), r.body.c_str(), x.uri);
+            TEST_ASSERT_EQUAL_STRING_MESSAGE("<none>", r.header("Content-Encoding").c_str(), x.uri);
+            TEST_ASSERT_EQUAL_STRING_MESSAGE("Accept-Encoding", r.header("Vary").c_str(), x.uri);
+        }
+        shimFiles().erase(std::string(x.file) + ".gz");        // gzip accepted, no copy -> plain
+        const ShimResponse& p = request(HTTP_GET, x.uri, nullptr, accepts[0]);
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(plain.c_str(), p.body.c_str(), x.uri);
+        TEST_ASSERT_EQUAL_STRING_MESSAGE("<none>", p.header("Content-Encoding").c_str(), x.uri);
+        shimFiles()[std::string(x.file) + ".gz"] = gz;         // only the copy: gzip clients get it,
+        shimFiles().erase(x.file);                              // the others 404
+        TEST_ASSERT_EQUAL_INT_MESSAGE(200, request(HTTP_GET, x.uri, nullptr, accepts[0]).code, x.uri);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(404, request(HTTP_GET, x.uri, nullptr, nullptr).code, x.uri);
+        shimFiles().erase(std::string(x.file) + ".gz");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(404, request(HTTP_GET, x.uri, nullptr, accepts[0]).code, x.uri);
+        TEST_ASSERT_EQUAL_INT(0, shimOpenFiles());
+    }
+    // V1.6.5: /favicon.ico, cacheable, binary, no gzip copy
+    const std::string ico("\x00\x00\x01\x00\x03\x00", 6);
+    shimFiles()["/www/favicon.ico"] = ico;
+    shimFiles()["/www/favicon.ico.gz"] = "gz";
+    const ShimResponse& i = request(HTTP_GET, "/favicon.ico", nullptr, "gzip");
+    TEST_ASSERT_EQUAL_INT(200, i.code);
+    TEST_ASSERT_EQUAL_STRING("image/x-icon", i.type.c_str());
+    TEST_ASSERT_TRUE(i.body == ico);
+    TEST_ASSERT_EQUAL_STRING("max-age=86400", i.header("Cache-Control").c_str());
+    TEST_ASSERT_EQUAL_STRING("<none>", i.header("Content-Encoding").c_str());
+    assertCors(i);
+    shimFiles().erase("/www/favicon.ico.gz");
+    shimFiles().erase("/www/favicon.ico");
+    TEST_ASSERT_EQUAL_INT(404, request(HTTP_GET, "/favicon.ico").code);
+    // fonts are already compressed: never a .gz lookup
+    shimFiles()["/www/font-u400.woff2"] = "wOF2";
+    shimFiles()["/www/font-u400.woff2.gz"] = "gz";
+    const ShimResponse& f = request(HTTP_GET, "/font-u400.woff2", nullptr, "gzip");
+    TEST_ASSERT_EQUAL_STRING("wOF2", f.body.c_str());
+    TEST_ASSERT_EQUAL_STRING("<none>", f.header("Content-Encoding").c_str());
+    shimFiles().erase("/www/font-u400.woff2.gz");
 }
 void test_llms_txt_exact() {
     const ShimResponse& r = request(HTTP_GET, "/llms.txt");
@@ -203,7 +276,7 @@ void test_options_preflight() {
     TEST_ASSERT_EQUAL_STRING("Content-Type", r.header("Access-Control-Allow-Headers").c_str());
 }
 void test_api_syntax_errors_are_400() {
-    snapshotSetLastApiRx(7);
+    snapshotSetLastApiRx(RX_MARK);
     std::string bad = "{\"cmd\":\"STOP\",\"crc\":\"00000000\"}";
     const ShimResponse& r = request(HTTP_POST, "/api", &bad);
     TEST_ASSERT_EQUAL_INT(400, r.code);
@@ -221,24 +294,24 @@ void test_api_syntax_errors_are_400() {
     const ShimResponse& tb = request(HTTP_POST, "/api", &big);
     TEST_ASSERT_EQUAL_INT(400, tb.code);
     TEST_ASSERT_NOT_NULL(strstr(tb.body.c_str(), "\"err\":-2"));
-    TEST_ASSERT_EQUAL_UINT32(7, snapshotLastApiRx());                       // no valid packet yet
+    TEST_ASSERT_EQUAL_UINT32(RX_MARK, snapshotLastApiRx());                       // no valid packet yet
 }
 void test_api_unknown_cmd_200_no_heartbeat() {
-    snapshotSetLastApiRx(7);
+    snapshotSetLastApiRx(RX_MARK);
     std::string b = framed("{\"cmd\":\"FLY\"}");
     const ShimResponse& r = request(HTTP_POST, "/api", &b);
     TEST_ASSERT_EQUAL_INT(200, r.code);
     TEST_ASSERT_EQUAL_STRING(errBody(ApiError::UNKNOWN_CMD, "NONE").c_str(), unframe(r.body).c_str());
-    TEST_ASSERT_EQUAL_UINT32(7, snapshotLastApiRx());
+    TEST_ASSERT_EQUAL_UINT32(RX_MARK, snapshotLastApiRx());
 }
 void test_api_bad_param_counts_as_heartbeat() {
-    snapshotSetLastApiRx(7);
+    snapshotSetLastApiRx(RX_MARK);
     std::string b = framed("{\"cmd\":\"MOVE\",\"params\":{}}");               // pos missing
     int before = g_cmds;
     const ShimResponse& r = request(HTTP_POST, "/api", &b);
     TEST_ASSERT_EQUAL_INT(200, r.code);
     TEST_ASSERT_NOT_NULL(strstr(r.body.c_str(), "\"err\":-4,\"cmd\":\"MOVE\""));
-    TEST_ASSERT_TRUE(snapshotLastApiRx() != 7);                               // valid packet
+    TEST_ASSERT_TRUE(snapshotLastApiRx() != RX_MARK);                               // valid packet
     TEST_ASSERT_EQUAL_INT(before, (int)g_cmds);                               // not queued
 }
 void test_api_get_state_local() {
@@ -247,7 +320,7 @@ void test_api_get_state_local() {
     CycleStats cs; cs.cycle_max_us = 312; cs.period_max_us = 1010; cs.overruns = 2; cs.prio_lat_max_us = 1450;
     snapshotSetCycleStats(cs);
     int before = g_cmds;
-    snapshotSetLastApiRx(7);
+    snapshotSetLastApiRx(RX_MARK);
     std::string b = framed("{\"cmd\":\"GET_STATE\"}");
     const ShimResponse& r = request(HTTP_POST, "/api", &b);
     TEST_ASSERT_EQUAL_INT(200, r.code);
@@ -255,7 +328,7 @@ void test_api_get_state_local() {
         "\"local\":true,\"cycle_max_us\":312,\"period_max_us\":1010,\"overruns\":2,\"prio_lat_max_us\":1450}",
         unframe(r.body).c_str());
     TEST_ASSERT_EQUAL_INT(before, (int)g_cmds);                               // answered locally
-    TEST_ASSERT_TRUE(snapshotLastApiRx() != 7);
+    TEST_ASSERT_TRUE(snapshotLastApiRx() != RX_MARK);
 }
 void test_api_get_config_local() {
     Params p; paramsDefaults(p); p.measure_pos = 160.0f; strcpy(p.wifi_ssid, "net");
@@ -317,29 +390,6 @@ void test_proc_while_control_task_publishes() {
     pub = false; w.join();
     TEST_ASSERT_EQUAL_INT(0, bad);
 }
-void test_v1517_add_html_sends_blocks_not_bytes() {
-    // one sendContent() = one HTTP chunk = one TCP write on the device: never per character.
-    std::string json;
-    for (int i = 0; json.size() < 4000; ++i) json += (i % 7 == 0) ? "</" : (i % 5 == 0 ? "&<>" : "{\"k\":1},");
-    json += "<";                                            // a '<' as the very last byte is sent too
-    shimFiles()["/add.json"] = json;
-    const ShimResponse& r = request(HTTP_GET, "/add.html");
-    std::string script, pre;
-    for (size_t i = 0; i < json.size(); ++i) {
-        if (json[i] == '<' && i + 1 < json.size() && json[i + 1] == '/') { script += "<\\/"; ++i; } else script += json[i];
-    }
-    for (char c : json) { if (c == '&') pre += "&amp;"; else if (c == '<') pre += "&lt;"; else if (c == '>') pre += "&gt;"; else pre += c; }
-    std::string exp = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>ADD</title>\n"
-                      "<script type=\"application/ld+json\">\n" + script + "\n</script></head><body><pre>\n" +
-                      pre + "\n</pre></body></html>\n";
-    TEST_ASSERT_EQUAL_STRING(exp.c_str(), r.body.c_str());
-    int maxChunks = 10 + 2 * (int)((json.size() + 63) / 64);
-    if (r.chunks > maxChunks) {
-        char m[96]; snprintf(m, sizeof m, "%d sendContent calls for %u bytes (max %d)", r.chunks, (unsigned)json.size(), maxChunks);
-        TEST_FAIL_MESSAGE(m);
-    }
-    TEST_ASSERT_EQUAL_INT(0, shimOpenFiles());
-}
 void test_v1517_bad_param_is_an_error_also_for_get_state_and_get_config() {
     const char* bodies[] = {"{\"cmd\":\"GET_STATE\",\"params\":[1]}", "{\"cmd\":\"GET_CONFIG\",\"params\":[1]}"};
     const char* names[] = {"GET_STATE", "GET_CONFIG"};
@@ -390,7 +440,8 @@ int main(int, char**) {
     RUN_TEST(test_init_registers_routes_and_begins);
     RUN_TEST(test_static_files_and_404);
     RUN_TEST(test_v1522_web_assets);
-    RUN_TEST(test_add_html_embeds_and_escapes);
+    RUN_TEST(test_v165_add_html_is_a_file);
+    RUN_TEST(test_v165_gzip_copy_when_accepted);
     RUN_TEST(test_llms_txt_exact);
     RUN_TEST(test_v164_openapi_json);
     RUN_TEST(test_log_endpoint);
@@ -405,7 +456,6 @@ int main(int, char**) {
     RUN_TEST(test_v1516_slow_reply_within_timeout_is_ok);
     RUN_TEST(test_api_busy_when_control_task_does_not_answer);
     RUN_TEST(test_proc_while_control_task_publishes);
-    RUN_TEST(test_v1517_add_html_sends_blocks_not_bytes);
     RUN_TEST(test_v1517_bad_param_is_an_error_also_for_get_state_and_get_config);
     RUN_TEST(test_v1525_idle_connection_is_closed_and_waiting_request_served);
     RUN_TEST(test_zz_shutdown);

@@ -9,6 +9,7 @@ data/www/index.html carries a byte-identical copy of data/www/app.js between the
 
 It replaces only the text between the two marker lines ("</script>" written as "<\\/script>") and
 then copies index.html to web-ui/ims-demo-ui.html. Prints "embedded <n> bytes" or an error.
+V1.6.5: then runs build_data.py (gzip copies, add.html).
 """
 import os, sys
 
@@ -36,6 +37,8 @@ def main():
         with open(path, 'w', encoding='utf-8', newline='') as f:
             f.write(html)
     print('embedded %d bytes' % len(app))
+    import build_data                      # V1.6.5: index.html.gz and app.js.gz follow index.html
+    build_data.main()
 
 
 if __name__ == '__main__':

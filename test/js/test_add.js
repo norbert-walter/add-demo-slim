@@ -24,13 +24,16 @@ const API_PARSE = read('src/logic/api_parse.cpp');
 const PARAMS_CPP = read('src/logic/params.cpp');
 const PROC_JSON = read('src/logic/proc_json.cpp');
 
+// URLs as fixed after the first AI validation (09.11.2026): raw GitHub files – the github.io page of
+// the Ethical Framework returned 404, and raw Markdown is what a fetch tool reads best.
+const RAW_ADD = 'https://raw.githubusercontent.com/norbert-walter/ai-device-description-add/refs/heads/main/';
 const SPEC = {
-  spec_url: 'https://norbert-walter.github.io/ai-device-description-add/ADD_AI_Reference_v1_0.html',
+  spec_url: RAW_ADD + 'ADD_AI_Reference_v1_0.md',
   spec_license: 'CC BY 4.0 — © 2026 Norbert Walter',
   ethic: {
-    1: 'https://norbert-walter.github.io/ai-device-description-add/ADD_Ethical_Framework_Basic_v1.0',
-    2: 'https://norbert-walter.github.io/ai-device-description-add/ADD_Ethical_Framework_Standard_v1.0',
-    3: 'https://norbert-walter.github.io/ai-device-description-add/ADD_Ethical_Framework_Full_v1.0',
+    1: RAW_ADD + 'ADD_Ethical_Framework_Basic_v1_0.md',
+    2: RAW_ADD + 'ADD_Ethical_Framework_Standard_v1_0.md',
+    3: RAW_ADD + 'ADD_Ethical_Framework_Full_v1_0.md',
   },
 };
 const MANDATORY_RULES = [
@@ -367,4 +370,35 @@ test('d1 GET endpoints of the firmware are described in openapi', () => {
   for (const p of fw) assert.ok(oas.paths[p] && oas.paths[p].get, p);
   for (const p of ['/proc', '/log']) assert.ok(oas.paths[p].get['x-add-action'], p);
   assert.ok(oas.paths['/openapi.json'].get);
+});
+
+// ------------------------------------------------------------- generated files (V1.6.5, Sprint D1.2)
+test('d12 data/add.html is generated from add.json (scripts/build_data.py)', () => {
+  const js = ADD_TEXT;
+  const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>ADD</title>\n'
+    + '<script type="application/ld+json">\n' + js.split('</').join('<\\/') + '\n</script></head><body><pre>\n'
+    + js.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '\n</pre></body></html>\n';
+  assert.equal(read('data/add.html'), html, 'run: python3 scripts/build_data.py');
+  // what a cloud AI extracts from the page is the ADD document itself
+  const m = read('data/add.html').match(/<script type="application\/ld\+json">\n([\s\S]*?)\n<\/script>/);
+  assert.deepEqual(JSON.parse(m[1].split('<\\/').join('</')), add);
+});
+
+test('d12 every gzip copy is up to date and smaller (scripts/build_data.py)', () => {
+  const zlib = require('node:zlib');
+  const GZ = ['www/index.html', 'www/app.js', 'doc.html', 'add.json', 'add.html', 'openapi.json'];
+  for (const f of GZ) {
+    const raw = fs.readFileSync(path.join(ROOT, 'data', f));
+    const gz = fs.readFileSync(path.join(ROOT, 'data', f + '.gz'));
+    assert.ok(zlib.gunzipSync(gz).equals(raw), f + '.gz is out of date – run: python3 scripts/build_data.py');
+    assert.ok(gz.length < raw.length / 2, f);
+    assert.ok(('/' + f + '.gz').length <= 31, f + ': SPIFFS name length');
+  }
+  // only these: every .gz in data/ belongs to the list (a forgotten old copy would be served)
+  const all = [];
+  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+    if (e.isDirectory()) walk(path.join(d, e.name)); else if (e.name.endsWith('.gz')) all.push(path.relative(path.join(ROOT, 'data'), path.join(d, e.name)).split(path.sep).join('/'));
+  } };
+  walk(path.join(ROOT, 'data'));
+  assert.deepEqual(all.sort(), GZ.map((f) => f + '.gz').sort());
 });

@@ -14,6 +14,7 @@ public:
     String(long v) : s_(std::to_string(v)) {}
     String(unsigned long v) : s_(std::to_string(v)) {}
     const char* c_str() const { return s_.c_str(); }
+    int indexOf(const char* t) const { size_t p = s_.find(t ? t : ""); return p == std::string::npos ? -1 : (int)p; }   // V1.6.5
     unsigned int length() const { return (unsigned)s_.size(); }
     bool isEmpty() const { return s_.empty(); }
     String& operator+=(const String& o) { s_ += o.s_; return *this; }

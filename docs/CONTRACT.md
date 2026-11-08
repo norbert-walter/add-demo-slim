@@ -1,6 +1,6 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.6.4 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-08
+**Version:** 1.6.5 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-08
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.17
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
@@ -169,6 +169,20 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 1 | `test_hardware` crashed in `test_nvs_roundtrip` (Guru Meditation "Cache disabled but cached memory region accessed", PC in `StepperQueue::fill_i2s_buffer`). Cause in FastAccelStepper 96459ed: the I2S TX-done interrupt runs permanently with I2S_MUX and is IRAM-safe, but `fill_i2s_buffer()` and `I2sManager::i2sMuxSetBit()` were in flash; every flash operation (NVS write, SPIFFS read, OTA) crashed the board, also with the motor idle. Fix: both functions `IRAM_ATTR` (fork `norbert-walter/FastAccelStepper`, commit a64ceff on 96459ed; pull request to gin66 pending). Checked with nm/objdump: every function reachable from the interrupt is in IRAM, no literals into flash | `platformio.ini` |
 | 2 | Post-build check `scripts/check_iram.py` (all ESP32 environments): the build fails if one of the I2S interrupt functions is linked into flash (protects against library updates). Verified: fails with 96459ed, passes with a64ceff | `platformio.ini`, `scripts/` |
 | 3 | The nine native H1 tests could not see this (no flash cache on the host); the first five on-device tests were green (inputs, sensor, outputs, E-stop polarity change) | – |
+
+**Changes 1.6.4 → 1.6.5 (fast /add.html, gzip copies, Sprint D1.2, 2026-11-08, decision Norbert Walter):**
+
+On the device `/add.html` took about **24 s** for the 34 kB ADD document: since V1.5.17 the page was built
+at runtime and sent in 64-byte HTTP chunks (one TCP write each, about 2000 writes). Now it is a file, and
+the larger text files have precompressed copies.
+
+| # | Change | Where |
+|---|---|---|
+| 1 | `/add.html` is the SPIFFS file `/add.html`, generated from `add.json` by `scripts/build_data.py` (format unchanged: JSON in `<script type="application/ld+json">` with `</` as `<\/`, and in `<pre>` with `& < >` escaped); headers of ADD spec §5.3 unchanged. The runtime generation (`sendScriptJson`, `sendHtmlEscaped`) is removed | §5.4, `http_server.h` |
+| 2 | **gzip copies:** every file route except the fonts sends `<path>.gz` with `Content-Encoding: gzip` when the request header `Accept-Encoding` contains `gzip` and the copy exists, else the plain file; `Vary: Accept-Encoding` on every file answer. `httpServerInit` collects the request header `Accept-Encoding`. Copies (built by `build_data.py`): `www/index.html` (118 → 31 kB), `www/app.js`, `doc.html`, `add.json` (34 → 9 kB), `add.html` (69 → 17 kB), `openapi.json` (58 → 10 kB) | §5.4, `http_server.h`, `data/` |
+| 3 | `/favicon.ico` → SPIFFS `/www/favicon.ico` (`image/x-icon`, 16/32/48 px, 5 kB, `Cache-Control: max-age=86400`, no gzip copy); the font helper becomes `sendCached(path, type)` | §5.4, `http_server.h`, `data/www/` |
+| 3a | Test shims: `WebServer` with request headers (`collectHeaders`, `header`) and, like the ESP32 core, `Content-Encoding: gzip` added by `streamFile` for a `.gz` file name; `File::name()`; `String::indexOf` | `test/native/freertos_shim` |
+| 4 | Tests: `test_http_server` – `test_v165_add_html_is_a_file`, `test_v165_gzip_copy_when_accepted` replace the two runtime tests of `/add.html`; the marker for "no valid packet" is no longer 7 ms (`millis()` reached it in a fast run → flaky). `test_add.js` +2 (generated files up to date). `check_add.py`: gzip and load time. Native 22 suites **500**, JS 65 | `test/`, `scripts/` |
 
 **Changes 1.6.3 → 1.6.4 (ADD document and OpenAPI, Sprint D1, 2026-11-08, decision Norbert Walter):**
 
@@ -673,6 +687,8 @@ because of a full normal queue (§6.7).
 (last 20 log lines). All responses carry `Access-Control-Allow-Origin: *`.
 V1.6.4: `/openapi.json` (OpenAPI 3.1 of this HTTP API, `Cache-Control: no-store`; an extension to ADD –
 for AI agents `/add` is binding). `/llms.txt` lists it as its fourth link.
+V1.6.5: `/add.html` is a file (`scripts/build_data.py`); file routes (not the fonts) send a gzip copy
+`<path>.gz` when the client accepts gzip (`Vary: Accept-Encoding`). `/favicon.ico` (cacheable for a day).
 V1.5.22: `/app.js`, `/style.css` and the four font files of the web UI (§5.5).
 V1.5.26: `/style.css` answers 404 (file removed, the CSS is part of `index.html`).
 V1.5.23: serial console on the USB port (115200 Bd) – commands and answers in `net_task.h`.

@@ -13,7 +13,7 @@ Builds the simulator on first start with g++ (C++17) and ArduinoJson 7 (searched
 .pio/libdeps/native/ArduinoJson/src, or set ADD_ARDUINOJSON=<path to ArduinoJson/src>).
 
 Endpoints as on the device: / /settings /doc /app.js /font-*.woff2 /proc /api (POST, OPTIONS) /log
-/llms.txt /add /add.html /openapi.json (D1). Test hooks (not on the device):
+/llms.txt /add /add.html /openapi.json (D1; gzip copies like the firmware, V1.6.5). Test hooks (not on the device):
     GET /sim/set?estop=1|0&press_fwd=1|0&press_bwd=1|0&block=1|0
 """
 import json, os, subprocess, sys, threading, time
@@ -26,9 +26,11 @@ DATA = os.path.join(REPO, 'data')
 BIN = os.path.join(REPO, '.pio', 'sim', 'logic_sim')
 FILES = {'/': ('www/index.html', 'text/html'), '/settings': ('www/settings.html', 'text/html'),
          '/doc': ('doc.html', 'text/html'), '/app.js': ('www/app.js', 'application/javascript'),
-         '/add': ('add.json', 'application/json'), '/openapi.json': ('openapi.json', 'application/json')}
+         '/add': ('add.json', 'application/json'), '/openapi.json': ('openapi.json', 'application/json'),
+         '/add.html': ('add.html', 'text/html; charset=utf-8')}   # V1.6.5: a file (scripts/build_data.py)
 for f in ('u400', 'u700', 'm400', 'm700'):
     FILES['/font-%s.woff2' % f] = ('www/font-%s.woff2' % f, 'font/woff2')
+FILES['/favicon.ico'] = ('www/favicon.ico', 'image/x-icon')        # V1.6.5
 LLMS = ('# AI Device Description (ADD)\n- ADD (JSON): [Device Description](/add)\n'
         '- ADD (HTML): [Device Description for Cloud-AI](/add.html)\n'
         '- OpenAPI (JSON): [HTTP API, technical reference](/openapi.json)\n- Documentation: [Device manual](/doc)\n')
@@ -102,22 +104,21 @@ class H(BaseHTTPRequestHandler):
         u = urlparse(self.path); path = u.path
         if path in FILES:
             f, typ = FILES[path]
-            try: data = open(os.path.join(DATA, f), 'rb').read()
-            except OSError: return self.nf()
             extra = {'Cache-Control': 'no-store'} if path in ('/add', '/openapi.json') else (
-                {'Cache-Control': 'max-age=86400'} if path.endswith('.woff2') else None)
-            return self.send(200, typ, data, extra)
+                {'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache'} if path == '/add.html' else (
+                {'Cache-Control': 'max-age=86400'} if path.endswith(('.woff2', '.ico')) else {}))
+            fn = os.path.join(DATA, f)                  # V1.6.5: gzip copy if accepted, like the firmware
+            if not path.endswith(('.woff2', '.ico')):
+                extra['Vary'] = 'Accept-Encoding'
+                if 'gzip' in self.headers.get('Accept-Encoding', '') and os.path.exists(fn + '.gz'):
+                    fn += '.gz'; extra['Content-Encoding'] = 'gzip'
+            try: data = open(fn, 'rb').read()
+            except OSError: return self.nf()
+            return self.send(200, typ, data, extra or None)
         if path == '/proc':
             return self.send(200, 'application/json', SIM.req('P')['proc'], {'Cache-Control': 'no-store'})
         if path == '/log':
             return self.send(200, 'text/plain', ''.join(l + '\n' for l in SIM.log))
-        if path == '/add.html':                          # ADD spec §5.3, like the firmware (handleAddHtml)
-            try: j = open(os.path.join(DATA, 'add.json'), encoding='utf-8').read()
-            except OSError: return self.nf()
-            esc = j.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-            page = ('<!DOCTYPE html><html><head><meta charset="utf-8"><title>ADD</title>\n<script type="application/ld+json">\n'
-                    + j.replace('</', '<\\/') + '\n</script></head><body><pre>\n' + esc + '\n</pre></body></html>\n')
-            return self.send(200, 'text/html; charset=utf-8', page, {'Cache-Control': 'no-store, no-cache, must-revalidate'})
         if path == '/llms.txt':
             return self.send(200, 'text/plain', LLMS)
         if path == '/sim/set':

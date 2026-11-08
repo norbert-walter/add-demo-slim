@@ -7,6 +7,7 @@
 #include "FS.h"
 #include <functional>
 #include <vector>
+#include <strings.h>   // strcasecmp
 typedef enum { HTTP_ANY = 0, HTTP_GET, HTTP_HEAD, HTTP_POST, HTTP_PUT, HTTP_PATCH, HTTP_DELETE, HTTP_OPTIONS } HTTPMethod;
 #define CONTENT_LENGTH_UNKNOWN ((size_t)-1)
 // V1.5.25: the members of the real WebServer used by AddWebServer::dropIdleClient (protected there).
@@ -18,7 +19,8 @@ public:
     int available() { return shim_avail ? 1 : 0; }
     void stop() { ++shimClientStops(); }
 };
-struct ShimRequest { HTTPMethod method; std::string uri; std::string body; bool has_body; };
+struct ShimRequest { HTTPMethod method; std::string uri; std::string body; bool has_body;
+                     std::vector<std::pair<std::string, std::string>> headers; };   // V1.6.5: request headers
 struct ShimResponse {
     int code = 0; std::string type; std::string body;
     std::vector<std::pair<std::string, std::string>> headers;
@@ -35,6 +37,7 @@ private:
     struct Route { std::string uri; HTTPMethod method; THandlerFunction fn; };
     std::vector<Route> routes_; THandlerFunction notFound_; int port_; bool begun_ = false;
     std::vector<ShimRequest> pending_; ShimRequest cur_{}; std::vector<std::pair<std::string,std::string>> hdr_;
+    std::vector<std::string> collect_;     // V1.6.5: request headers to collect (collectHeaders)
     size_t content_len_ = 0;
 protected:
     // V1.5.25: like the real server: one client at a time; a connected client that has sent nothing
@@ -53,6 +56,20 @@ public:
     int port() const { return port_; }
     bool begun() const { return begun_; }
     void begin() { begun_ = true; }
+    bool collected_before_begin = false;    // V1.6.5: collectHeaders() was called before begin()
+    // V1.6.5: like the real server: only collected request headers are available (else "").
+    void collectHeaders(const char* keys[], const size_t n) {
+        collect_.clear(); for (size_t i = 0; i < n; ++i) collect_.push_back(keys[i]);
+        collected_before_begin = !begun_;
+    }
+    String header(const String& name) const {
+        bool known = false;
+        for (auto& k : collect_) if (strcasecmp(k.c_str(), name.c_str()) == 0) known = true;
+        if (!known) return String();
+        for (auto& h : cur_.headers) if (strcasecmp(h.first.c_str(), name.c_str()) == 0) return String(h.second);
+        return String();
+    }
+    bool hasHeader(const String& name) const { return header(name).length() > 0; }
     void on(const String& uri, HTTPMethod m, THandlerFunction fn) { routes_.push_back({uri.std(), m, fn}); }
     void on(const String& uri, THandlerFunction fn) { routes_.push_back({uri.std(), HTTP_ANY, fn}); }
     void onNotFound(THandlerFunction fn) { notFound_ = fn; }
@@ -78,6 +95,11 @@ public:
     }
     void sendContent(const char* c) { sendContent(c, strlen(c)); }
     template <typename T> size_t streamFile(T& file, const String& type, const int code = 200) {
+        // V1.6.5: like WebServer::_streamFileCore of the ESP32 core: a file name ending in ".gz" gets
+        // Content-Encoding: gzip automatically (unless the type is application/x-gzip).
+        std::string fn = file.name();
+        if (fn.size() >= 3 && fn.compare(fn.size() - 3, 3, ".gz") == 0 && type.std() != "application/x-gzip")
+            hdr_.push_back({"Content-Encoding", "gzip"});
         ShimResponse r; r.code = code; r.type = type.std(); r.headers = hdr_; hdr_.clear(); r.sends = 1;
         uint8_t b[64]; size_t n, total = 0;
         while ((n = file.read(b, sizeof b)) > 0) { r.body.append((const char*)b, n); total += n; }
@@ -103,8 +125,9 @@ public:
         }
     }
     // test helper
-    void shimQueue(HTTPMethod m, const std::string& uri, const std::string* body = nullptr) {
-        pending_.push_back({m, uri, body ? *body : std::string(), body != nullptr});
+    void shimQueue(HTTPMethod m, const std::string& uri, const std::string* body = nullptr,
+                   std::vector<std::pair<std::string, std::string>> headers = {}) {
+        pending_.push_back({m, uri, body ? *body : std::string(), body != nullptr, headers});
     }
 private:
     void sendRaw(int code, const char* type, const std::string& content) {

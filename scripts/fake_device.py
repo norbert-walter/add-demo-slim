@@ -20,7 +20,8 @@ ROOT = os.environ.get('ADD_FAKE_ROOT') or os.path.join(os.path.dirname(os.path.a
 ROUTES = {'/': ('www/index.html', 'text/html'), '/settings': ('www/settings.html', 'text/html'), '/doc': ('doc.html', 'text/html'),
           '/app.js': ('www/app.js', 'application/javascript'), '/openapi.json': ('openapi.json', 'application/json'),
           '/font-u400.woff2': ('www/font-u400.woff2', 'font/woff2'), '/font-u700.woff2': ('www/font-u700.woff2', 'font/woff2'),
-          '/font-m400.woff2': ('www/font-m400.woff2', 'font/woff2'), '/font-m700.woff2': ('www/font-m700.woff2', 'font/woff2')}
+          '/font-m400.woff2': ('www/font-m400.woff2', 'font/woff2'), '/font-m700.woff2': ('www/font-m700.woff2', 'font/woff2'),
+          '/favicon.ico': ('www/favicon.ico', 'image/x-icon')}
 ERR_MSG = {-4: 'bad parameter', -5: 'not allowed in this state', -6: 'precondition not met', -7: 'busy',
            -3: 'unknown command', -1: 'bad crc', -2: 'bad json', -10: 'local operator has priority'}
 SAMPLE_ADD = {"add_version": "1.0", "validation": {"validated_by": [

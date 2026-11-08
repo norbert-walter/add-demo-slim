@@ -13,9 +13,12 @@ struct ShimFileHandle {                    // shared by all copies of a File, li
 };
 class File {
     std::shared_ptr<ShimFileHandle> h_;
+    std::string name_;
 public:
     File() {}
-    explicit File(const std::string& d) : h_(std::make_shared<ShimFileHandle>(d)) {}
+    explicit File(const std::string& d, const std::string& path = "") : h_(std::make_shared<ShimFileHandle>(d)), name_(path) {}
+    /// V1.6.5: like the ESP32 core 3.x the base name ("add.html.gz"); WebServer::streamFile uses it.
+    const char* name() const { size_t p = name_.rfind('/'); return name_.c_str() + (p == std::string::npos ? 0 : p + 1); }
     explicit operator bool() const { return h_ && h_->open; }
     size_t size() const { return h_ ? h_->data.size() : 0; }
     int available() { return (h_ && h_->open) ? (int)(h_->data.size() - h_->pos) : 0; }
@@ -36,7 +39,7 @@ public:
     bool exists(const char* path) { return shimFiles().count(path) > 0; }
     bool exists(const String& path) { return exists(path.c_str()); }
     File open(const char* path, const char* mode = "r") {
-        auto it = shimFiles().find(path); if (it == shimFiles().end()) return File(); return File(it->second);
+        auto it = shimFiles().find(path); if (it == shimFiles().end()) return File(); return File(it->second, path);
     }
     File open(const String& path, const char* mode = "r") { return open(path.c_str(), mode); }
 };

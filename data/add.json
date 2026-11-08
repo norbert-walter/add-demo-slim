@@ -16,7 +16,7 @@
     "id": "add-demo-slim",
     "type": "actuator",
     "manufacturer": "Norbert Walter (demonstration project)",
-    "firmware": "1.0.0 (CONTRACT V1.6.4)",
+    "firmware": "1.0.0 (CONTRACT V1.6.5)",
     "hardware": "ESP32 (MKS DLC32 V2.1), TMC2209 stepper driver, Sharp GP2Y0A41SK0F distance sensor, MKS TS35-R touch display",
     "location": "Demonstration setup of Norbert Walter, operated remotely over the internet",
     "description": "Scale model (about 1:5) of a radiometric thickness gauge as used in rolling mills. A C-frame moves on a linear axis (0 ... 242 mm) over a six-step body (step centres 115 ... 215 mm, thickness 5 ... 30 mm) and measures its thickness with an optical distance sensor. X-ray high voltage (HV) and shutter are simulated by LEDs. Zones: park 0 ... 20 mm (shutter always closed), service 20 ... 60 mm (shutter only manually), measuring zone > 60 ... 242 mm (shutter only by the measuring programmes). Safety states: SAFE_START, READY, RUNNING (HV on), FAULT, WAIT_ACK, RECOVER.",
