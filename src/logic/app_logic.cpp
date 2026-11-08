@@ -401,7 +401,7 @@ ApiError appCommand(AppState& s, const Command& cmd, const HwInputs& hw, const A
             break;
         }
         case CmdId::CALIB:
-            if (s.seq.phase != SeqPhase::IDLE) { r = ApiError::BUSY; break; }
+            if (s.seq.phase != SeqPhase::IDLE && s.seq.phase != SeqPhase::MEAS_HOLD) { r = ApiError::BUSY; break; }
             switch (cmd.calib) {
                 case CalibAction::POINT:
                     if (cmd.calib_index < 1 || cmd.calib_index > CALIB_POINTS) { r = ApiError::BAD_PARAM; break; }
