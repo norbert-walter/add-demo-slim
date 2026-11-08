@@ -1,0 +1,1297 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Demoanlage ADD Slim – HTTP API",
+    "version": "1.6.4",
+    "summary": "REST API of a demonstration model of a radiometric thickness gauge (ESP32).",
+    "description": "Technical description of the HTTP API (CONTRACT V1.6.4 §4/§5). **For AI agents the ADD document at /add is binding**: it defines which actions an AI may use, which need user confirmation, and the rules. This OpenAPI document is an extension to ADD (not part of the ADD standard) and describes the complete API, including commands and SET keys that are reserved for the operator (x-add-reserved). x-add-action names the ADD action that covers an operation or command.\n\n**CRC frame (requests, responses and /proc).** 1. Build the JSON object text without the crc member, compact (no spaces), e.g. `{\"cmd\":\"HV_ON\",\"params\":{}}`. 2. Compute CRC32 (IEEE 802.3, same as zlib.crc32) over exactly these UTF-8 bytes and write it as 8 hex digits. 3. Insert `,\"crc\":\"XXXXXXXX\"` directly before the final `}`. Receiver: take the text before the last `,\"crc\":\"`, append `}`, compute and compare (hex case-insensitive). No JSON re-serialisation is ever involved; the CRC covers the text actually sent, so `35` and `35.0` are both fine. Test vectors: `{\"cmd\":\"HV_ON\",\"params\":{}}` -> `88F7C802`; `{\"cmd\":\"SET\",\"params\":{\"key\":\"temp\",\"value\":35.0}}` -> `C93F2D33`; `{\"cmd\":\"SET\",\"params\":{\"key\":\"temp\",\"value\":35}}` -> `F2B0BAC5`. Reference client: scripts/add_client.py.\n\n**Watchdog.** INIT, MOVE, PARK, SERVICE, START_MEASURE, START_TRAVERSE and HV_ON accepted from the API arm a communication watchdog (/proc safety.comm_armed). While armed, a client must send a POST /api packet at least every 4 s (GET_STATE as heartbeat; GET /proc does not count), else the device faults with COMM_TIMEOUT after 5 s. It disarms when the axis is idle and HV is off.\n\n**Demonstration system.** HV and shutter are LEDs, there is no radiation source; interlock, cooling_flow and temp are simulated signals. The software safety logic is not a safety function in the sense of EN ISO 13849.",
+    "contact": {"name": "Norbert Walter", "url": "https://github.com/norbert-walter/add-demo-slim"},
+    "license": {"name": "see repository", "url": "https://github.com/norbert-walter/add-demo-slim"},
+    "x-firmware": "1.0.0",
+    "x-contract": "V1.6.4"
+  },
+  "servers": [
+    {"url": "https://test.norbert-walter.dnshome.de", "description": "public address (HTTPS through an Nginx reverse proxy with HTTP Basic Auth)"},
+    {"url": "http://192.168.4.1", "description": "access point of the device (local, no authentication)"}
+  ],
+  "security": [
+    {
+      "basicAuth": []
+    },
+    {}
+  ],
+  "externalDocs": {"description": "CONTRACT (device behaviour, normative)", "url": "https://github.com/norbert-walter/add-demo-slim/blob/master/docs/CONTRACT.md"},
+  "paths": {
+    "/proc": {
+      "get": {
+        "summary": "Live process data",
+        "description": "Current state, motion, measurement and safety data (Proc). Read it after every command: the end of long operations is only visible here. Polling every 200 ... 500 ms is fine.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Proc"}
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {"type": "string", "const": "no-store"}
+              }
+            }
+          }
+        },
+        "x-add-action": "read_process_data",
+        "parameters": [
+          {"$ref": "#/components/parameters/t"}
+        ]
+      }
+    },
+    "/api": {
+      "post": {
+        "summary": "Send a command",
+        "description": "One endpoint for all commands. The body is a CRC-framed JSON object {\"cmd\":\"<NAME>\",\"params\":{...},\"crc\":\"XXXXXXXX\"}; params is optional for commands without parameters. Send it as text/plain (simple CORS request, no preflight) or application/json. Commands are never repeated automatically by the device.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "text/plain": {
+              "schema": {"$ref": "#/components/schemas/ApiRequest"}
+            },
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/ApiRequest"}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Command processed; err tells the result (0 = accepted).",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/ApiResponse"}
+              }
+            }
+          },
+          "400": {
+            "description": "BAD_CRC (-1) or BAD_JSON (-2).",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/ApiResponse"}
+              }
+            }
+          }
+        },
+        "x-add-action": ["init_homing", "move_axis", "park", "service_position", "start_measure", "start_traverse", "stop", "get_state", "get_config", "set_parameter", "set_simulated_signal", "calibrate", "acknowledge_fault", "hv_on", "hv_off", "shutter_open", "shutter_close", "reboot"]
+      },
+      "options": {
+        "summary": "CORS preflight",
+        "responses": {
+          "204": {"description": "CORS headers"}
+        }
+      }
+    },
+    "/add": {
+      "get": {
+        "summary": "ADD document",
+        "description": "AI Device Description (ADD v1.0) of this device. Binding for AI agents: autonomy level, permitted actions, confirmation requirements and rules.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {"type": "object"}
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {"type": "string", "const": "no-store"}
+              }
+            }
+          },
+          "404": {"description": "file not present on the device"}
+        },
+        "parameters": [
+          {"$ref": "#/components/parameters/t"}
+        ]
+      }
+    },
+    "/add.html": {
+      "get": {
+        "summary": "ADD document as HTML",
+        "description": "The ADD document embedded in an HTML page (ADD spec §5.3) for cloud AIs that only read web pages.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/html": {
+                "schema": {"type": "string"}
+              }
+            }
+          },
+          "404": {"description": "file not present on the device"}
+        },
+        "parameters": [
+          {"$ref": "#/components/parameters/t"}
+        ]
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "summary": "This OpenAPI document",
+        "description": "Technical description of the HTTP API (extension to ADD, not part of the ADD standard).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {"type": "object"}
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {"type": "string", "const": "no-store"}
+              }
+            }
+          },
+          "404": {"description": "file not present on the device"}
+        },
+        "parameters": [
+          {"$ref": "#/components/parameters/t"}
+        ]
+      }
+    },
+    "/llms.txt": {
+      "get": {
+        "summary": "Entry point for language models",
+        "description": "Markdown list with links to /add, /add.html, /openapi.json and /doc.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {"type": "string"}
+              }
+            }
+          },
+          "404": {"description": "file not present on the device"}
+        },
+        "parameters": [
+          {"$ref": "#/components/parameters/t"}
+        ]
+      }
+    },
+    "/doc": {
+      "get": {
+        "summary": "Documentation page",
+        "description": "HTML page (German) with links to the specification, the contract and the manuals.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/html": {
+                "schema": {"type": "string"}
+              }
+            }
+          },
+          "404": {"description": "file not present on the device"}
+        },
+        "parameters": [
+          {"$ref": "#/components/parameters/t"}
+        ]
+      }
+    },
+    "/log": {
+      "get": {
+        "summary": "Device log",
+        "description": "Last 20 log lines, plain text.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {"type": "string"}
+              }
+            }
+          }
+        },
+        "x-add-action": "read_log",
+        "parameters": [
+          {"$ref": "#/components/parameters/t"}
+        ]
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "Operator web UI",
+        "description": "IMS operator UI (German); /#process, #status, #settings, #calibration, #log select the page.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/html": {
+                "schema": {"type": "string"}
+              }
+            }
+          },
+          "404": {"description": "file not present on the device"}
+        },
+        "parameters": [
+          {"$ref": "#/components/parameters/t"}
+        ]
+      }
+    },
+    "/settings": {
+      "get": {
+        "summary": "Settings (redirect)",
+        "description": "Redirect to /#settings.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/html": {
+                "schema": {"type": "string"}
+              }
+            }
+          },
+          "404": {"description": "file not present on the device"}
+        },
+        "parameters": [
+          {"$ref": "#/components/parameters/t"}
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Crc": {"type": "string", "pattern": "^[0-9A-Fa-f]{8}$", "description": "CRC32 (IEEE 802.3 / zlib) in 8 hex digits over the compact JSON text without the crc member; see info.description."},
+      "Cmd_INIT": {
+        "type": "object",
+        "title": "INIT",
+        "description": "Reference run (homing): the axis moves backward at 5 mm/s to the backward end switch, pulls off 2 mm and sets position 0 there. Takes up to 70 s; the end is visible in /proc (motion.homed true, motion.state idle, state READY). Allowed in: SAFE_START, READY. Typical errors: -5 STATE, -7 BUSY, -10 LOCAL_CONTROL. Arms the communication watchdog.",
+        "properties": {
+          "cmd": {"const": "INIT"},
+          "params": {
+            "type": "object",
+            "properties": {}
+          },
+          "crc": {"$ref": "#/components/schemas/Crc"}
+        },
+        "required": ["cmd", "crc"],
+        "x-add-action": "init_homing",
+        "x-allowed-states": ["SAFE_START", "READY"]
+      },
+      "Cmd_MOVE": {
+        "type": "object",
+        "title": "MOVE",
+        "description": "Absolute move of the axis to pos. Requires a valid reference (motion.homed). Does not open the shutter. Allowed in: READY, RUNNING. Typical errors: -4 BAD_PARAM, -5 STATE, -6 PRECONDITION, -7 BUSY, -10 LOCAL_CONTROL. Arms the communication watchdog.",
+        "properties": {
+          "cmd": {"const": "MOVE"},
+          "params": {
+            "type": "object",
+            "properties": {
+              "pos": {"type": "number", "minimum": 0, "maximum": 242, "description": "absolute target position [mm]"},
+              "speed": {"type": "number", "minimum": 1, "maximum": 20, "default": 10, "description": "travel speed [mm/s]"}
+            },
+            "required": ["pos"]
+          },
+          "crc": {"$ref": "#/components/schemas/Crc"}
+        },
+        "required": ["cmd", "crc", "params"],
+        "x-add-action": "move_axis",
+        "x-allowed-states": ["READY", "RUNNING"]
+      },
+      "Cmd_PARK": {
+        "type": "object",
+        "title": "PARK",
+        "description": "Move to the park position 2 mm at 10 mm/s. Requires motion.homed. The shutter closes when the axis enters the park zone (0 ... 20 mm); HV is not changed. Allowed in: READY, RUNNING. Typical errors: -5 STATE, -6 PRECONDITION, -7 BUSY, -10 LOCAL_CONTROL. Arms the communication watchdog.",
+        "properties": {
+          "cmd": {"const": "PARK"},
+          "params": {
+            "type": "object",
+            "properties": {}
+          },
+          "crc": {"$ref": "#/components/schemas/Crc"}
+        },
+        "required": ["cmd", "crc"],
+        "x-add-action": "park",
+        "x-allowed-states": ["READY", "RUNNING"]
+      },
+      "Cmd_SERVICE": {
+        "type": "object",
+        "title": "SERVICE",
+        "description": "Move to the service position maint_pos (service zone 20 ... 60 mm, default 40 mm) at 10 mm/s. Requires motion.homed. An automatic shutter closes when the axis enters the service zone. Allowed in: READY, RUNNING. Typical errors: -5 STATE, -6 PRECONDITION, -7 BUSY, -10 LOCAL_CONTROL. Arms the communication watchdog.",
+        "properties": {
+          "cmd": {"const": "SERVICE"},
+          "params": {
+            "type": "object",
+            "properties": {}
+          },
+          "crc": {"$ref": "#/components/schemas/Crc"}
+        },
+        "required": ["cmd", "crc"],
+        "x-add-action": "service_position",
+        "x-allowed-states": ["READY", "RUNNING"]
+      },
+      "Cmd_START_MEASURE": {
+        "type": "object",
+        "title": "START_MEASURE",
+        "description": "Stationary measurement: the axis moves to pos at 10 mm/s, the shutter opens automatically there, and the measurement runs until STOP. Results in /proc measure (dist, thick, on_material, avg, n). Needs state RUNNING (HV on). A START_MEASURE or START_TRAVERSE during a running stationary measurement may be rejected with BUSY (-7): send STOP first. Allowed in: RUNNING. Typical errors: -4 BAD_PARAM, -5 STATE, -6 PRECONDITION, -7 BUSY, -10 LOCAL_CONTROL. Arms the communication watchdog.",
+        "properties": {
+          "cmd": {"const": "START_MEASURE"},
+          "params": {
+            "type": "object",
+            "properties": {
+              "pos": {"type": "number", "exclusiveMinimum": 60, "maximum": 242, "description": "measuring position, 60 < pos <= 242 (measuring zone); default measure_pos [mm]; default: parameter measure_pos"}
+            }
+          },
+          "crc": {"$ref": "#/components/schemas/Crc"}
+        },
+        "required": ["cmd", "crc"],
+        "x-add-action": "start_measure",
+        "x-allowed-states": ["RUNNING"]
+      },
+      "Cmd_START_TRAVERSE": {
+        "type": "object",
+        "title": "START_TRAVERSE",
+        "description": "One profile run: approach start at 10 mm/s without measurement, then traverse to end at speed while measuring (/proc samples with motion.mode \"traverse\"), then stay at end. The shutter opens in the run and stays open for shutter_hold seconds afterwards, so that a next run (start and end swapped) sent within that time continues without closing it. HV stays on. Allowed in: RUNNING. Typical errors: -4 BAD_PARAM, -5 STATE, -6 PRECONDITION, -7 BUSY, -10 LOCAL_CONTROL. Arms the communication watchdog.",
+        "properties": {
+          "cmd": {"const": "START_TRAVERSE"},
+          "params": {
+            "type": "object",
+            "properties": {
+              "start": {"type": "number", "exclusiveMinimum": 60, "maximum": 242, "description": "start position, 60 < start <= 242; default traverse_start [mm]; default: parameter traverse_start"},
+              "end": {"type": "number", "exclusiveMinimum": 60, "maximum": 242, "description": "end position, 60 < end <= 242, |end - start| >= 1 mm, end < start allowed; default traverse_end [mm]; default: parameter traverse_end"},
+              "speed": {"type": "number", "minimum": 1, "maximum": 20, "description": "speed of the measuring run; default traverse_speed [mm/s]; default: parameter traverse_speed"}
+            }
+          },
+          "crc": {"$ref": "#/components/schemas/Crc"}
+        },
+        "required": ["cmd", "crc"],
+        "x-add-action": "start_traverse",
+        "x-allowed-states": ["RUNNING"]
+      },
+      "Cmd_STOP": {
+        "type": "object",
+        "title": "STOP",
+        "description": "Controlled stop of every motion and acquisition; an automatic shutter closes in the same control cycle. Priority command (separate queue, never BUSY because of a full normal queue). HV is not changed. Allowed in: SAFE_START, READY, RUNNING, FAULT, WAIT_ACK, RECOVER. Typical errors: none (always accepted).",
+        "properties": {
+          "cmd": {"const": "STOP"},
+          "params": {
+            "type": "object",
+            "properties": {}
+          },
+          "crc": {"$ref": "#/components/schemas/Crc"}
+        },
+        "required": ["cmd", "crc"],
+        "x-add-action": "stop",
+        "x-allowed-states": ["SAFE_START", "READY", "RUNNING", "FAULT", "WAIT_ACK", "RECOVER"],
+        "x-priority-command": true
+      },
+      "Cmd_GET_STATE": {
+        "type": "object",
+        "title": "GET_STATE",
+        "description": "Heartbeat for the communication watchdog; reply with state, sys_err, local and cycle timing. No physical effect. Allowed in: SAFE_START, READY, RUNNING, FAULT, WAIT_ACK, RECOVER. Typical errors: none (always accepted).",
+        "properties": {
+          "cmd": {"const": "GET_STATE"},
+          "params": {
+            "type": "object",
+            "properties": {}
+          },
+          "crc": {"$ref": "#/components/schemas/Crc"}
+        },
+        "required": ["cmd", "crc"],
+        "x-add-action": "get_state",
+        "x-allowed-states": ["SAFE_START", "READY", "RUNNING", "FAULT", "WAIT_ACK", "RECOVER"]
+      },
+      "Cmd_GET_CONFIG": {
+        "type": "object",
+        "title": "GET_CONFIG",
+        "description": "Read all parameters, the calibration table and the simulated signals (reply member \"config\"). No physical effect. Allowed in: SAFE_START, READY, RUNNING, FAULT, WAIT_ACK, RECOVER. Typical errors: none (always accepted).",
+        "properties": {
+          "cmd": {"const": "GET_CONFIG"},
+          "params": {
+            "type": "object",
+            "properties": {}
+          },
+          "crc": {"$ref": "#/components/schemas/Crc"}
+        },
+        "required": ["cmd", "crc"],
+        "x-add-action": "get_config",
+        "x-allowed-states": ["SAFE_START", "READY", "RUNNING", "FAULT", "WAIT_ACK", "RECOVER"]
+      },
+      "Cmd_SET": {
+        "type": "object",
+        "title": "SET",
+        "description": "Set one parameter or simulated signal (key/value, ranges per key). Parameters are stored in flash, simulated signals are not. Allowed in: SAFE_START, READY, RUNNING, FAULT, WAIT_ACK, RECOVER. Typical errors: -4 BAD_PARAM, -6 PRECONDITION.",
+        "properties": {
+          "cmd": {"const": "SET"},
+          "params": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "enum": ["measure_pos", "maint_pos", "traverse_start", "traverse_end", "traverse_speed", "shutter_hold", "edge_threshold", "base_dist", "calib_ref_1", "calib_ref_2", "calib_ref_3", "calib_ref_4", "calib_ref_5", "calib_ref_6", "interlock", "cooling_flow", "temp", "estop_nc", "wifi_ssid", "wifi_pass"],
+                "description": "parameter name, see components.schemas.SetKeys for type, range and unit of each key"
+              },
+              "value": {
+                "type": ["number", "boolean", "string"],
+                "description": "number, boolean or string, depending on key"
+              }
+            },
+            "required": ["key", "value"]
+          },
+          "crc": {"$ref": "#/components/schemas/Crc"}
+        },
+        "required": ["cmd", "crc", "params"],
+        "x-add-action": ["set_parameter", "set_simulated_signal"],
+        "x-allowed-states": ["SAFE_START", "READY", "RUNNING", "FAULT", "WAIT_ACK", "RECOVER"],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "key": {"const": "measure_pos"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "value": {"type": "number", "minimum": 61, "maximum": 242}
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "key": {"const": "maint_pos"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "value": {"type": "number", "minimum": 21, "maximum": 60}
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "key": {"const": "traverse_start"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "value": {"type": "number", "minimum": 61, "maximum": 242}
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "key": {"const": "traverse_end"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "value": {"type": "number", "minimum": 61, "maximum": 242}
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "key": {"const": "traverse_speed"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "value": {"type": "number", "minimum": 1, "maximum": 20}
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "key": {"const": "shutter_hold"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "value": {"type": "number", "minimum": 0, "maximum": 10}
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "key": {"const": "edge_threshold"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "value": {"type": "number", "minimum": 0.5, "maximum": 100}
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "key": {"const": "base_dist"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "value": {"type": "number", "minimum": 40, "maximum": 300}
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "key": {"const": "calib_ref_1"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "value": {"type": "number", "minimum": 40, "maximum": 300}
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "key": {"const": "calib_ref_2"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "value": {"type": "number", "minimum": 40, "maximum": 300}
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "key": {"const": "calib_ref_3"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "value": {"type": "number", "minimum": 40, "maximum": 300}
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "key": {"const": "calib_ref_4"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "value": {"type": "number", "minimum": 40, "maximum": 300}
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "key": {"const": "calib_ref_5"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "value": {"type": "number", "minimum": 40, "maximum": 300}
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "key": {"const": "calib_ref_6"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "value": {"type": "number", "minimum": 40, "maximum": 300}
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "key": {"const": "interlock"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "value": {
+                      "oneOf": [
+                        {"type": "boolean"},
+                        {
+                          "enum": [0, 1]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "key": {"const": "cooling_flow"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "value": {
+                      "oneOf": [
+                        {"type": "boolean"},
+                        {
+                          "enum": [0, 1]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "key": {"const": "temp"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "value": {"type": "number", "minimum": -20, "maximum": 99.9}
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "key": {"const": "estop_nc"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "value": {
+                      "oneOf": [
+                        {"type": "boolean"},
+                        {
+                          "enum": [0, 1]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "key": {"const": "wifi_ssid"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "value": {"type": "string", "minLength": 0, "maxLength": 32}
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "key": {"const": "wifi_pass"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "value": {"type": "string", "pattern": "^(|.{8,63})$"}
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "x-add-reserved-keys": ["estop_nc", "wifi_ssid", "wifi_pass"]
+      },
+      "Cmd_CALIB": {
+        "type": "object",
+        "title": "CALIB",
+        "description": "Calibration of the distance sensor (6 points, step centres 115 ... 215 mm). point: take the current uncalibrated value as raw value of point index (axis idle or stationary measurement running, signal stable 500 ms). base: base_dist = current calibrated distance. save: store all parameters if the table is valid. reset: identity table (not stored until save). Allowed in: SAFE_START, READY, RUNNING. Typical errors: -4 BAD_PARAM, -5 STATE, -6 PRECONDITION, -7 BUSY, -8 NOT_STABLE, -9 CALIB_INVALID, -10 LOCAL_CONTROL.",
+        "properties": {
+          "cmd": {"const": "CALIB"},
+          "params": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": ["point", "base", "save", "reset"],
+                "description": "point | base | save | reset"
+              },
+              "index": {"type": "integer", "minimum": 1, "maximum": 6, "description": "calibration point 1 ... 6, required for action point"}
+            },
+            "required": ["action"]
+          },
+          "crc": {"$ref": "#/components/schemas/Crc"}
+        },
+        "required": ["cmd", "crc", "params"],
+        "x-add-action": "calibrate",
+        "x-allowed-states": ["SAFE_START", "READY", "RUNNING"],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "params": {
+                  "properties": {
+                    "action": {"const": "point"}
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "required": ["action", "index"]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Cmd_ACK": {
+        "type": "object",
+        "title": "ACK",
+        "description": "Acknowledge a latched fault (state WAIT_ACK). Rejected with PRECONDITION (-6) while the cause persists. Afterwards READY (homed) or SAFE_START; HV and shutter stay off. Allowed in: WAIT_ACK. Typical errors: -5 STATE, -6 PRECONDITION, -10 LOCAL_CONTROL.",
+        "properties": {
+          "cmd": {"const": "ACK"},
+          "params": {
+            "type": "object",
+            "properties": {}
+          },
+          "crc": {"$ref": "#/components/schemas/Crc"}
+        },
+        "required": ["cmd", "crc"],
+        "x-add-action": "acknowledge_fault",
+        "x-allowed-states": ["WAIT_ACK"]
+      },
+      "Cmd_HV_ON": {
+        "type": "object",
+        "title": "HV_ON",
+        "description": "Switch the (simulated) X-ray high voltage on: READY -> RUNNING if interlock, cooling_flow, temp <= 30.0 °C and no E-stop (/proc safety.hv_ok). The shutter stays closed. Allowed in: READY, RUNNING. Typical errors: -5 STATE, -6 PRECONDITION, -10 LOCAL_CONTROL. Arms the communication watchdog.",
+        "properties": {
+          "cmd": {"const": "HV_ON"},
+          "params": {
+            "type": "object",
+            "properties": {}
+          },
+          "crc": {"$ref": "#/components/schemas/Crc"}
+        },
+        "required": ["cmd", "crc"],
+        "x-add-action": "hv_on",
+        "x-allowed-states": ["READY", "RUNNING"]
+      },
+      "Cmd_HV_OFF": {
+        "type": "object",
+        "title": "HV_OFF",
+        "description": "Switch the high voltage off: RUNNING -> READY, the shutter closes, any measuring motion stops. Priority command. Allowed in: SAFE_START, READY, RUNNING, FAULT, WAIT_ACK, RECOVER. Typical errors: none (always accepted).",
+        "properties": {
+          "cmd": {"const": "HV_OFF"},
+          "params": {
+            "type": "object",
+            "properties": {}
+          },
+          "crc": {"$ref": "#/components/schemas/Crc"}
+        },
+        "required": ["cmd", "crc"],
+        "x-add-action": "hv_off",
+        "x-allowed-states": ["SAFE_START", "READY", "RUNNING", "FAULT", "WAIT_ACK", "RECOVER"],
+        "x-priority-command": true
+      },
+      "Cmd_SHUTTER_OPEN": {
+        "type": "object",
+        "title": "SHUTTER_OPEN",
+        "description": "Open the shutter manually (service function). Only in the service zone 20 < pos <= 60 mm, else PRECONDITION (-6). In the measuring zone only the measuring programmes open the shutter. Allowed in: RUNNING. Typical errors: -5 STATE, -6 PRECONDITION, -10 LOCAL_CONTROL.",
+        "properties": {
+          "cmd": {"const": "SHUTTER_OPEN"},
+          "params": {
+            "type": "object",
+            "properties": {}
+          },
+          "crc": {"$ref": "#/components/schemas/Crc"}
+        },
+        "required": ["cmd", "crc"],
+        "x-add-action": "shutter_open",
+        "x-allowed-states": ["RUNNING"]
+      },
+      "Cmd_SHUTTER_CLOSE": {
+        "type": "object",
+        "title": "SHUTTER_CLOSE",
+        "description": "Close the shutter. Priority command. Allowed in: SAFE_START, READY, RUNNING, FAULT, WAIT_ACK, RECOVER. Typical errors: none (always accepted).",
+        "properties": {
+          "cmd": {"const": "SHUTTER_CLOSE"},
+          "params": {
+            "type": "object",
+            "properties": {}
+          },
+          "crc": {"$ref": "#/components/schemas/Crc"}
+        },
+        "required": ["cmd", "crc"],
+        "x-add-action": "shutter_close",
+        "x-allowed-states": ["SAFE_START", "READY", "RUNNING", "FAULT", "WAIT_ACK", "RECOVER"],
+        "x-priority-command": true
+      },
+      "Cmd_REBOOT": {
+        "type": "object",
+        "title": "REBOOT",
+        "description": "Restart the controller 700 ms after the reply. The reference is lost (INIT needed), the simulated signals return to their defaults; the device is unreachable for about 10 s. Allowed in: SAFE_START, READY, WAIT_ACK. Typical errors: -5 STATE, -10 LOCAL_CONTROL.",
+        "properties": {
+          "cmd": {"const": "REBOOT"},
+          "params": {
+            "type": "object",
+            "properties": {}
+          },
+          "crc": {"$ref": "#/components/schemas/Crc"}
+        },
+        "required": ["cmd", "crc"],
+        "x-add-action": "reboot",
+        "x-allowed-states": ["SAFE_START", "READY", "WAIT_ACK"]
+      },
+      "ApiRequest": {
+        "oneOf": [
+          {"$ref": "#/components/schemas/Cmd_INIT"},
+          {"$ref": "#/components/schemas/Cmd_MOVE"},
+          {"$ref": "#/components/schemas/Cmd_PARK"},
+          {"$ref": "#/components/schemas/Cmd_SERVICE"},
+          {"$ref": "#/components/schemas/Cmd_START_MEASURE"},
+          {"$ref": "#/components/schemas/Cmd_START_TRAVERSE"},
+          {"$ref": "#/components/schemas/Cmd_STOP"},
+          {"$ref": "#/components/schemas/Cmd_GET_STATE"},
+          {"$ref": "#/components/schemas/Cmd_GET_CONFIG"},
+          {"$ref": "#/components/schemas/Cmd_SET"},
+          {"$ref": "#/components/schemas/Cmd_CALIB"},
+          {"$ref": "#/components/schemas/Cmd_ACK"},
+          {"$ref": "#/components/schemas/Cmd_HV_ON"},
+          {"$ref": "#/components/schemas/Cmd_HV_OFF"},
+          {"$ref": "#/components/schemas/Cmd_SHUTTER_OPEN"},
+          {"$ref": "#/components/schemas/Cmd_SHUTTER_CLOSE"},
+          {"$ref": "#/components/schemas/Cmd_REBOOT"}
+        ],
+        "discriminator": {
+          "propertyName": "cmd",
+          "mapping": {
+            "INIT": "#/components/schemas/Cmd_INIT",
+            "MOVE": "#/components/schemas/Cmd_MOVE",
+            "PARK": "#/components/schemas/Cmd_PARK",
+            "SERVICE": "#/components/schemas/Cmd_SERVICE",
+            "START_MEASURE": "#/components/schemas/Cmd_START_MEASURE",
+            "START_TRAVERSE": "#/components/schemas/Cmd_START_TRAVERSE",
+            "STOP": "#/components/schemas/Cmd_STOP",
+            "GET_STATE": "#/components/schemas/Cmd_GET_STATE",
+            "GET_CONFIG": "#/components/schemas/Cmd_GET_CONFIG",
+            "SET": "#/components/schemas/Cmd_SET",
+            "CALIB": "#/components/schemas/Cmd_CALIB",
+            "ACK": "#/components/schemas/Cmd_ACK",
+            "HV_ON": "#/components/schemas/Cmd_HV_ON",
+            "HV_OFF": "#/components/schemas/Cmd_HV_OFF",
+            "SHUTTER_OPEN": "#/components/schemas/Cmd_SHUTTER_OPEN",
+            "SHUTTER_CLOSE": "#/components/schemas/Cmd_SHUTTER_CLOSE",
+            "REBOOT": "#/components/schemas/Cmd_REBOOT"
+          }
+        },
+        "example": {
+          "cmd": "MOVE",
+          "params": {"pos": 155, "speed": 10},
+          "crc": "2F71C1D3"
+        }
+      },
+      "ApiError": {
+        "type": "integer",
+        "enum": [0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10],
+        "description": "API result code: 0 OK = accepted; the outputs of that control cycle are already set; -1 BAD_CRC = CRC frame missing or wrong (HTTP 400); -2 BAD_JSON = body is not a JSON object (HTTP 400); -3 UNKNOWN_CMD = cmd missing or unknown; -4 BAD_PARAM = parameter missing, wrong type or out of range; -5 STATE = command not allowed in the current safety state; -6 PRECONDITION = allowed in this state, but a condition is not met (HV conditions, zone, not homed, cause of a fault persists); -7 BUSY = motion sequence active, queue full or no reply within 100 ms; the command may still be executed later; -8 NOT_STABLE = calibration capture: signal not stable for 500 ms; -9 CALIB_INVALID = calibration table invalid, not saved; -10 LOCAL_CONTROL = an operator at the touch display has priority; the device is fine.",
+        "x-enum-varnames": ["OK", "BAD_CRC", "BAD_JSON", "UNKNOWN_CMD", "BAD_PARAM", "STATE", "PRECONDITION", "BUSY", "NOT_STABLE", "CALIB_INVALID", "LOCAL_CONTROL"]
+      },
+      "SystemError": {
+        "type": "integer",
+        "enum": [0, 1, 2, 3, 4, 5],
+        "description": "Latched system error (until ACK): 0 NONE = -; 1 ESTOP = E-stop pressed or E-stop wire broken; 2 TEMP_HIGH = simulated cooling water temperature > 32.0 °C; 3 COMM_TIMEOUT = remote operation active and no /api packet for > 5 s; 4 MOTOR_FAULT = end switch hit unexpectedly during motion; 5 HOMING_FAILED = homing timeout (70 s) or forward switch during homing.",
+        "x-enum-varnames": ["NONE", "ESTOP", "TEMP_HIGH", "COMM_TIMEOUT", "MOTOR_FAULT", "HOMING_FAILED"]
+      },
+      "SafetyState": {
+        "type": "string",
+        "enum": ["SAFE_START", "READY", "RUNNING", "FAULT", "WAIT_ACK", "RECOVER"],
+        "description": "SAFE_START: boot or no valid reference, INIT required. READY: homed, HV off. RUNNING: HV on, shutter may be open. FAULT: fault detected (one cycle). WAIT_ACK: waiting for ACK. RECOVER: ACK accepted (one cycle)."
+      },
+      "ApiResponse": {
+        "type": "object",
+        "description": "Reply of POST /api, CRC-framed like the request. HTTP 200 for every result except BAD_CRC and BAD_JSON (HTTP 400). OK means: accepted and the outputs of that control cycle are set; the end of long operations is only visible in GET /proc. GET_STATE and GET_CONFIG add their members (GetStateExtra, GetConfigExtra) to this object.",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["ok", "error"]
+          },
+          "err": {"$ref": "#/components/schemas/ApiError"},
+          "cmd": {"type": "string", "description": "echo of the command name (empty if unknown)"},
+          "msg": {"type": "string", "description": "short English error text, only present if err != 0"},
+          "crc": {"$ref": "#/components/schemas/Crc"}
+        },
+        "required": ["status", "err", "cmd", "crc"],
+        "examples": [
+          {"status": "ok", "err": 0, "cmd": "HV_ON", "crc": "XXXXXXXX"},
+          {"status": "error", "err": -6, "cmd": "HV_ON", "msg": "precondition not met", "crc": "XXXXXXXX"}
+        ]
+      },
+      "GetStateExtra": {
+        "type": "object",
+        "description": "Additional members of the GET_STATE reply.",
+        "properties": {
+          "state": {"$ref": "#/components/schemas/SafetyState"},
+          "sys_err": {"$ref": "#/components/schemas/SystemError"},
+          "local": {"type": "boolean", "description": "LOCAL operator priority active"},
+          "cycle_max_us": {"type": "integer", "description": "max. work time of a 1 ms control cycle since boot [µs]"},
+          "period_max_us": {"type": "integer", "description": "max. distance of two cycle starts [µs]"},
+          "overruns": {"type": "integer", "description": "cycles with work time > 1000 µs (information)"},
+          "prio_lat_max_us": {"type": "integer", "description": "max. latency of a priority command from queue to outputs [µs]; 0 until the first one"}
+        },
+        "required": ["state", "sys_err", "local", "cycle_max_us", "period_max_us", "overruns", "prio_lat_max_us"]
+      },
+      "GetConfigExtra": {
+        "type": "object",
+        "description": "Additional member \"config\" of the GET_CONFIG reply.",
+        "properties": {
+          "config": {
+            "type": "object",
+            "properties": {
+              "measure_pos": {"type": "number", "description": "default position of START_MEASURE (measuring zone) [mm]"},
+              "maint_pos": {"type": "number", "description": "service position of SERVICE (service zone) [mm]"},
+              "traverse_start": {"type": "number", "description": "default start of START_TRAVERSE [mm]"},
+              "traverse_end": {"type": "number", "description": "default end of START_TRAVERSE [mm]"},
+              "traverse_speed": {"type": "number", "description": "default speed of START_TRAVERSE [mm/s]"},
+              "shutter_hold": {"type": "number", "description": "hold time of the automatic shutter after a measuring programme [s]"},
+              "edge_threshold": {"type": "number", "description": "thickness above which measure.on_material is true [mm]"},
+              "base_dist": {"type": "number", "description": "virtual reference plane; thick = base_dist - dist [mm]"},
+              "calib_ref_1": {"type": "number", "description": "true sensor distance of calibration point 1 (step centre at 115 mm) [mm]"},
+              "calib_ref_2": {"type": "number", "description": "true sensor distance of calibration point 2 (step centre at 135 mm) [mm]"},
+              "calib_ref_3": {"type": "number", "description": "true sensor distance of calibration point 3 (step centre at 155 mm) [mm]"},
+              "calib_ref_4": {"type": "number", "description": "true sensor distance of calibration point 4 (step centre at 175 mm) [mm]"},
+              "calib_ref_5": {"type": "number", "description": "true sensor distance of calibration point 5 (step centre at 195 mm) [mm]"},
+              "calib_ref_6": {"type": "number", "description": "true sensor distance of calibration point 6 (step centre at 215 mm) [mm]"},
+              "interlock": {"type": "boolean", "description": "SIMULATED safety interlock (door closed); not persisted, true after boot"},
+              "cooling_flow": {"type": "boolean", "description": "SIMULATED cooling water flow; not persisted, true after boot"},
+              "temp": {"type": "number", "description": "SIMULATED cooling water temperature; HV needs <= 30.0, > 32.0 is a fault (TEMP_HIGH); not persisted, 18.0 after boot [°C]"},
+              "estop_nc": {"type": "boolean", "description": "E-stop wiring (normally closed with wire-break detection); only while idle with HV off"},
+              "wifi_ssid": {"type": "string", "description": "router SSID, effective after REBOOT (empty = access point only)"},
+              "calib_raw_1": {"type": "number", "description": "uncalibrated sensor value of calibration point 1 [mm]"},
+              "calib_raw_2": {"type": "number", "description": "uncalibrated sensor value of calibration point 2 [mm]"},
+              "calib_raw_3": {"type": "number", "description": "uncalibrated sensor value of calibration point 3 [mm]"},
+              "calib_raw_4": {"type": "number", "description": "uncalibrated sensor value of calibration point 4 [mm]"},
+              "calib_raw_5": {"type": "number", "description": "uncalibrated sensor value of calibration point 5 [mm]"},
+              "calib_raw_6": {"type": "number", "description": "uncalibrated sensor value of calibration point 6 [mm]"},
+              "calib_valid": {"type": "boolean", "description": "calibration table valid"},
+              "wifi_pass_set": {"type": "boolean", "description": "a router password is stored (the password itself is never reported)"}
+            },
+            "required": [
+              "measure_pos",
+              "maint_pos",
+              "traverse_start",
+              "traverse_end",
+              "traverse_speed",
+              "shutter_hold",
+              "edge_threshold",
+              "base_dist",
+              "calib_ref_1",
+              "calib_ref_2",
+              "calib_ref_3",
+              "calib_ref_4",
+              "calib_ref_5",
+              "calib_ref_6",
+              "interlock",
+              "cooling_flow",
+              "temp",
+              "estop_nc",
+              "wifi_ssid",
+              "calib_raw_1",
+              "calib_raw_2",
+              "calib_raw_3",
+              "calib_raw_4",
+              "calib_raw_5",
+              "calib_raw_6",
+              "calib_valid",
+              "wifi_pass_set"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": ["config"]
+      },
+      "SetKeys": {
+        "type": "object",
+        "description": "Keys of SET with type, range, unit and default (CONTRACT §9). Keys marked x-add-reserved are reserved for the operator and are not ADD actions.",
+        "properties": {
+          "measure_pos": {"type": "number", "description": "default position of START_MEASURE (measuring zone)", "default": 155.0, "minimum": 61, "maximum": 242, "x-unit": "mm", "x-add-action": "set_parameter"},
+          "maint_pos": {"type": "number", "description": "service position of SERVICE (service zone)", "default": 40.0, "minimum": 21, "maximum": 60, "x-unit": "mm", "x-add-action": "set_parameter"},
+          "traverse_start": {"type": "number", "description": "default start of START_TRAVERSE", "default": 80.0, "minimum": 61, "maximum": 242, "x-unit": "mm", "x-add-action": "set_parameter"},
+          "traverse_end": {"type": "number", "description": "default end of START_TRAVERSE", "default": 240.0, "minimum": 61, "maximum": 242, "x-unit": "mm", "x-add-action": "set_parameter"},
+          "traverse_speed": {"type": "number", "description": "default speed of START_TRAVERSE", "default": 10.0, "minimum": 1, "maximum": 20, "x-unit": "mm/s", "x-add-action": "set_parameter"},
+          "shutter_hold": {"type": "number", "description": "hold time of the automatic shutter after a measuring programme", "default": 3.0, "minimum": 0, "maximum": 10, "x-unit": "s", "x-add-action": "set_parameter"},
+          "edge_threshold": {"type": "number", "description": "thickness above which measure.on_material is true", "default": 3.0, "minimum": 0.5, "maximum": 100, "x-unit": "mm", "x-add-action": "set_parameter"},
+          "base_dist": {"type": "number", "description": "virtual reference plane; thick = base_dist - dist", "default": 70.0, "minimum": 40, "maximum": 300, "x-unit": "mm", "x-add-action": "set_parameter"},
+          "calib_ref_1": {"type": "number", "description": "true sensor distance of calibration point 1 (step centre at 115 mm)", "default": 65.0, "minimum": 40, "maximum": 300, "x-unit": "mm", "x-add-action": "set_parameter"},
+          "calib_ref_2": {"type": "number", "description": "true sensor distance of calibration point 2 (step centre at 135 mm)", "default": 60.0, "minimum": 40, "maximum": 300, "x-unit": "mm", "x-add-action": "set_parameter"},
+          "calib_ref_3": {"type": "number", "description": "true sensor distance of calibration point 3 (step centre at 155 mm)", "default": 55.0, "minimum": 40, "maximum": 300, "x-unit": "mm", "x-add-action": "set_parameter"},
+          "calib_ref_4": {"type": "number", "description": "true sensor distance of calibration point 4 (step centre at 175 mm)", "default": 50.0, "minimum": 40, "maximum": 300, "x-unit": "mm", "x-add-action": "set_parameter"},
+          "calib_ref_5": {"type": "number", "description": "true sensor distance of calibration point 5 (step centre at 195 mm)", "default": 45.0, "minimum": 40, "maximum": 300, "x-unit": "mm", "x-add-action": "set_parameter"},
+          "calib_ref_6": {"type": "number", "description": "true sensor distance of calibration point 6 (step centre at 215 mm)", "default": 40.0, "minimum": 40, "maximum": 300, "x-unit": "mm", "x-add-action": "set_parameter"},
+          "interlock": {"type": "boolean", "description": "SIMULATED safety interlock (door closed); not persisted, true after boot (0 and 1 are accepted as well)", "default": true, "x-simulated": true, "x-add-action": "set_simulated_signal"},
+          "cooling_flow": {"type": "boolean", "description": "SIMULATED cooling water flow; not persisted, true after boot (0 and 1 are accepted as well)", "default": true, "x-simulated": true, "x-add-action": "set_simulated_signal"},
+          "temp": {"type": "number", "description": "SIMULATED cooling water temperature; HV needs <= 30.0, > 32.0 is a fault (TEMP_HIGH); not persisted, 18.0 after boot", "default": 18.0, "minimum": -20, "maximum": 99.9, "x-unit": "°C", "x-simulated": true, "x-add-action": "set_simulated_signal"},
+          "estop_nc": {"type": "boolean", "description": "E-stop wiring (normally closed with wire-break detection); only while idle with HV off (0 and 1 are accepted as well)", "default": false, "x-add-reserved": true},
+          "wifi_ssid": {"type": "string", "description": "router SSID, effective after REBOOT (empty = access point only)", "default": "", "minLength": 0, "maxLength": 32, "x-add-reserved": true},
+          "wifi_pass": {"type": "string", "description": "router password (0 or 8 ... 63 characters), never reported back; the empty string keeps the stored password", "default": "", "maxLength": 63, "pattern": "^(|.{8,63})$", "x-add-reserved": true}
+        }
+      },
+      "Proc": {
+        "type": "object",
+        "description": "Live process data, one line, CRC-framed, <= 512 bytes, floats with one decimal. measure.valid is true only while the shutter is open (no radiation, no measurement).",
+        "properties": {
+          "ts": {"type": "integer", "description": "device time since boot [ms]"},
+          "state": {"$ref": "#/components/schemas/SafetyState"},
+          "err": {"$ref": "#/components/schemas/SystemError"},
+          "local": {"type": "boolean", "description": "LOCAL operator priority active: remote start commands are rejected with -10"},
+          "motion": {
+            "type": "object",
+            "properties": {
+              "pos": {"type": "number", "description": "axis position [mm], 0 ... 242"},
+              "vel": {"type": "number", "description": "speed [mm/s]"},
+              "state": {
+                "type": "string",
+                "enum": ["idle", "moving", "homing", "error"]
+              },
+              "mode": {
+                "type": "string",
+                "enum": ["none", "measure", "traverse"]
+              },
+              "homed": {"type": "boolean", "description": "axis has a valid reference"},
+              "limit_fwd": {"type": "boolean", "description": "forward end switch"},
+              "limit_bwd": {"type": "boolean", "description": "backward end switch"}
+            },
+            "required": ["pos", "vel", "state", "mode", "homed", "limit_fwd", "limit_bwd"],
+            "additionalProperties": false
+          },
+          "measure": {
+            "type": "object",
+            "properties": {
+              "dist": {"type": "number", "description": "calibrated distance sensor -> surface [mm]"},
+              "thick": {"type": "number", "description": "thickness = max(0, base_dist - dist) [mm]"},
+              "on_material": {"type": "boolean", "description": "thick > edge_threshold"},
+              "valid": {"type": "boolean", "description": "measurement valid (shutter open, or hold time after a run)"},
+              "in_range": {"type": "boolean", "description": "sensor reading within 35 ... 300 mm"},
+              "avg": {"type": "number", "description": "mean thickness over valid on-material samples of the current/last acquisition [mm]"},
+              "n": {"type": "integer", "description": "number of samples in avg"}
+            },
+            "required": ["dist", "thick", "on_material", "valid", "in_range", "avg", "n"],
+            "additionalProperties": false
+          },
+          "safety": {
+            "type": "object",
+            "properties": {
+              "estop": {"type": "boolean", "description": "E-stop active"},
+              "hv_on": {"type": "boolean", "description": "high voltage on"},
+              "hv_ok": {"type": "boolean", "description": "HV enable conditions met right now"},
+              "shutter": {
+                "type": "string",
+                "enum": ["open", "closed"]
+              },
+              "interlock": {"type": "boolean", "description": "SIMULATED interlock"},
+              "cooling_flow": {"type": "boolean", "description": "SIMULATED cooling flow"},
+              "temp": {"type": "number", "description": "SIMULATED cooling water temperature [°C]"},
+              "temp_ok": {"type": "boolean", "description": "temp <= 30.0 °C"},
+              "comm_armed": {"type": "boolean", "description": "communication watchdog armed: send GET_STATE at least every 4 s"}
+            },
+            "required": ["estop", "hv_on", "hv_ok", "shutter", "interlock", "cooling_flow", "temp", "temp_ok", "comm_armed"],
+            "additionalProperties": false
+          },
+          "crc": {"$ref": "#/components/schemas/Crc"}
+        },
+        "required": ["ts", "state", "err", "local", "motion", "measure", "safety", "crc"],
+        "additionalProperties": false,
+        "example": {
+          "ts": 123456,
+          "state": "RUNNING",
+          "err": 0,
+          "local": false,
+          "motion": {"pos": 120.0, "vel": 10.0, "state": "moving", "mode": "traverse", "homed": true, "limit_fwd": false, "limit_bwd": false},
+          "measure": {"dist": 50.2, "thick": 19.8, "on_material": true, "valid": true, "in_range": true, "avg": 19.7, "n": 143},
+          "safety": {"estop": false, "hv_on": true, "hv_ok": true, "shutter": "open", "interlock": true, "cooling_flow": true, "temp": 18.0, "temp_ok": true, "comm_armed": true},
+          "crc": "XXXXXXXX"
+        }
+      }
+    },
+    "parameters": {
+      "t": {
+        "name": "t",
+        "in": "query",
+        "required": false,
+        "schema": {"type": "integer"},
+        "description": "cache buster (unix timestamp); ignored by the device"
+      }
+    },
+    "securitySchemes": {
+      "basicAuth": {"type": "http", "scheme": "basic", "description": "Required by the reverse proxy of the public address only. Credentials are provided by the operator; they are never part of this document."}
+    }
+  }
+}

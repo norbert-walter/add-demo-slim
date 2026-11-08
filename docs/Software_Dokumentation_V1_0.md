@@ -1,7 +1,7 @@
 # Software-Dokumentation – Demoanlage ADD (Slim)
 
-**Version:** 1.1 · **Stand:** 2026-11-08 · **Autor:** Norbert Walter
-**Firmware:** `FW_VERSION` 1.0.0 · **Contract:** V1.5.28 · **Pflichtenheft:** V1.7.12
+**Version:** 1.2 · **Stand:** 2026-11-08 · **Autor:** Norbert Walter
+**Firmware:** `FW_VERSION` 1.0.0 · **Contract:** V1.6.4 · **Pflichtenheft:** V1.7.17
 **Hardware:** siehe `docs/Hardware_Dokumentation_V1_0.md`
 
 ---
@@ -100,7 +100,7 @@ Die Spezifikation besteht aus dem Pflichtenheft (deutsch, für Menschen) und dem
 | Weboberfläche | IMS-Bedienoberfläche, deutsch, eine Seite, auch lokal als Datei nutzbar | 12.1 |
 | WLAN | Access Point immer an; Router-Verbindung optional mit Wiederholstrategie; mDNS `add-demo.local` | 10.7 |
 | Summer | sechs Signalmuster mit Priorität | 3.6 |
-| ADD | Gerätebeschreibung nach ADD Specification v1.0 unter `/add`, `/add.html`, `/llms.txt` | 13 |
+| ADD | Gerätebeschreibung nach ADD Specification v1.0 unter `/add`, `/add.html`, `/llms.txt`; als Erweiterung OpenAPI 3.1 unter `/openapi.json` | 13 |
 | Simulierte Signale | Sicherheitskreis, Kühlwasserfluss und Kühlwassertemperatur werden per API gesetzt und als `SIM` gekennzeichnet | 4.2 |
 
 ---
@@ -186,7 +186,8 @@ Inhalt des Dateisystems (SPIFFS), aufgespielt mit `pio run -e firmware -t upload
 | `www/settings.html` | Weiterleitung auf `/#settings` |
 | `www/app.js` | ADDAPP: Protokoll- und Regelfunktionen (CRC, Rahmen, Tastenregeln, Parameterprüfung) |
 | `www/font-*.woff2`, `LICENCE-ubuntu-font.txt` | Schriften Ubuntu und Ubuntu Mono |
-| `add.json` | ADD-Dokument – **folgt mit Sprint D1** |
+| `add.json` | ADD-Dokument (Sprint D1, Level 2, Entwurf bis zur KI-Validierung) |
+| `openapi.json` | OpenAPI 3.1 der HTTP-API – Erweiterung zu ADD, technische Referenz (Sprint D1) |
 | `doc.html` | Dokumentationsseite für `/doc`: Kurzbeschreibung, Endpunkte, Links zur Dokumentation auf GitHub |
 
 ### 2.3 `test/`, `scripts/`, `docs/`
@@ -584,7 +585,7 @@ Pflichtenhefts.
 | W1 | Weboberfläche | JS-Tests, Browserprüfung |
 | IMS-UI | IMS-Bedienoberfläche ersetzt W1 | JS-Tests, Browserprüfung |
 | A1 | Abnahme nach Pflichtenheft Kapitel 10 | vorbereitet: `docs/sprints/A1.md`, `scripts/acceptance_a1.py` |
-| D1 | `add.json`, Demo-Skripte | offen |
+| D1 | `add.json`, `openapi.json`, Demo-Skripte | in Arbeit |
 
 Der aktuelle Stand steht in der Statustabelle der `README.md`, die Befunde in `docs/reviews/`.
 
@@ -779,7 +780,7 @@ pio run -e firmware -t upload
 ```
 pio run -e firmware -t uploadfs
 ```
-Spielt das Dateisystem (`data/`: Weboberfläche, `doc.html`, später `add.json`) auf. Nötig nach jeder
+Spielt das Dateisystem (`data/`: Weboberfläche, `doc.html`, `add.json`, `openapi.json`) auf. Nötig nach jeder
 Änderung in `data/`. Die Parameter im NVS bleiben erhalten.
 
 ```
@@ -1050,8 +1051,9 @@ curl -s -X POST --data '{"cmd":"HV_ON","params":{},"crc":"88F7C802"}' http://192
 | `GET /proc` | Prozessabbild mit CRC, `Cache-Control: no-store` | application/json |
 | `POST /api` | Befehle (Kapitel 9) | application/json |
 | `OPTIONS /api` | CORS-Preflight → 204 | – |
-| `GET /add` | ADD-Dokument (`/add.json`), `no-store` – **folgt mit D1** | application/json |
-| `GET /add.html` | ADD-Dokument eingebettet in HTML für Cloud-KIs (ADD Spec §5.3) – **folgt mit D1** | text/html |
+| `GET /add` | ADD-Dokument (`/add.json`), `no-store` | application/json |
+| `GET /add.html` | ADD-Dokument eingebettet in HTML für Cloud-KIs (ADD Spec §5.3) | text/html |
+| `GET /openapi.json` | OpenAPI 3.1 der HTTP-API (`/openapi.json`), `no-store` – ab Contract V1.6.4 | application/json |
 | `GET /llms.txt` | Index für Sprachmodelle (ADD Spec §5.4) | text/plain |
 | `GET /doc` | Dokumentationsseite (`/doc.html`) mit Links | text/html |
 | `GET /log` | letzte 20 Logzeilen | text/plain |
@@ -1061,7 +1063,7 @@ curl -s -X POST --data '{"cmd":"HV_ON","params":{},"crc":"88F7C802"}' http://192
 | andere | `404 {"error":"not found"}` | application/json |
 
 Jede Antwort trägt `Access-Control-Allow-Origin: *`; Seiten auf anderen Rechnern (oder als lokale
-Datei) dürfen die Anlage also abfragen. Ohne `add.json` liefern `/add` und `/add.html` 404.
+Datei) dürfen die Anlage also abfragen. Fehlt `add.json` bzw. `openapi.json` im Dateisystem, liefern `/add`, `/add.html` bzw. `/openapi.json` 404.
 
 ### 10.2 `GET /proc`
 
@@ -1124,17 +1126,25 @@ Die letzten 20 Logzeilen, älteste zuerst. Typische Zeilen:
 # AI Device Description (ADD)
 - ADD (JSON): [Device Description](/add)
 - ADD (HTML): [Device Description for Cloud-AI](/add.html)
+- OpenAPI (JSON): [HTTP API, technical reference](/openapi.json)
 - Documentation: [Device manual](/doc)
 ```
 
 Einstiegspunkt für Sprachmodelle, die nur Text lesen.
 
-### 10.5 `GET /add`, `/add.html`, `/doc`
+### 10.5 `GET /add`, `/add.html`, `/openapi.json`, `/doc`
 
 Das ADD-Dokument beschreibt die Anlage nach der ADD Specification v1.0 mit den Blöcken `autonomy`,
-`device`, `security`, `interfaces`, `actions`, `rules`, `validation` (Pflichtenheft Kapitel 7).
-`/add.html` bettet dasselbe JSON in eine HTML-Seite ein, damit Cloud-KIs mit Web-Zugriff es lesen
-können. **Der Inhalt folgt mit Sprint D1;** bis dahin antworten `/add` und `/add.html` mit 404.
+`device`, `security`, `interfaces`, `actions`, `rules`, `validation` (Pflichtenheft Kapitel 7), dazu
+den optionalen Block `ui`. `/add.html` bettet dasselbe JSON in eine HTML-Seite ein, damit Cloud-KIs
+mit Web-Zugriff es lesen können. Inhalt und Begründungen: Kapitel 13.
+
+`/openapi.json` (Contract V1.6.4) beschreibt dieselbe HTTP-API als OpenAPI 3.1 – für Werkzeuge,
+Code-Generatoren und Entwickler. Das ist eine **eigene Erweiterung**, nicht Teil des ADD-Standards
+(der Standard erlaubt sinnvolle Erweiterungen). Für KI-Agenten bleibt das ADD-Dokument verbindlich:
+Es legt fest, welche Befehle eine KI verwenden darf und welche eine Bestätigung brauchen. Das
+OpenAPI-Dokument enthält die vollständige API, auch die dem Betreiber vorbehaltenen `SET`-Schlüssel
+(`x-add-reserved`); `x-add-action` nennt zu jedem Befehl die ADD-Aktion.
 
 `/doc` liefert eine deutsche HTML-Seite (`data/doc.html`, seit Contract V1.5.27): Kurzbeschreibung
 der Demoanlage, Endpunkte des Geräts und eine Linktabelle zu ADD-Referenz, Developer Guide, Style
@@ -1404,27 +1414,53 @@ Regeln, Autonomiestufe und Validierungsprotokoll. Live-Daten kommen aus `/proc`.
 | `GET /llms.txt` | Einstieg für Sprachmodelle |
 | `GET /add` | KI-Agenten mit HTTP-Zugriff (JSON) |
 | `GET /add.html` | Cloud-KIs, die nur Webseiten lesen |
+| `GET /openapi.json` | Werkzeuge und Code-Generatoren (Erweiterung, technische Referenz) |
 | `GET /doc` | Dokumentationsseite mit Links zu Spezifikation und Handbüchern |
 | `GET /proc`, `POST /api` | Zustand lesen, Befehle senden |
 
-> **Stand:** `add.json` entsteht in Sprint D1. Bis dahin kann man einer KI dieses
-> Dokument, den Contract (`docs/CONTRACT.md`) und die Hardware-Dokumentation geben – die Beispiele
-> unten funktionieren damit ebenso. Die Autonomiestufe ist **Level 2** geplant: Die Demo ist
-> harmlos, modelliert aber eine Strahlenquelle; die KI soll sich so verhalten wie an der echten
-> Anlage (Bestätigung durch den Benutzer vor HV und Fahrten).
+**Einstufung: Level 2** (Scores Umkehrbarkeit 1, Wirkungsbereich 1, Fehlertoleranz 0). Die Demo ist
+harmlos, modelliert aber eine Strahlenquelle; die KI soll sich so verhalten wie an der echten Anlage.
+Die Anlage ist über das Internet erreichbar: `https://test.norbert-walter.dnshome.de` hinter einem
+Nginx-Reverse-Proxy mit TLS und HTTP Basic Auth. Zugangsdaten stehen in keiner Datei des Projekts.
+
+| Aktionen | Bestätigung |
+|---|---|
+| Lesen: `/proc`, `/log`, `GET_STATE`, `GET_CONFIG` | keine (`safe`) |
+| `STOP`, `HV_OFF`, `SHUTTER_CLOSE` | keine – sichere Richtung, jeder Agent darf sie senden (`autonomous`, `timing: critical`) |
+| alle anderen: `INIT`, `HV_ON`, Fahrten, Messungen, `SET`, `CALIB`, `ACK`, `SHUTTER_OPEN`, `REBOOT` | vor jeder einzelnen Aktion (`per_action`) |
+| `SET estop_nc`, `wifi_ssid`, `wifi_pass` | keine ADD-Aktion – dem Betreiber vorbehalten |
+
+**KI und Skripte.** Eine KI, die im Dialog arbeitet (eine Anfrage pro Antwort), kann den Herzschlag
+alle 2 s nicht halten; nach 5 s löst der Watchdog `COMM_TIMEOUT` aus (sicher, aber mit ACK). Für
+automatische Abläufe – Profilfahrten, Messreihen, die Abnahme – sind deshalb Python-Skripte da. Ein
+Skript, das **der Benutzer** startet, läuft ohne Rückfragen: Die Entscheidung, es zu starten, ersetzt
+die Bestätigung je Aktion. Die KI darf solche Skripte schreiben und erklären, aber **nicht selbst
+starten** – sonst würde sie die Bestätigungspflicht umgehen.
+
+**Validierung.** `validation.validated_by` ist leer, solange keine KI das Dokument nach ADD Spec §13
+am Gerät geprüft hat; die Statusseite zeigt dann „not validated“. Read-only-Prüfung der Endpunkte:
+`python3 scripts/check_add.py --base http://<IP>` (mit `--user` über die Internetadresse; das
+Passwort wird abgefragt und nirgends gespeichert).
 
 ### 13.2 Regeln für KI-Agenten
 
 Diese Regeln stehen im ADD-Dokument (`rules`) und gelten für jeden Agenten:
 
-1. Vor HV_ON und vor jeder Fahrt die Zustimmung des Benutzers einholen.
+Die wichtigsten (vollständig und verbindlich: `rules` in `data/add.json`, Englisch):
+
+1. Vor jeder Aktion mit `requires_confirmation: true` die Zustimmung des Benutzers einholen; vor jeder
+   Fahrt bestätigen lassen, dass niemand an der Achse ist.
 2. `OK` heißt „angenommen“ – das Ende eines Ablaufs aus `/proc` lesen.
-3. Solange `safety.comm_armed = true`: mindestens jede Sekunde `GET_STATE` senden.
+3. Solange `safety.comm_armed = true`: mindestens alle 2 s `GET_STATE` senden. Wer das nicht kann,
+   startet keine Fahrt und kein HV, sondern bietet ein Skript an.
 4. Bei `BUSY` erst `/proc` lesen, nur bei fehlender Wirkung wiederholen.
 5. Bei `LOCAL_CONTROL` nicht wiederholen, sondern auf den Bediener warten.
 6. Bei einem Fehler (`WAIT_ACK`) die Ursache erklären; ACK erst nach Freigabe durch den Benutzer.
-7. STOP ist immer erlaubt und hat Vorrang.
+7. STOP ist immer erlaubt und hat Vorrang; auf „Stopp“ sofort STOP und HV_OFF.
 8. Simulierte Signale (`interlock`, `cooling_flow`, `temp`) als simuliert kennzeichnen.
+9. CRC mit Code berechnen (z. B. `zlib.crc32`), nie von Hand; Antworten mit falscher CRC verwerfen.
+10. Keine Skripte mit Schreibbefehlen selbst starten; `estop_nc`, `wifi_ssid`, `wifi_pass` nie setzen.
+11. Zugangsdaten nie in Dateien, Skripte, Berichte oder den Chat schreiben.
 
 ### 13.3 Ziel 1 und 2: Anlage erklären, Fragen beantworten
 
@@ -1790,7 +1826,7 @@ temporären Arbeitsbaum (nur für den Reviewer; die Referenz liegt nicht im Repo
 | Eine HTTP-Verbindung zur Zeit | Laden der Weboberfläche verzögert `/api` um bis zu 1 s |
 | FastAccelStepper-Fork | Korrektur des IRAM-Fehlers; Pull Request an das Original offen |
 | `/style.css` | Route liefert 404 (Datei entfernt); kann bei der nächsten Firmware-Änderung entfallen |
-| Sprint D1 offen | `add.json`, Demo-Skripte; `/add` und `/add.html` liefern bis dahin 404 |
+| Sprint D1 in Arbeit | `add.json` und `openapi.json` als Entwurf (nicht KI-validiert); `/openapi.json` ab Firmware mit Contract V1.6.4; Demo-Skripte offen |
 | Sprint A1 offen | Abnahme nach Pflichtenheft Kapitel 10 |
 | Bedienvorrang aus | `LOCAL_HOLD_MS = 0`; einschalten mit einem Wert > 0 in `config.h` |
 
@@ -1872,3 +1908,4 @@ Anmerkungen:
 |---|---|---|
 | 1.0 | 2026-11-07 | Erste Ausgabe (Contract V1.5.27, Pflichtenheft V1.7.10); ADD-Kapitel vorläufig bis Sprint D1. Ergänzt: Bedienwege (1.1), WLAN-Einbuchen per Konsole (10.7, 11.1), Umfang (16.4) |
 | 1.1 | 2026-11-08 | Kalibriertabelle mit 6 Stufen, unter Messbedingungen (Contract V1.6.3, Sprints K1/K2): Messkette 3.4, Befehle, Parameter, `GET_CONFIG`, NVS Version 5, Kapitel 12.3 neu, Testzahlen |
+| 1.2 | 2026-11-08 | ADD-Dokument und OpenAPI (Contract V1.6.4, Sprint D1): 2.2, 10.1, 10.4, 10.5, 13.1 (Einstufung, Bestätigungen, KI und Skripte, Validierung), 13.2 |
