@@ -188,6 +188,7 @@ static void handleLlms() {
         "# AI Device Description (ADD)\n"
         "- ADD (JSON): [Device Description](/add)\n"
         "- ADD (HTML): [Device Description for Cloud-AI](/add.html)\n"
+        "- OpenAPI (JSON): [HTTP API, technical reference](/openapi.json)\n"
         "- Documentation: [Device manual](/doc)\n");
 }
 
@@ -288,6 +289,7 @@ void httpServerInit() {
     server.on("/", HTTP_GET, []() { sendFile("/www/index.html", "text/html", false); });
     server.on("/settings", HTTP_GET, []() { sendFile("/www/settings.html", "text/html", false); });
     server.on("/add", HTTP_GET, []() { sendFile("/add.json", "application/json", true); });
+    server.on("/openapi.json", HTTP_GET, []() { sendFile("/openapi.json", "application/json", true); });
     server.on("/doc", HTTP_GET, []() { sendFile("/doc.html", "text/html", false); });   // V1.5.27: HTML
     // V1.5.22: web UI assets (Sprint W1); fonts may be cached by the browser
     server.on("/app.js", HTTP_GET, []() { sendFile("/www/app.js", "application/javascript", false); });
