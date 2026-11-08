@@ -1132,11 +1132,19 @@ def t18k(c):
     for i, (pos, dist, thick) in enumerate(STEPS, start=1):
         measure_at(c, pos)
         time.sleep(1.0)
-        for k in range(6):
+        # the firmware takes a point only after 500 ms within ±0.5 mm; at the far step (σ ≈ 0.5 mm)
+        # that needs patience: up to 30 attempts 0.5 s apart (≈ 15 s)
+        for k in range(30):
             e = d.api("CALIB", action="point", index=i)
-            if e != -8 or k == 5:                                   # NOT_STABLE: retry
+            if e != -8 or k == 29:                                  # NOT_STABLE: retry
                 break
             time.sleep(0.5)
+        c.val("Punkt %d (%d mm): Versuche bis stabil" % (i, pos), k + 1, warn=False)
+        if e == -8:
+            v = []
+            for _ in range(40):
+                v.append(d.proc()["measure"]["dist"]); time.sleep(0.05)
+            c.val("Punkt %d (%d mm): Streuung Abstand (σ, Diagnose)" % (i, pos), stats(v)[1], "mm")
         if e == -7:
             d.ok("STOP")
             raise Problem("CALIB während der Messung abgelehnt (BUSY): Firmware vor Contract V1.6.3 (Sprint K2)")
@@ -1179,6 +1187,30 @@ def t18(c):
             bad.append("%d mm" % pos)
     check(not bad, "außerhalb der Toleranz: %s" % ", ".join(bad))
     return "alle Stufen in Toleranz (Einzelwerte im Anhang)" + shutter_note(c)
+
+
+def material_span(samples, max_gap=3):
+    """Edges of the material from one run, robust against single outliers beside the material (the sensor
+    looks at the lower boom about 123 mm away and scatters strongly): the samples are taken in the order of
+    travel, gaps of at most max_gap samples inside the material are bridged, and the LONGEST contiguous
+    stretch of on_material is the material. -> (low edge, high edge, outliers outside the stretch)"""
+    runs, cur, gap = [], None, 0
+    for i, (pos, _, on) in enumerate(samples):
+        if on:
+            if cur is None: cur = [i, i]
+            else: cur[1] = i
+            gap = 0
+        elif cur is not None:
+            gap += 1
+            if gap > max_gap:
+                runs.append(cur); cur, gap = None, 0
+    if cur is not None: runs.append(cur)
+    if not runs:
+        return None, None, 0
+    a, b = max(runs, key=lambda r: r[1] - r[0])
+    lo, hi = sorted((samples[a][0], samples[b][0]))
+    outliers = sum(1 for j, s_ in enumerate(samples) if s_[2] and not a <= j <= b)
+    return lo, hi, outliers
 
 
 def traverse_run(c, start, end, speed):
@@ -1229,10 +1261,11 @@ def t19(c):
     for name, (samples, closed, avg, n) in runs.items():
         c.val("%s: Messwerte im Lauf" % name, len(samples), mn=201)
         check(len(samples) > 200, "%s: zu wenige Messwerte (%d)" % (name, len(samples)))
-        on = [s_[0] for s_ in samples if s_[2]]
-        check(on, "%s: kein Messgut erkannt" % name)
-        edges[name] = (min(on), max(on))
-        for label, v, nom in (("Messgut ab", min(on), 105.0), ("Messgut bis", max(on), 225.0)):
+        lo, hi, outl = material_span(samples)
+        check(lo is not None, "%s: kein Messgut erkannt" % name)
+        edges[name] = (lo, hi)
+        c.val("%s: einzelne Messgut-Ausreißer neben dem Stufenkörper (Info)" % name, outl)
+        for label, v, nom in (("Messgut ab", lo, 105.0), ("Messgut bis", hi, 225.0)):
             st = c.val("%s: Kante %s erkannt (Aufzeichnung, grob %g ± %g)" % (name, label, nom, EDGE_FOUND_MM), v, "mm",
                        nom=nom, tol=EDGE_FOUND_MM, warn=False)
             if st == "fail": bad.append("%s: Kante %s nicht erkannt (%.1f)" % (name, label, v))
@@ -1310,6 +1343,8 @@ def t25(c):
 
 @test("T26", 2, "4", "Parallele Anfragen (8 Threads, 400 Befehle): keine vertauschte Antwort")
 def t26(c):
+    if c.cache.get("quiet", "ok") != "ok":
+        c.notes.append("Ruhe-Check vor Block 3: " + c.cache["quiet"])
     c.d.ready()
     return stress(c, "parallel", "--n", "400", "--threads", "8")
 
@@ -1320,6 +1355,35 @@ def t27(c):
         raise Skip("--skip-soak")
     c.d.ready()
     return stress(c, "soak", "--minutes", str(c.args.soak_minutes), "--web", timeout=int(c.args.soak_minutes * 60 + 300))
+
+
+def foreign_traffic(d, seconds=8.0):
+    """Lines that another client causes in /log while this script only reads /proc: slow page loads
+    ('net: http', 'net: gap') and /api gaps of a client that armed the watchdog."""
+    before = d.log()
+    time.sleep(seconds)
+    after = d.log()
+    k = 0
+    for n in range(min(len(before), len(after)), 0, -1):          # overlap of the ring buffer
+        if before[-n:] == after[:n]:
+            k = n; break
+    new = after[k:] if k else [l for l in after if l not in before]
+    return [l for l in new if l.startswith("net: http") or l.startswith("comm: /api gap")]
+
+
+def quiet_check(c, d):
+    """Before block 3: no other client may load the web UI or poll /api (falsifies T16, T26, T27)."""
+    for attempt in range(1, 4):
+        lines = foreign_traffic(d)
+        if len(lines) < 2:
+            say("  Ruhe-Check: keine anderen Clients erkannt")
+            c.cache["quiet"] = "ok"
+            return
+        say("  Ruhe-Check: ein anderer Client greift noch zu (%s)" % "; ".join(lines[:3]))
+        if c.interactive and attempt < 3:
+            c.prompt("Bitte ALLE Browser (Tablet, PC, Handy) mit der Anlage schließen, auch die lokale Datei")
+    c.cache["quiet"] = "anderer Client aktiv: " + "; ".join(lines[:3])
+    say("  WARNUNG: anderer Client weiterhin aktiv – T16, T26, T27 können dadurch scheitern")
 
 
 def recover(d):
@@ -1421,8 +1485,10 @@ def main():
                 else:
                     say("\n### Block 3 – automatische Prüfungen (ca. 40 min) ###")
                     if c.interactive:
-                        c.prompt("Handprüfungen fertig. Jetzt ALLE Browser-Tabs mit der Anlage und jede add_client "
-                                 "shell schließen, Not-Aus gelöst, Fahrbereich frei. Danach läuft alles ohne dich")
+                        c.prompt("Handprüfungen fertig. Jetzt ALLE Browser-Tabs mit der Anlage (auch das Tablet aus "
+                                 "M11!) und jede add_client shell schließen, Not-Aus gelöst, Fahrbereich frei. "
+                                 "Danach läuft alles ohne dich")
+                    quiet_check(c, d)
             say("\n[%s] Block %s: %s" % (tid, block, title))
             t0 = time.time()
             c.notes, c.tid = [], tid
