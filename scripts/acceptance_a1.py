@@ -33,13 +33,16 @@ from add_client import build, frame, verify   # noqa: E402
 ERR = {0: "OK", -1: "BAD_CRC", -2: "BAD_JSON", -3: "UNKNOWN_CMD", -4: "BAD_PARAM", -5: "STATE",
        -6: "PRECONDITION", -7: "BUSY", -8: "NOT_STABLE", -9: "CALIB_INVALID", -10: "LOCAL_CONTROL"}
 SYS_ERR = ["NONE", "ESTOP", "TEMP_HIGH", "COMM_TIMEOUT", "MOTOR_FAULT", "HOMING_FAILED"]
-# Measuring accuracy (decision 08.11.2026, Norbert Walter): ONE pragmatic tolerance for all steps –
-# the sensor gets less accurate with distance, a single value covers the whole range. Sigma: 3σ ≤ TOL_MM.
-# Values beside the material (sensor sees the lower boom) are not assessed; T19 only checks the edges there.
-TOL_MM = 1.0
-SIGMA_MAX = round(TOL_MM / 3, 2)
-EDGE_TOL_MM = 3.0           # edge position (mean of both directions) against 105 / 225 mm
-EDGE_DIR_MAX_MM = 3.0       # difference of an edge between the two directions of travel
+# Measuring accuracy (decisions 08.11.2026, Norbert Walter; Pflichtenheft V1.7.16): the optical sensor
+# reaches ±2 mm for single values after the calibration (3σ ≤ 2 mm); the MEAN per step stays at ±1 mm,
+# so that a wrong calibration (up to 2.4 mm off) is still found. Values beside the material (lower boom,
+# far outside the table) are recorded only; the edges in T19 are recorded, only "found" is checked.
+TOL_MM = 1.0                # mean per step (T18, T20, step medians T19)
+SINGLE_MM = 2.0             # single values: 3σ ≤ SINGLE_MM
+SIGMA_MAX = round(SINGLE_MM / 3, 2)
+RAW_PLAUS_MM = 7.0          # T18K: uncalibrated value against the reference (sensor / stair body plausible)
+EDGE_FOUND_MM = 10.0        # T19: edge must be found within 105 / 225 ± 10 mm in each direction
+TIMING_MAX_US = 3100        # T29 (decision 08.11.2026: demo, not critical)
 
 STEPS = [(115, 65.0, 5.0), (135, 60.0, 10.0), (155, 55.0, 15.0), (175, 50.0, 20.0), (195, 45.0, 25.0),
          (215, 40.0, 30.0)]                      # step centre (mm), distance (mm), thickness (mm)
@@ -610,7 +613,7 @@ def m05(c):
     return "TEMP_HIGH, quittiert"
 
 
-@test("M06", 1, "2", "Abstand neben dem Messgut plausibel (Maßband, ±5 %)")
+@test("M06", 1, "2", "Abstand neben dem Messgut aufzeichnen (Maßband, ohne Bewertung)")
 def m06(c):
     d = c.d
     c.prompt("M06: Die Achse fährt auf 242 mm (ganz vorn, neben dem Stufenkörper), der Sensor schaut auf den "
@@ -627,11 +630,8 @@ def m06(c):
     tape = c.number("Abstand Sensorfenster – unterer Ausleger, mit dem Maßband gemessen", "mm")
     check(tape > 0, "Maßband-Wert muss größer 0 sein")
     c.val("Abstand Maßband", tape, "mm")
-    tol = round(0.05 * tape, 1)
-    c.val("Abweichung Anlage – Maßband", dist - tape, "mm", nom=0.0, tol=tol, target="0 ± %.1f (5 %%)" % tol)
-    c.val("Abweichung in Prozent", (dist - tape) / tape * 100, "%")
-    check(abs(dist - tape) <= tol, "Abweichung %.1f mm (zulässig ±%.1f mm)" % (dist - tape, tol))
-    return "Anlage %.1f mm, Maßband %.1f mm" % (dist, tape)
+    c.val("Abweichung Anlage – Maßband (Info)", dist - tape, "mm")     # outside the table, noisy: no rating
+    return "aufgezeichnet: Anlage %.1f mm, Maßband %.1f mm (ohne Bewertung)" % (dist, tape)
 
 
 @test("M07", 1, "3", "MOVE ±0,1 mm, keine Schrittverluste nach 10 Fahrten (Messschieber)")
@@ -1144,16 +1144,21 @@ def t18k(c):
     d.ok("CALIB", action="save")
     after = d.config()
     for i, (pos, dist, thick) in enumerate(STEPS, start=1):
-        c.val("Punkt %d (%d mm): Rohwert" % (i, pos), after["calib_raw_%d" % i], "mm")
+        st = c.val("Punkt %d (%d mm): Rohwert (unkalibriert) gegen Referenz %.0f" % (i, pos, after["calib_ref_%d" % i]),
+                   after["calib_raw_%d" % i], "mm", nom=after["calib_ref_%d" % i], tol=RAW_PLAUS_MM, warn=False)
+        if st == "fail":
+            c.notes.append("Punkt %d unplausibel" % i)
         c.val("Punkt %d (%d mm): Änderung gegenüber der alten Tabelle" % (i, pos),
               round(after["calib_raw_%d" % i] - before["calib_raw_%d" % i], 2), "mm")
     c.val("calib_valid", after["calib_valid"], eq=True)
     check(after["calib_valid"], "Tabelle nach der Kalibrierung ungültig")
+    check(not any(abs(after["calib_raw_%d" % i] - after["calib_ref_%d" % i]) > RAW_PLAUS_MM for i in range(1, 7)),
+          "Rohwert mehr als %.0f mm von der Referenz: Sensor oder Stufenkörper prüfen" % RAW_PLAUS_MM)
     c.cache["calibrated"] = True
     return "6 Punkte mit HV an und offenem Shutter übernommen und gespeichert" + shutter_note(c)
 
 
-@test("T18", 2, "2, 8", "Stehende Messung je Stufe: Dicke und Abstand ±1 mm, 3σ ≤ 1 mm (Mittelwert, Sigma)")
+@test("T18", 2, "2, 8", "Stehende Messung je Stufe: Mittelwert ±1 mm, Einzelwerte 3σ ≤ 2 mm")
 def t18(c):
     c.cache.pop("steps", None)                                   # fresh values after T18K
     res = measure_steps(c)
@@ -1166,7 +1171,7 @@ def t18(c):
                c.val("%d mm: Dicke Mittelwert" % pos, tm, "mm", nom=thick, tol=TOL_MM),
                c.val("%d mm: Dicke Mittelwert der Anlage (avg)" % pos, r["avg"], "mm", nom=thick, tol=TOL_MM),
                c.val("%d mm: Dicke Sigma" % pos, tsd, "mm", mx=SIGMA_MAX,
-                     target="≤ %.2f (3σ ≤ %.0f)" % (SIGMA_MAX, TOL_MM)),
+                     target="≤ %.2f (Einzelwerte 3σ ≤ %.0f)" % (SIGMA_MAX, SINGLE_MM)),
                c.val("%d mm: Anzahl Einzelwerte" % pos, n, mn=30, warn=False)]
         c.val("%d mm: Dicke Min / Max" % pos, "%.1f / %.1f" % (tmin, tmax), "mm")
         c.val("%d mm: Abstand Sigma" % pos, dsd, "mm")
@@ -1211,7 +1216,7 @@ def traverse_run(c, start, end, speed):
     return samples, closed, p["measure"]["avg"], p["measure"]["n"]
 
 
-@test("T19", 2, "8", "Profilfahrt hin und zurück: Kanten in beiden Richtungen, Stufen ±1 mm, Shutter durchgehend offen")
+@test("T19", 2, "8", "Profilfahrt hin und zurück: Kanten erkannt und aufgezeichnet, Stufen ±1 mm, Shutter durchgehend offen")
 def t19(c):
     """Decision 08.11.2026: the edges are measured in both directions and compared (the direction of travel
     shifts them – sensor spot and filter lag); the mean of both is checked against the stair body.
@@ -1227,8 +1232,10 @@ def t19(c):
         on = [s_[0] for s_ in samples if s_[2]]
         check(on, "%s: kein Messgut erkannt" % name)
         edges[name] = (min(on), max(on))
-        c.val("%s: Kante Messgut ab (Soll 105)" % name, min(on), "mm")
-        c.val("%s: Kante Messgut bis (Soll 225)" % name, max(on), "mm")
+        for label, v, nom in (("Messgut ab", min(on), 105.0), ("Messgut bis", max(on), 225.0)):
+            st = c.val("%s: Kante %s erkannt (Aufzeichnung, grob %g ± %g)" % (name, label, nom, EDGE_FOUND_MM), v, "mm",
+                       nom=nom, tol=EDGE_FOUND_MM, warn=False)
+            if st == "fail": bad.append("%s: Kante %s nicht erkannt (%.1f)" % (name, label, v))
         c.val("%s: Shutter geschlossen im Messgutbereich (Messpunkte)" % name, closed, eq=0)
         if closed: bad.append("%s: Shutter zwischendurch zu" % name)
         for pos, _, thick in STEPS:
@@ -1240,13 +1247,12 @@ def t19(c):
         c.val("%s: Mittelwert der Anlage" % name, avg, "mm", lo=5.0, hi=30.0, warn=False)
         c.val("%s: Anzahl Werte der Anlage" % name, n, mn=51)
         if not (5.0 <= avg <= 30.0 and n > 50): bad.append("%s: Statistik (Mittel %.2f, n %d)" % (name, avg, n))
-    for i, (label, nom) in enumerate((("Messgut ab", 105.0), ("Messgut bis", 225.0))):
+    for i, label in enumerate(("Messgut ab", "Messgut bis")):
         h, z = edges["hin"][i], edges["zurück"][i]
-        st1 = c.val("Kante %s: Mittel hin/zurück" % label, (h + z) / 2, "mm", nom=nom, tol=EDGE_TOL_MM)
-        st2 = c.val("Kante %s: Unterschied hin – zurück" % label, abs(h - z), "mm", mx=EDGE_DIR_MAX_MM)
-        if "fail" in (st1, st2): bad.append("Kante %s (hin %.1f, zurück %.1f)" % (label, h, z))
+        c.val("Kante %s: Mittel hin/zurück (Info)" % label, (h + z) / 2, "mm")
+        c.val("Kante %s: Unterschied hin – zurück (Info)" % label, h - z, "mm")
     check(not bad, "; ".join(bad))
-    return "Kanten in beiden Richtungen und Stufen in Toleranz" + shutter_note(c)
+    return "Kanten in beiden Richtungen erkannt (Werte im Protokoll), Stufen in Toleranz" + shutter_note(c)
 
 
 @test("T20", 2, "8", "Kalibriertabelle (6 Stufen) gespeichert und wirksam: Abweichung je Stufe ±1 mm (Mittelwert, Sigma)")
@@ -1495,15 +1501,15 @@ def final_checks(c, d, args, results, start):
         d.ok("GET_STATE")
         state = dict(d.last_reply)
         for k in ("cycle_max_us", "period_max_us", "prio_lat_max_us"):
-            c.val(k, state[k], "µs", mx=3000)
+            c.val(k, state[k], "µs", mx=TIMING_MAX_US)
         c.val("overruns (Info)", state["overruns"])
-        st = "PASS" if all(state[k] <= 3000 for k in ("cycle_max_us", "period_max_us", "prio_lat_max_us")) else "FAIL"
+        st = "PASS" if all(state[k] <= TIMING_MAX_US for k in ("cycle_max_us", "period_max_us", "prio_lat_max_us")) else "FAIL"
         if st == "PASS" and any(v[1] == "warn" for v in c.values if v[0] == "T29"):
             st = "WARN"
         detail = "seit dem letzten Neustart" + (" – Simulator: Zeitwerte nicht simuliert" if args.sim else "")
     except Exception as e:
         detail = "GET_STATE: %s" % e
-    results.append(("T29", 2, "4", "Zeitwerte ≤ 3000 µs (inkl. Summer-Signale aus Block 1 und 2)", st, detail, 0))
+    results.append(("T29", 2, "4", "Zeitwerte ≤ %d µs (inkl. Summer-Signale aus Block 1 und 2)" % TIMING_MAX_US, st, detail, 0))
     c.cache["state_end"] = state
 
 

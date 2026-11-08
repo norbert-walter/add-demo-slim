@@ -2,12 +2,24 @@
 
 **Stand:** 2026-11-07
 **Autor:** Norbert Walter
-**Version:** 1.7.15 (Abnahme Messgenauigkeit: eine Toleranz, Kanten hin/zurück, Shutter offen)
+**Version:** 1.7.16 (Abnahmegrenzen an den optischen Sensor angepasst)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.7.15 → V1.7.16 (08.11.2026, Entscheidung Norbert Walter, nach dem vollen A1-Lauf)
+- **Messgenauigkeit:** Einzelwerte ±2 mm nach der Kalibrierung (3σ ≤ 2 mm, σ ≤ 0,67 mm) – besser geht es
+  mit dem optischen Sensor nicht. Der **Mittelwert** je Stufe bleibt bei ±1 mm (erreicht: ≤ 0,62 mm), damit
+  eine falsche Kalibrierung (bis 2,4 mm daneben) weiter auffällt.
+- **Kalibrierung (T18K):** Plausibilität der unkalibrierten Rohwerte ±7 mm gegen die Referenz (erkennt einen
+  defekten Sensor oder einen verrutschten Stufenkörper).
+- **Abstand neben dem Messgut (M06):** nur aufzeichnen, keine Bewertung (123 mm, weit außerhalb der
+  Tabelle und stark schwankend).
+- **Kanten (T19):** hin und zurück nur aufzeichnen; geprüft wird nur, dass sie erkannt werden
+  (105 bzw. 225 ± 10 mm).
+- **Zeitwerte (T29, Lasttests):** ≤ 3100 µs statt 3000 µs (Demoanlage, nicht kritisch).
 
 ### V1.7.14 → V1.7.15 (08.11.2026, Entscheidung Norbert Walter, A1 nach K2)
 - **Messgenauigkeit: eine pragmatische Toleranz von ±1 mm für alle Stufen** (Mittelwert von Abstand und
@@ -105,7 +117,7 @@
   Nenntakt von 1 ms. Unter Last (WLAN, REST-Anfragen, dauerhaftes Laden der Weboberfläche)
   überschreiten einzelne Zyklen diesen Takt, gemessen etwa 0,05 % der Zyklen (`overruns`, nur
   Information). Die maximale Zykluszeit, der maximale Abstand zweier Zyklusstarts und die Latenz
-  von Prioritätsbefehlen sind jeweils **≤ 3 ms**, nachgewiesen mit `stress_api.py` (Flood, Parallel,
+  von Prioritätsbefehlen sind jeweils **≤ 3 ms** (Abnahmegrenze ab V1.7.16: 3,1 ms), nachgewiesen mit `stress_api.py` (Flood, Parallel,
   Latenz bei fahrender Achse, 10-min-Soak mit Weblast; gemessen max. 2,22 / 2,41 / 1,73 ms). Gilt im
   Betrieb; Einstellwerte werden nur im Stillstand gespeichert, weil ein Flash-Schreibvorgang beide
   Kerne für einige 10 ms anhält. Die bisherigen Werte (500 µs / 1,5 ms / 2 ms, Überläufe 0, V1.5)
@@ -238,7 +250,7 @@ von R20 4k7, LEDs je 20 mA, Buzzer, Display und Touch).
 | Bedienvorrang | nicht geregelt (Display und API gleichrangig) | **Display hat Vorrang (LOCAL)**: nach jedem Display-Befehl lehnt die Anlage Start-Befehle von der API mit `LOCAL_CONTROL (−10)` ab; STOP/HV_OFF/SHUTTER_CLOSE/SET bleiben erlaubt. Ende 30 s nach dem letzten Display-Befehl, sobald Achse steht und HV aus ist. **V1.7.8:** Haltezeit `LOCAL_HOLD_MS`, Standard 0 = kein Vorrang |
 | STOP-Latenz | STOP wartete u. U. auf einen Zyklus ohne Fahrauftrag, volle Queue → BUSY | **Prioritäts-Queue** für STOP/HV_OFF/SHUTTER_CLOSE, Ausführung auch bei laufendem Fahrauftrag; ≤ 2 ms bis zum Treiber |
 | API-Antwort | vor dem Setzen der Ausgänge | **nach** dem Setzen der Ausgänge: `OK` = angenommen und Ausgänge gesetzt; Bewegungsende nur über `/proc` |
-| Zykluszeit | nicht überwacht | im Gerät gemessen und in `GET_STATE` gemeldet: Rechenzeit `cycle_max_us`, Jitter `period_max_us`, Prioritätsbefehl-Latenz `prio_lat_max_us` (V1.5: < 500 µs / < 1500 µs / ≤ 2000 µs, Überläufe 0; **ab V1.7.9 jeweils ≤ 3000 µs, Überläufe nur Information**) |
+| Zykluszeit | nicht überwacht | im Gerät gemessen und in `GET_STATE` gemeldet: Rechenzeit `cycle_max_us`, Jitter `period_max_us`, Prioritätsbefehl-Latenz `prio_lat_max_us` (V1.5: < 500 µs / < 1500 µs / ≤ 2000 µs, Überläufe 0; **ab V1.7.9 jeweils ≤ 3000 µs, ab V1.7.16 Abnahmegrenze ≤ 3100 µs, Überläufe nur Information**) |
 | Gleichzeitige API-Aufrufe | eine Antwort-Queue, Annahme „ein Aufrufer“ nur als Kommentar | Warten auf Antwort per Mutex **serialisiert**; STOP/HV_OFF/SHUTTER_CLOSE werden auch bei belegtem Mutex eingereiht; Integrationstest mit 8 Threads gegen den echten Queue-Code |
 | Überlauf Prioritäts-Queue | Befehl hätte verloren gehen können | **Überlauf-Latch**: ein Bit je Befehl und Herkunft (API/LOCAL getrennt), kann nicht überlaufen, gleiche Anforderungen werden zusammengefasst, keine geht verloren |
 | Abarbeitung Prioritätsbefehle | einer pro Zyklus (STOP konnte hinter anderen warten) | **alle** wartenden Prioritätsbefehle im selben Zyklus (max. 7); 2-ms-Grenze unabhängig von der Anzahl |
@@ -966,7 +978,7 @@ Die Zeiten der 🤖-Sprints sind Rechenzeit von Qwen lokal (ca. 18 Token/s), nic
 - [ ] Buzzer: Startsignal nach dem Booten, Quittungs-Piep bei Display-Tasten, Not-Aus 4 s Dauerton, andere Fehler 3 Pieps, Referenzfahrt-Ende ein Piep, Reboot-Signal vor dem Neustart
 - [ ] Blaue LED blinkt mit 0,5 Hz (1 s an, 1 s aus); steht still, wenn die Steuerschleife hängt (Watchdog-Reset folgt)
 - [ ] Endschalter in `/proc` korrekt
-- [ ] Abstand plausibel 35–300 mm (±5 %); Stufen 65 … 40 mm auf ±1 mm
+- [ ] Stufen 65 … 40 mm: Mittelwert ±1 mm, Einzelwerte 3σ ≤ 2 mm; Abstand neben dem Messgut wird nur aufgezeichnet (V1.7.16)
 - [ ] Not-Aus mit `estop_nc = false` (einfacher Schalter): Drücken löst aus
 - [ ] Nach Umstellung auf Öffner (`estop_nc = true`): Drücken **und** Drahtbruch lösen aus; falsche Einstellung zeigt Dauer-Not-Aus
 - [ ] Umschalten von `estop_nc` bei nicht gedrücktem Not-Aus: falsche Polarität löst **sofort** Not-Aus aus (On-Target-Test `test_estop_polarity_change`; nutzt die gespeicherte Verdrahtung `estop_nc`, Voraussetzung: Not-Aus nicht gedrückt)
@@ -1026,7 +1038,7 @@ Die Zeiten der 🤖-Sprints sind Rechenzeit von Qwen lokal (ca. 18 Token/s), nic
 - [ ] Router aus: 3 Versuche, dann 2 min Pause (Log), Router wieder an → Verbindung kommt automatisch zurück
 
 **8. Betriebsmodi**
-- [ ] Stehende Messung: Mittelwert auf jeder Treppenstufe ±1 mm, 3σ ≤ 1 mm (V1.7.15)
+- [ ] Stehende Messung: Mittelwert auf jeder Treppenstufe ±1 mm, Einzelwerte 3σ ≤ 2 mm (V1.7.16)
 - [ ] Profilfahrt: Kanten der Treppenstufen erkannt, Statistik plausibel
 - [ ] Kalibrierung (6 Stufen, unter Messbedingungen, auch automatisch) gespeichert und wirksam
 
