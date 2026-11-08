@@ -17,9 +17,14 @@ ACHTUNG: Die Achse fährt über den ganzen Verfahrweg, die (simulierte) HV wird 
 startet zweimal neu. Fahrbereich frei, Not-Aus in Reichweite. Abbruch mit Strg+C (sendet STOP).
 
     python3 scripts/acceptance_a1.py --host 192.168.4.1
-    python3 scripts/acceptance_a1.py --host 192.168.4.1 --only T18,T19 --tag wiederholung   (Block 1 läuft vorher)
+    python3 scripts/acceptance_a1.py --host 192.168.4.1 --only T18,T19 --tag wiederholung   (Teillauf, s. u.)
     python3 scripts/acceptance_a1.py --host 192.168.4.1 --no-manual          (Block 1 und 3, ohne Block 2)
     python3 scripts/acceptance_a1.py --host localhost:8090 --sim --yes       (gegen sim_device.py)
+
+Teillauf (--only ohne S-Prüfungen): Das Skript fragt zuerst, ob der Sicherheitsblock mit dem jetzigen Stand
+bestanden war. Die Angabe muss aus Haftungsgründen wahrheitsgemäß sein und wird mit Name, Zeit und Nachweis
+im Protokoll festgehalten. Ja -> Teillauf ohne Block 1; nein -> Block 1 läuft zuerst. Ein Volllauf beginnt
+immer mit Block 1.
 
 --sim: gegen scripts/sim_device.py; Not-Aus und Endschalter über die Test-Hooks, Fragen bleiben
 offen, Display- und Messwert-Eingaben werden übersprungen (im Simulator sperrt ein ⏭ nicht).
@@ -1417,7 +1422,11 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--host", default="192.168.4.1")
     ap.add_argument("--pruefer", help="Name des Prüfers (sonst Abfrage beim Start)")
-    ap.add_argument("--only", help="z. B. M04,T18 – der Sicherheitsblock S01–S07 läuft immer vorher")
+    ap.add_argument("--only", help="z. B. M04,T18 – Teillauf: vorher Frage, ob der Sicherheitsblock bestanden "
+                    "war; nein -> Sicherheitsblock S01–S07 läuft vorher")
+    ap.add_argument("--sicherheit-bestaetigt", metavar="REFERENZ",
+                    help="nur mit --sim (automatische Tests des Skripts): beantwortet die Frage nach dem Sicherheitsblock "
+                    "vorab; am Gerät fragt das Skript immer")
     ap.add_argument("--no-manual", action="store_true", help="Block 2 (weitere Handprüfungen) auslassen; "
                     "der Sicherheitsblock läuft immer")
     ap.add_argument("--sim", action="store_true", help="gegen scripts/sim_device.py (Test-Hooks)")
@@ -1427,6 +1436,8 @@ def main():
     ap.add_argument("--out-dir", help="Verzeichnis des Protokolls (Standard: docs/reviews, sonst aktuelles)")
     ap.add_argument("--tag", help="Zusatz im Dateinamen, z. B. wiederholung")
     args = ap.parse_args()
+    if args.sicherheit_bestaetigt and not args.sim:
+        raise SystemExit("--sicherheit-bestaetigt gibt es nur mit --sim – am Gerät wird immer gefragt")
 
     order = [t[0] for t in TESTS]
     ids = [t.strip().upper() for t in args.only.split(",")] if args.only else list(order)
@@ -1436,16 +1447,45 @@ def main():
         raise SystemExit("unbekannte Prüfung: %s (vorhanden: %s)" % (unknown, ", ".join(order)))
     if args.no_manual:
         ids = [i for i in ids if tests[i][1] != 1]
-    # decision 08.11.2026: without the safety checks no other check may run – block 1 always comes first
-    ids = [t[0] for t in TESTS if t[1] == 0] + [i for i in ids if tests[i][1] != 0]
+    # decision 08.11.2026: without the safety checks no other check may run. A full run always starts with
+    # block 1. A partial run (--only without safety checks) may leave it out only if the tester confirms,
+    # truthfully and on his responsibility, that the safety block has passed (asked below).
+    partial = bool(args.only) and not any(tests[i][1] == 0 for i in ids)
+    safety_ids = [t[0] for t in TESTS if t[1] == 0]
     ids = sorted(set(ids), key=order.index)
 
-    say("Abnahme A1 gegen http://%s/ – %d Prüfungen" % (args.host, len(ids)))
+    say("Abnahme A1 gegen http://%s/" % args.host)
     say("ACHTUNG: Die Achse fährt über den ganzen Verfahrweg, die HV wird geschaltet, die Anlage startet neu.")
     say("Fahrbereich frei halten, Not-Aus in Reichweite. Abbruch jederzeit mit Strg+C (danach STOP).")
     pruefer = args.pruefer or ("Simulator-Test" if args.sim else "")
     while not pruefer:
         pruefer = input("Name des Prüfers: ").strip()
+    safety_note = ""
+    if partial:
+        say("\n" + "=" * 72 + "\n  TEILLAUF – Sicherheitsblock S01–S07 (Not-Aus, Shutter, Fahrtrichtung, Endlagen)\n"
+            "  Der Sicherheitsblock darf nur entfallen, wenn er mit dem jetzigen Stand von Anlage und Firmware\n"
+            "  bereits vollständig BESTANDEN wurde. HINWEIS: Die Angabe wird mit Name, Datum und Uhrzeit im\n"
+            "  Protokoll festgehalten. Sie muss aus Haftungsgründen WAHRHEITSGEMÄSS sein – die Verantwortung\n"
+            "  für die Richtigkeit trägt der Prüfer.\n" + "=" * 72)
+        if args.sicherheit_bestaetigt:
+            ref = args.sicherheit_bestaetigt.strip()
+            say("  Bestätigung per Option --sicherheit-bestaetigt: %s" % ref)
+            ok = True
+        else:
+            while True:
+                a = input("  Wurde der Sicherheitsblock S01–S07 erfolgreich bestanden? [ja/nein] ").strip().lower()
+                if a in ("ja", "nein"): break
+            ok = a == "ja"
+            ref = input("  Nachweis (z. B. Protokoll Abnahme_A1_2026-11-08_1519_wiederholung.md): ").strip() if ok else ""
+        if ok:
+            safety_note = ("nicht ausgeführt – %s bestätigt am %s wahrheitsgemäß und auf eigene Verantwortung, dass "
+                           "der Sicherheitsblock bestanden war (Nachweis: %s)" % (
+                               pruefer, datetime.datetime.now().strftime("%d.%m.%Y %H:%M"), ref or "keine Angabe"))
+        else:
+            say("  -> Der Sicherheitsblock S01–S07 läuft jetzt zuerst.")
+            ids = sorted(set(ids) | set(safety_ids), key=order.index)
+    else:
+        ids = sorted(set(ids) | set(safety_ids), key=order.index)
     if not args.yes and input("Starten? Mit 'ja' bestätigen: ").strip().lower() != "ja":
         raise SystemExit("abgebrochen")
 
@@ -1552,6 +1592,7 @@ def main():
         cfg_end, log_end = {}, []
     state = c.cache.get("state_end", {})
     d.run = False
+    c.cache["safety_note"] = safety_note
     write_reports(c, args, results, block_time, blocked, pruefer, start, boot, cfg_start, cfg_end, log_end, state)
 
 
@@ -1613,6 +1654,8 @@ def write_report(path, title, c, args, results, block_time, blocked, pruefer, st
             if part in block_time:
                 t0, t1 = block_time[part]
                 fh.write("| Ergebnis %s | %s · Dauer %s |\n" % (PART_HEAD[part], counts(rows)[1], mmss((t1 or t0) - t0)))
+            elif part == 0 and c.cache.get("safety_note"):
+                fh.write("| Ergebnis %s | **%s** |\n" % (PART_HEAD[part], md(c.cache["safety_note"])))
             else:
                 fh.write("| Ergebnis %s | nicht ausgeführt%s |\n" % (
                     PART_HEAD[part], " – **gesperrt: Sicherheitsprüfung nicht bestanden (%s)**" % blocked if blocked
