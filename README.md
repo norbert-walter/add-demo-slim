@@ -36,6 +36,8 @@ agentenbasierte Entwicklung mit code-server + Cline.
 | `scripts/embed_app.py` | kopiert `data/www/app.js` in `index.html` (ADDAPP-Block) und `index.html` nach `web-ui/` – nach jeder Änderung von `app.js` |
 | `scripts/verify_reference.sh` | alle nativen Tests gegen die Referenzimplementierung (`referenz_logic.zip`, separat geliefert) in einem temporären Worktree – Nachweis, dass die eingefrorenen Tests widerspruchsfrei und erfüllbar sind |
 | `scripts/stress_api.py` | Abnahme V1.1: STOP-Latenz, Queue-Flut, parallele Anfragen, Dauerlauf, Bedienvorrang |
+| `scripts/check_add.py` | D1: prüft am laufenden Gerät nur lesend `/llms.txt`, `/add`, `/add.html`, `/openapi.json` und die Schemas von `/proc` und Antworten (Basic Auth mit `--user`, Passwort wird abgefragt) |
+| `data/add.json`, `data/openapi.json` | D1: ADD-Dokument (verbindlich für KI-Agenten) und OpenAPI 3.1 der HTTP-API (Erweiterung) |
 
 ## Schnellstart
 
@@ -49,7 +51,7 @@ pio device monitor -e smoketest           # "help"
 
 ## Status der Module
 
-**Stand: 08.11.2026 · Contract V1.6.3 · Pflichtenheft V1.7.16**
+**Stand: 08.11.2026 · Contract V1.6.4 · Pflichtenheft V1.7.17**
 Diese Tabelle wird **nach jedem Sprint** aktualisiert (Implementierung **und** Tests) –
 Teil der Definition of Done in `.clinerules`.
 
@@ -71,7 +73,7 @@ Teil der Definition of Done in `.clinerules`.
 | A1 | Abnahme (`scripts/acceptance_a1.py`, drei Blöcke: Sicherheit, Handprüfungen, automatisch) | ✅ abgenommen 08.11.2026 (Norbert Walter) | Volllauf 12:24 + Wiederholungen bis 16:32 (`docs/reviews`), alle Prüfungen bestanden; offen außerhalb des Skripts: H05, Ergänzungsblatt, Block 9 mit D1 | ✅ 08.11.2026 |
 | K1 | Kalibriertabelle mit 6 Stufen: `logic/types`, `measure_logic`, `api_parse`, `params`, `app_logic`, `system/nvs_config`, `data/www/app.js`, `index.html` | ✅ fertig (Qwen; 1 Korrektur Claude) | native 496/496 · JS 41/41 · Differenztest und Browserprüfung ✅ · Gerät ✅ (A1) | ✅ 08.11.2026, Review_K1 |
 | K2 | Kalibrierung unter Messbedingungen: `logic/app_logic.cpp` (eine Bedingung); Seite und Abnahme T18K von Claude | ✅ fertig (Qwen) | native 499/499 · JS 41/41 · Simulator T18K–T20 ✅ · Gerät ✅ (A1) | ✅ 08.11.2026, Review_K2 |
-| D1 | `data/add.json`, Demo-Skripte | ⬜ offen | KI-Validierung | – |
+| D1 | `data/add.json`, `data/openapi.json` (Erweiterung), Route `/openapi.json`, Demo-Skripte | 🔶 in Arbeit: Dokumente von Claude (Entwurf), D1.1 Route für Qwen | JS 63/63 · KI-Validierung offen | – |
 
 Reihenfolge und Begründung: `docs/Sprint_Prompts_Demoanlage_ADD_Slim_V2.md`, Abschnitt
 „Sprint-Plan V3“. Die Sprint-Dateien für Cline liegen in `docs/sprints/`.

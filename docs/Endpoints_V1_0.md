@@ -1,6 +1,6 @@
 # HTTP-Endpunkte – Kurzübersicht
 
-**Demoanlage ADD (Slim)** · Version 1.0 · Stand 2026-11-08 · Contract V1.6.3
+**Demoanlage ADD (Slim)** · Version 1.0 · Stand 2026-11-08 · Contract V1.6.4
 Befehle für `/api`: `docs/REST_API_V1_0.md` · ausführlich: `docs/Software_Dokumentation_V1_0.md`
 Kapitel 10 · verbindlich: `src/comm/http_server.h`
 
@@ -14,6 +14,7 @@ Kapitel 10 · verbindlich: `src/comm/http_server.h`
 | Router-WLAN | `http://<IP vom Router>` | IP im Display, in `/log` oder mit dem Konsolenbefehl `status` |
 | mDNS | `http://add-demo.local` | in beiden Netzen, wenn der Client mDNS unterstützt |
 | Port | 80 | nur HTTP, kein HTTPS, keine Anmeldung |
+| Internet (V1.6.4) | `https://test.norbert-walter.dnshome.de` | über einen Nginx-Reverse-Proxy mit TLS und HTTP Basic Auth (Zugangsdaten nur beim Betreiber); diese Adresse steht im ADD-Dokument (`device.ip`) |
 
 ---
 
@@ -27,9 +28,10 @@ Kapitel 10 · verbindlich: `src/comm/http_server.h`
 | POST | `/api` | Befehl mit CRC → Antwort mit CRC | `application/json` | – | 200 / 400 |
 | OPTIONS | `/api` | CORS-Preflight | – | – | 204 |
 | GET | `/log` | letzte 20 Logzeilen | `text/plain` | – | 200 |
-| GET | `/llms.txt` | Einstieg für Sprachmodelle (4 Zeilen) | `text/plain` | – | 200 |
+| GET | `/llms.txt` | Einstieg für Sprachmodelle (5 Zeilen) | `text/plain` | – | 200 |
 | GET | `/add` | ADD-Dokument, Datei `/add.json` | `application/json` | `no-store` | 200 / 404 |
 | GET | `/add.html` | ADD-Dokument in HTML eingebettet | `text/html; charset=utf-8` | `no-store, no-cache, must-revalidate` | 200 / 404 |
+| GET | `/openapi.json` | OpenAPI 3.1 der HTTP-API, Datei `/openapi.json` (V1.6.4) | `application/json` | `no-store` | 200 / 404 |
 | GET | `/doc` | Dokumentationsseite mit Links, Datei `/doc.html` | `text/html` | – | 200 |
 | GET | `/app.js` | ADDAPP: CRC, Rahmen, Regeln für eigene Seiten | `application/javascript` | – | 200 |
 | GET | `/font-u400.woff2` `/font-u700.woff2` `/font-m400.woff2` `/font-m700.woff2` | Schriften Ubuntu / Ubuntu Mono | `font/woff2` | `max-age=86400` | 200 |
@@ -39,8 +41,8 @@ Kapitel 10 · verbindlich: `src/comm/http_server.h`
 **Für alle Antworten:** Header `Access-Control-Allow-Origin: *` – Seiten auf anderen Rechnern oder
 als lokale Datei geöffnete Seiten dürfen die Anlage abfragen.
 
-**Stand Sprint D1:** `/add.json` gibt es noch nicht; `/add` und `/add.html` antworten bis dahin mit
-404.
+**Stand Sprint D1:** `data/add.json` und `data/openapi.json` sind fertig (Entwurf, noch nicht KI-validiert).
+Sie kommen mit `uploadfs` auf die Anlage; `/openapi.json` braucht zusätzlich die Firmware mit Contract V1.6.4.
 
 ---
 
@@ -103,15 +105,17 @@ als lokale Datei geöffnete Seiten dürfen die Anlage abfragen.
 # AI Device Description (ADD)
 - ADD (JSON): [Device Description](/add)
 - ADD (HTML): [Device Description for Cloud-AI](/add.html)
+- OpenAPI (JSON): [HTTP API, technical reference](/openapi.json)
 - Documentation: [Device manual](/doc)
 ```
 
-### 3.6 `GET /add`, `/add.html`, `/doc` – ADD-Dokument und Dokumentation
+### 3.6 `GET /add`, `/add.html`, `/openapi.json`, `/doc` – ADD-Dokument, OpenAPI und Dokumentation
 
 | Pfad | Für wen | Aufbau |
 |---|---|---|
 | `/add` | KI-Agenten mit HTTP-Zugriff | ADD-Dokument nach ADD Specification v1.0, unverändert aus `/add.json` |
 | `/add.html` | Cloud-KIs, die nur Webseiten lesen | dasselbe JSON zweimal: in `<script type="application/ld+json">` (mit `</` als `<\/`) und lesbar in `<pre>` (mit `&amp; &lt; &gt;`); in Blöcken gesendet |
+| `/openapi.json` | Werkzeuge, Code-Generatoren, Entwickler | OpenAPI 3.1 derselben HTTP-API (`POST /api` mit `oneOf` über `cmd`, Schemas für `/proc` und Antworten). **Erweiterung**, nicht Teil des ADD-Standards; für KI-Agenten ist `/add` verbindlich (`x-add-action` nennt die ADD-Aktion) |
 | `/doc` | Menschen und KI | deutsche Seite aus `/doc.html`: Kurzbeschreibung der Anlage, Endpunkte, Linktabelle zu ADD-Referenz, Developer Guide, Style Guides, Repository, Hardware- und Software-Dokumentation, Kurzübersichten (Links zu GitHub, brauchen Internet) |
 
 ### 3.7 Weboberfläche und Dateien

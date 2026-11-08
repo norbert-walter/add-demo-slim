@@ -1,6 +1,6 @@
 # REST-API – Kurzübersicht
 
-**Demoanlage ADD (Slim)** · Version 1.1 · Stand 2026-11-08 · Contract V1.6.3
+**Demoanlage ADD (Slim)** · Version 1.1 · Stand 2026-11-08 · Contract V1.6.4
 Ausführlich: `docs/Software_Dokumentation_V1_0.md` Kapitel 9–11, verbindlich: `docs/CONTRACT.md` §4–§5
 
 ---
@@ -205,8 +205,9 @@ Nach `ACK` bleiben HV und Shutter aus (kein automatischer Wiederanlauf).
 | `OPTIONS /api` | CORS-Preflight, Antwort 204 |
 | `GET /log` | letzte 20 Logzeilen (Text) |
 | `GET /llms.txt` | Einstieg für Sprachmodelle |
-| `GET /add` | ADD-Dokument (JSON) – folgt mit Sprint D1 |
-| `GET /add.html` | ADD-Dokument für Cloud-KIs – folgt mit Sprint D1 |
+| `GET /add` | ADD-Dokument (JSON) – verbindlich für KI-Agenten (D1) |
+| `GET /add.html` | ADD-Dokument für Cloud-KIs (D1) |
+| `GET /openapi.json` | OpenAPI 3.1 dieser API – technische Referenz, Erweiterung zu ADD (V1.6.4) |
 | `GET /doc` | Dokumentationsseite mit Links (HTML) |
 | `GET /app.js` | ADDAPP (CRC, Rahmen, Regeln) für eigene Webseiten |
 

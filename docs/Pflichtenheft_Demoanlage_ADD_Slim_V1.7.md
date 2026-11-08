@@ -1,13 +1,24 @@
 # Pflichtenheft – Demoanlage ADD (Slim)
 
-**Stand:** 2026-11-07
+**Stand:** 2026-11-08
 **Autor:** Norbert Walter
-**Version:** 1.7.16 (Abnahmegrenzen an den optischen Sensor angepasst)
+**Version:** 1.7.17 (ADD-Dokument und OpenAPI als Erweiterung, Sprint D1)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.7.16 → V1.7.17 (08.11.2026, Entscheidung Norbert Walter, Sprint D1)
+- **ADD-Dokument** `data/add.json` erstellt (Kapitel 7): Level 2, Internetadresse
+  `https://test.norbert-walter.dnshome.de` (Nginx-Reverse-Proxy mit TLS und Basic Auth, keine Zugangsdaten
+  in Dateien), Sprache Englisch. Ohne Rückfrage nur `STOP`, `HV_OFF`, `SHUTTER_CLOSE` (sichere Richtung);
+  alle anderen Schreibbefehle mit Bestätigung je Aktion. `estop_nc`, `wifi_ssid`, `wifi_pass` sind keine
+  ADD-Aktionen (Betreiber).
+- **OpenAPI 3.1** unter `/openapi.json` als **eigene Erweiterung**, nicht Teil des ADD-Standards; für
+  KI-Agenten bleibt `/add` verbindlich. Contract V1.6.4 (neue Route, `/llms.txt` mit 5 Zeilen).
+- **KI und Skripte:** Vom Benutzer gestartete Python-Skripte laufen ohne Rückfragen (die Entscheidung zum
+  Start ersetzt die Bestätigung je Aktion). Eine KI darf solche Skripte schreiben, aber nicht selbst starten.
 
 ### V1.7.15 → V1.7.16 (08.11.2026, Entscheidung Norbert Walter, nach dem vollen A1-Lauf)
 - **Messgenauigkeit:** Einzelwerte ±2 mm nach der Kalibrierung (3σ ≤ 2 mm, σ ≤ 0,67 mm) – besser geht es
@@ -884,6 +895,14 @@ des Style Guides. **Kein** eigener Top-Level-Block `live_data` – `/proc` wird 
 - `security.enforcement`: alle Prüfungen, die das Gerät selbst durchsetzt (Zustandsgate, Bereichsgrenzen, Shutter/Parkzone, Watchdog)
 - `actions`: alle Befehle mit Parametern, Bereichen, `safe`, `reversible`, `requires_confirmation`
 - `validation`: Validierungsprotokoll nach Spec §10.7 (zunächst `validated_by: []`)
+
+**Erweiterung OpenAPI (V1.7.17):** `/openapi.json` beschreibt dieselbe HTTP-API als OpenAPI 3.1 für
+Werkzeuge und Code-Generatoren. Es ist eine eigene, nach dem Standard erlaubte Erweiterung und nicht Teil
+der ADD Specification. Das ADD-Dokument verweist im Interface darauf (`x-openapi`); das OpenAPI-Dokument
+nennt `/add` als verbindlich und je Befehl die ADD-Aktion (`x-add-action`).
+
+**Zugang:** Internetadresse über Nginx-Reverse-Proxy mit TLS und HTTP Basic Auth (`security.network_scope
+"internet"`, `authentication "basic"`). Zugangsdaten stehen weder im ADD-Dokument noch in einer anderen Datei.
 
 **Demo-Ablauf KI-Validierung**
 1. KI ruft `/add` ab, lädt Ethical Framework

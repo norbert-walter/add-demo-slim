@@ -156,8 +156,21 @@ void test_llms_txt_exact() {
         "# AI Device Description (ADD)\n"
         "- ADD (JSON): [Device Description](/add)\n"
         "- ADD (HTML): [Device Description for Cloud-AI](/add.html)\n"
+        "- OpenAPI (JSON): [HTTP API, technical reference](/openapi.json)\n"   // V1.6.4
         "- Documentation: [Device manual](/doc)\n", r.body.c_str());
     assertCors(r);
+}
+void test_v164_openapi_json() {
+    shimFiles()["/openapi.json"] = "{\"openapi\":\"3.1.0\"}";
+    const ShimResponse& r = request(HTTP_GET, "/openapi.json");
+    TEST_ASSERT_EQUAL_INT(200, r.code);
+    TEST_ASSERT_EQUAL_STRING("application/json", r.type.c_str());
+    TEST_ASSERT_EQUAL_STRING("{\"openapi\":\"3.1.0\"}", r.body.c_str());
+    TEST_ASSERT_EQUAL_STRING("no-store", r.header("Cache-Control").c_str()); assertCors(r);
+    TEST_ASSERT_EQUAL_INT(0, shimOpenFiles());
+    shimFiles().erase("/openapi.json");
+    const ShimResponse& m = request(HTTP_GET, "/openapi.json");   // missing file -> 404
+    TEST_ASSERT_EQUAL_INT(404, m.code); TEST_ASSERT_EQUAL_STRING("{\"error\":\"not found\"}", m.body.c_str());
 }
 void test_log_endpoint() {
     logLine("http test %d", 1);
@@ -379,6 +392,7 @@ int main(int, char**) {
     RUN_TEST(test_v1522_web_assets);
     RUN_TEST(test_add_html_embeds_and_escapes);
     RUN_TEST(test_llms_txt_exact);
+    RUN_TEST(test_v164_openapi_json);
     RUN_TEST(test_log_endpoint);
     RUN_TEST(test_proc_endpoint);
     RUN_TEST(test_options_preflight);

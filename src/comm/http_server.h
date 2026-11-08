@@ -8,6 +8,7 @@
  *   GET  /add         -> SPIFFS /add.json  (application/json, Cache-Control: no-store)
  *   GET  /add.html    -> /add.json embedded per ADD spec §5.3
  *   GET  /llms.txt    -> generated index (ADD spec §5.4)
+ *   GET  /openapi.json -> SPIFFS /openapi.json (application/json, Cache-Control: no-store)   V1.6.4
  *   GET  /doc         -> SPIFFS /doc.html (text/html)   V1.5.27, was /doc.md (text/markdown)
  *   V1.5.22 (web UI assets, Sprint W1):
  *   GET  /app.js      -> SPIFFS /www/app.js (application/javascript)
@@ -37,7 +38,8 @@
  *    Access-Control-Allow-Methods: GET, POST, OPTIONS and Access-Control-Allow-Headers: Content-Type.
  *  - Files: if SPIFFS.exists(path): File f = SPIFFS.open(path, "r"); server.streamFile(f, type);
  *    f.close(). Missing file -> the 404 answer. Types: "/" and "/settings" text/html,
- *    "/add" application/json (+ Cache-Control: no-store), "/doc" text/html (V1.5.27).
+ *    "/add" application/json (+ Cache-Control: no-store), "/doc" text/html (V1.5.27),
+ *    "/openapi.json" application/json (+ Cache-Control: no-store) (V1.6.4, Sprint D1).
  *  - /add.html (from /add.json; missing -> 404): HTTP 200, Content-Type
  *    "text/html; charset=utf-8", headers Cache-Control: no-store, no-cache, must-revalidate and
  *    Pragma: no-cache. Sent in chunks (server.setContentLength(CONTENT_LENGTH_UNKNOWN);
@@ -53,10 +55,11 @@
  *    sendContent calls per started 64 bytes of JSON (one sendContent = one HTTP chunk = one TCP
  *    write on the device; never one call per character). A '<' held back at the end of a block
  *    belongs to the next block; a '<' as the very last byte of the file is sent as well.
- *  - /llms.txt: text/plain, exactly these 4 lines, each ending with '\n':
+ *  - /llms.txt: text/plain, exactly these 5 lines (V1.6.4: line 4 new), each ending with '\n':
  *      # AI Device Description (ADD)
  *      - ADD (JSON): [Device Description](/add)
  *      - ADD (HTML): [Device Description for Cloud-AI](/add.html)
+ *      - OpenAPI (JSON): [HTTP API, technical reference](/openapi.json)
  *      - Documentation: [Device manual](/doc)
  *  - /log: text/plain, logDump() into a static buffer of LOG_LINES * LOG_LINE_LEN + 1 bytes.
  *  - /proc: snapshotGet + procToJson into char[PROC_JSON_MAX]; application/json, Cache-Control: no-store.

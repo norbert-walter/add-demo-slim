@@ -1,7 +1,7 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.6.3 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-07
-**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.13
+**Version:** 1.6.4 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-08
+**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.17
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
 
@@ -169,6 +169,21 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 1 | `test_hardware` crashed in `test_nvs_roundtrip` (Guru Meditation "Cache disabled but cached memory region accessed", PC in `StepperQueue::fill_i2s_buffer`). Cause in FastAccelStepper 96459ed: the I2S TX-done interrupt runs permanently with I2S_MUX and is IRAM-safe, but `fill_i2s_buffer()` and `I2sManager::i2sMuxSetBit()` were in flash; every flash operation (NVS write, SPIFFS read, OTA) crashed the board, also with the motor idle. Fix: both functions `IRAM_ATTR` (fork `norbert-walter/FastAccelStepper`, commit a64ceff on 96459ed; pull request to gin66 pending). Checked with nm/objdump: every function reachable from the interrupt is in IRAM, no literals into flash | `platformio.ini` |
 | 2 | Post-build check `scripts/check_iram.py` (all ESP32 environments): the build fails if one of the I2S interrupt functions is linked into flash (protects against library updates). Verified: fails with 96459ed, passes with a64ceff | `platformio.ini`, `scripts/` |
 | 3 | The nine native H1 tests could not see this (no flash cache on the host); the first five on-device tests were green (inputs, sensor, outputs, E-stop polarity change) | – |
+
+**Changes 1.6.3 → 1.6.4 (ADD document and OpenAPI, Sprint D1, 2026-11-08, decision Norbert Walter):**
+
+The device describes itself for AI agents with the ADD document (`data/add.json`, ADD Specification
+v1.0, Level 2) and – as an **extension, not part of the ADD standard** – with an OpenAPI 3.1 description
+of the same HTTP API (`data/openapi.json`). The ADD document is **binding** for AI agents; the OpenAPI
+document is a technical reference for tools and code generators. Device behaviour is unchanged.
+
+| # | Change | Where |
+|---|---|---|
+| 1 | New route `GET /openapi.json` → SPIFFS `/openapi.json`, `application/json`, `Cache-Control: no-store`, 404 if the file is missing | §5.4, `http_server.h` |
+| 2 | `/llms.txt` gets a fifth line `- OpenAPI (JSON): [HTTP API, technical reference](/openapi.json)` before the documentation line | §5.4, `http_server.h` |
+| 3 | `data/add.json`: Level 2 (scores 1/1/0), public address `https://test.norbert-walter.dnshome.de` (Nginx reverse proxy with HTTP Basic Auth; no credentials in any file), 20 actions – `STOP`, `HV_OFF`, `SHUTTER_CLOSE` without confirmation (`autonomous`, safe direction), every other write per action; `SET` split into `set_parameter` and `set_simulated_signal`; `estop_nc`, `wifi_ssid`, `wifi_pass` are reserved for the operator (no ADD action). `interfaces[0].x-openapi` points to `/openapi.json`. `validated_by: []` (draft) until the AI validation | `data/` |
+| 4 | `data/openapi.json`: `info.version` = contract version, one operation `POST /api` with `oneOf`/`discriminator` on `cmd` (17 commands), per-key value schemas for `SET`, `Proc`, `ApiResponse`, `GetStateExtra`, `GetConfigExtra`, error codes; `x-add-action` names the ADD action of each operation and command, `x-add-reserved` marks the operator keys | `data/` |
+| 5 | Tests: `test_http_server` +1 (`/openapi.json`), `/llms.txt` 5 lines; new `test/js/test_add.js` (22 tests: ADD structure per spec §9/§10, both documents against `types.cpp`, `types.h`, `api_parse.cpp`, `params.cpp`, `proc_json.cpp`, `http_server.cpp`, CONTRACT §3/§5 and `PARAMS` of the web UI). `scripts/check_add.py`: read-only check of a running device (endpoints, schemas, CRC). Simulator and fake device serve `/openapi.json` (and `/add.html` in the simulator) | `test/`, `scripts/` |
 
 **Changes 1.6.2 → 1.6.3 (calibration under measuring conditions, Sprint K2, 2026-11-08, decision Norbert Walter):**
 
@@ -656,6 +671,8 @@ because of a full normal queue (§6.7).
 `/` and `/settings` (web UI), `/add` (ADD document, `Cache-Control: no-store`),
 `/add.html` and `/llms.txt` (ADD spec §5.3/§5.4), `/doc` (HTML page with links, V1.5.27), `/log`
 (last 20 log lines). All responses carry `Access-Control-Allow-Origin: *`.
+V1.6.4: `/openapi.json` (OpenAPI 3.1 of this HTTP API, `Cache-Control: no-store`; an extension to ADD –
+for AI agents `/add` is binding). `/llms.txt` lists it as its fourth link.
 V1.5.22: `/app.js`, `/style.css` and the four font files of the web UI (§5.5).
 V1.5.26: `/style.css` answers 404 (file removed, the CSS is part of `index.html`).
 V1.5.23: serial console on the USB port (115200 Bd) – commands and answers in `net_task.h`.
