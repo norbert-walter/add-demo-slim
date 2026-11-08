@@ -41,12 +41,12 @@ SYS_ERR = ["NONE", "ESTOP", "TEMP_HIGH", "COMM_TIMEOUT", "MOTOR_FAULT", "HOMING_
 # Measuring accuracy (decisions 08.11.2026, Norbert Walter; Pflichtenheft V1.7.16): the optical sensor
 # reaches ±2 mm for single values after the calibration (3σ ≤ 2 mm); the MEAN per step stays at ±1 mm,
 # so that a wrong calibration (up to 2.4 mm off) is still found. Values beside the material (lower boom,
-# far outside the table) are recorded only; the edges in T19 are recorded, only "found" is checked.
+# far outside the table) are recorded only; T19 records edges and step values without rating (decision
+# 08.11.2026: light cone and back reflection of the sensor are disturbed at the edges).
 TOL_MM = 1.0                # mean per step, stationary (T18, T20)
 SINGLE_MM = 2.0             # single values: 3σ ≤ SINGLE_MM; step medians of the moving profile run (T19)
 SIGMA_MAX = round(SINGLE_MM / 3, 2)
 RAW_PLAUS_MM = 7.0          # T18K: uncalibrated value against the reference (sensor / stair body plausible)
-EDGE_FOUND_MM = 10.0        # T19: edge must be found within 105 / 225 ± 10 mm in each direction
 TIMING_MAX_US = 3100        # T29 (decision 08.11.2026: demo, not critical)
 
 STEPS = [(115, 65.0, 5.0), (135, 60.0, 10.0), (155, 55.0, 15.0), (175, 50.0, 20.0), (195, 45.0, 25.0),
@@ -1253,7 +1253,7 @@ def traverse_run(c, start, end, speed):
     return samples, closed, p["measure"]["avg"], p["measure"]["n"]
 
 
-@test("T19", 2, "8", "Profilfahrt hin und zurück: Kanten erkannt und aufgezeichnet, Stufen ±2 mm (in Fahrt), Shutter durchgehend offen")
+@test("T19", 2, "8", "Profilfahrt hin und zurück: Kanten und Stufen aufgezeichnet (ohne Bewertung), Shutter durchgehend offen, Statistik plausibel")
 def t19(c):
     """Decision 08.11.2026: the edges are measured in both directions and compared (the direction of travel
     shifts them – sensor spot and filter lag); the mean of both is checked against the stair body.
@@ -1267,21 +1267,18 @@ def t19(c):
         c.val("%s: Messwerte im Lauf" % name, len(samples), mn=201)
         check(len(samples) > 200, "%s: zu wenige Messwerte (%d)" % (name, len(samples)))
         lo, hi, outl = material_span(samples)
-        check(lo is not None, "%s: kein Messgut erkannt" % name)
+        check(lo is not None, "%s: kein Messgut erkannt" % name)                      # the only rating of the profile
         edges[name] = (lo, hi)
         c.val("%s: einzelne Messgut-Ausreißer neben dem Stufenkörper (Info)" % name, outl)
         for label, v, nom in (("Messgut ab", lo, 105.0), ("Messgut bis", hi, 225.0)):
-            st = c.val("%s: Kante %s erkannt (Aufzeichnung, grob %g ± %g)" % (name, label, nom, EDGE_FOUND_MM), v, "mm",
-                       nom=nom, tol=EDGE_FOUND_MM, warn=False)
-            if st == "fail": bad.append("%s: Kante %s nicht erkannt (%.1f)" % (name, label, v))
+            c.val("%s: Kante %s (Info, Stufenkörper %g)" % (name, label, nom), v, "mm")
         c.val("%s: Shutter geschlossen im Messgutbereich (Messpunkte)" % name, closed, eq=0)
         if closed: bad.append("%s: Shutter zwischendurch zu" % name)
         for pos, _, thick in STEPS:
             v = sorted(s_[1] for s_ in samples if abs(s_[0] - pos) <= 5.0)
             med = v[len(v) // 2] if v else float("nan")
-            st = c.val("%s: Stufe %d mm: Dicke (Median)" % (name, pos), med, "mm", nom=thick, tol=SINGLE_MM)  # in motion
+            c.val("%s: Stufe %d mm: Dicke (Median, Info, Soll %g)" % (name, pos, thick), med, "mm")
             c.val("%s: Stufe %d mm: Anzahl Werte" % (name, pos), len(v))
-            if st == "fail": bad.append("%s %d mm" % (name, pos))
         c.val("%s: Mittelwert der Anlage" % name, avg, "mm", lo=5.0, hi=30.0, warn=False)
         c.val("%s: Anzahl Werte der Anlage" % name, n, mn=51)
         if not (5.0 <= avg <= 30.0 and n > 50): bad.append("%s: Statistik (Mittel %.2f, n %d)" % (name, avg, n))
@@ -1290,7 +1287,7 @@ def t19(c):
         c.val("Kante %s: Mittel hin/zurück (Info)" % label, (h + z) / 2, "mm")
         c.val("Kante %s: Unterschied hin – zurück (Info)" % label, h - z, "mm")
     check(not bad, "; ".join(bad))
-    return "Kanten in beiden Richtungen erkannt (Werte im Protokoll), Stufen in Toleranz" + shutter_note(c)
+    return "Profil hin und zurück aufgezeichnet (Kanten und Stufen im Protokoll, ohne Bewertung)" + shutter_note(c)
 
 
 @test("T20", 2, "8", "Kalibriertabelle (6 Stufen) gespeichert und wirksam: Abweichung je Stufe ±1 mm (Mittelwert, Sigma)")

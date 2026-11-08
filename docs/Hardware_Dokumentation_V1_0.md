@@ -297,6 +297,12 @@ rechnet sie mit einer kalibrierten Kennlinie um (Kapitel 6).
 | Shutter | rot | simulierter Shutter offen | GPIO 32 (SPINDLE/TTL), HIGH = an, 20 mA |
 | Herzschlag | blau | Firmware läuft (1 s an / 1 s aus) | GPIO 2, LED auf dem Board |
 
+> **Bekanntes Problem (08.11.2026, Norbert Walter):** Die LEDs hängen direkt an den GPIOs (HV etwa
+> 10 mA). Der Strom verschiebt die Analogmessung des Abstandssensors: Mit HV ein bzw. Shutter offen
+> springen die Messwerte um bis zu einige Millimeter (25 … 60 mV am Sensorsignal, A1 nach K1). Bis zur
+> Abhilfe in der Hardware (z. B. LED über Transistor oder mit kleinerem Strom) wird unter Messbedingungen
+> kalibriert (HV an, Shutter offen; Abnahme T18K). Nach einer Änderung an der Hardware neu kalibrieren.
+
 **Summer.**
 Aktiver Summer auf dem Board (Ausgang i2so.7), feste Tonhöhe. Die Signale unterscheiden sich im
 Rhythmus:
@@ -820,4 +826,4 @@ Referenzpunkt anfahren und erfassen, Basis erfassen, speichern.
 | Version | Datum | Änderung |
 |---|---|---|
 | 1.0 | 2026-11-07 | Erste Ausgabe auf Basis von Pflichtenheft V1.7.10 und Smoketest 0a |
-| 1.1 | 2026-11-08 | Echter TMC2209 eingebaut: `DIR_POSITIVE_HIGH` = true; Messkette mit Kalibriertabelle (6 Stufen) |
+| 1.1 | 2026-11-08 | Echter TMC2209 eingebaut: `DIR_POSITIVE_HIGH` = true; Messkette mit Kalibriertabelle (6 Stufen); LED-Strom beeinflusst die Analogmessung (bekanntes Problem) |
