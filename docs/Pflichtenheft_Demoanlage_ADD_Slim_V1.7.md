@@ -20,6 +20,9 @@
 - **Kanten (T19):** hin und zurück nur aufzeichnen; geprüft wird nur, dass sie erkannt werden
   (105 bzw. 225 ± 10 mm).
 - **Zeitwerte (T29, Lasttests):** ≤ 3100 µs statt 3000 µs (Demoanlage, nicht kritisch).
+- **Teilläufe der Abnahme:** Der Sicherheitsblock darf nur entfallen, wenn der Prüfer zu Beginn bestätigt,
+  dass er mit dem jetzigen Stand bestanden war (Hinweis: wahrheitsgemäß, aus Haftungsgründen; Name, Zeit
+  und Nachweis im Protokoll). Sonst läuft er zuerst. Ein Volllauf beginnt immer mit dem Sicherheitsblock.
 
 ### V1.7.14 → V1.7.15 (08.11.2026, Entscheidung Norbert Walter, A1 nach K2)
 - **Messgenauigkeit: eine pragmatische Toleranz von ±1 mm für alle Stufen** (Mittelwert von Abstand und
