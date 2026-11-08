@@ -17,10 +17,10 @@
   defekten Sensor oder einen verrutschten Stufenkörper).
 - **Abstand neben dem Messgut (M06):** nur aufzeichnen, keine Bewertung (123 mm, weit außerhalb der
   Tabelle und stark schwankend).
-- **Kanten (T19):** hin und zurück nur aufzeichnen; geprüft wird nur, dass sie erkannt werden
-  (105 bzw. 225 ± 10 mm).
+- **Profilfahrt (T19):** Kanten und Stufenwerte hin und zurück **nur aufzeichnen**, ohne Bewertung –
+  Lichtkegel und Rückreflex des Sensors sind an den Kanten gestört. Geprüft werden nur Messgut erkannt,
+  Shutter durchgehend offen und Statistik der Anlage plausibel.
 - **Zeitwerte (T29, Lasttests):** ≤ 3100 µs statt 3000 µs (Demoanlage, nicht kritisch).
-- **Profilfahrt (T19):** Stufenwerte in der Fahrt gelten als Einzelwerte: ±2 mm.
 - **Parallele Anfragen (T26):** Bei 8 gleichzeitigen Verbindungen lehnt der Webserver des ESP32 einzelne
   Verbindungsaufbauten ab; sie werden bis zu dreimal wiederholt und gezählt. Fehler sind nur vertauschte
   oder ganz verlorene Antworten.
@@ -1046,7 +1046,7 @@ Die Zeiten der 🤖-Sprints sind Rechenzeit von Qwen lokal (ca. 18 Token/s), nic
 
 **8. Betriebsmodi**
 - [ ] Stehende Messung: Mittelwert auf jeder Treppenstufe ±1 mm, Einzelwerte 3σ ≤ 2 mm (V1.7.16)
-- [ ] Profilfahrt: Kanten der Treppenstufen erkannt, Statistik plausibel
+- [ ] Profilfahrt: Messgut erkannt, Kanten und Stufen aufgezeichnet (ohne Bewertung), Statistik plausibel
 - [ ] Kalibrierung (6 Stufen, unter Messbedingungen, auch automatisch) gespeichert und wirksam
 
 **9. ADD + KI**
