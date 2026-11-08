@@ -31,6 +31,14 @@ from add_client import build, frame, verify   # noqa: E402
 ERR = {0: "OK", -1: "BAD_CRC", -2: "BAD_JSON", -3: "UNKNOWN_CMD", -4: "BAD_PARAM", -5: "STATE",
        -6: "PRECONDITION", -7: "BUSY", -8: "NOT_STABLE", -9: "CALIB_INVALID", -10: "LOCAL_CONTROL"}
 SYS_ERR = ["NONE", "ESTOP", "TEMP_HIGH", "COMM_TIMEOUT", "MOTOR_FAULT", "HOMING_FAILED"]
+# Measuring accuracy (decision 08.11.2026, Norbert Walter): ONE pragmatic tolerance for all steps –
+# the sensor gets less accurate with distance, a single value covers the whole range. Sigma: 3σ ≤ TOL_MM.
+# Values beside the material (sensor sees the lower boom) are not assessed; T19 only checks the edges there.
+TOL_MM = 1.0
+SIGMA_MAX = round(TOL_MM / 3, 2)
+EDGE_TOL_MM = 3.0           # edge position (mean of both directions) against 105 / 225 mm
+EDGE_DIR_MAX_MM = 3.0       # difference of an edge between the two directions of travel
+
 STEPS = [(115, 65.0, 5.0), (135, 60.0, 10.0), (155, 55.0, 15.0), (175, 50.0, 20.0), (195, 45.0, 25.0),
          (215, 40.0, 30.0)]                      # step centre (mm), distance (mm), thickness (mm)
 PROC_KEYS = {"ts", "state", "err", "local", "motion", "measure", "safety"}
@@ -951,18 +959,46 @@ def stats(v):
     return m, sd, min(v), max(v), n
 
 
+def measure_at(c, pos):
+    """Stationary measurement at pos with HV on and the shutter open; the shutter is meant to stay open
+    over all steps (decision 08.11.2026: spare the shutter mechanics). From a running stationary
+    measurement the next START_MEASURE is sent directly; a firmware that answers BUSY (before Contract
+    V1.6.4) needs a STOP first, which closes the shutter – counted in c.cache["shutter_stops"]."""
+    d = c.d
+    p = d.proc()
+    if p["motion"]["mode"] == "measure":
+        e = d.api("START_MEASURE", pos=pos)
+        if e == -7:                                              # BUSY: older firmware
+            c.cache["shutter_stops"] = c.cache.get("shutter_stops", 0) + 1
+            d.ok("STOP")
+            d.idle(20, "STOP")
+            d.ok("START_MEASURE", pos=pos)
+        else:
+            check(e == 0, "START_MEASURE %d -> %s" % (pos, ERR.get(e, e)))
+    else:
+        if p["state"] != "RUNNING" or not p["motion"]["homed"] or not d.still(p):
+            d.ready(hv=True)
+        d.ok("START_MEASURE", pos=pos)
+    d.wait(lambda q: q["motion"]["mode"] == "measure" and abs(q["motion"]["pos"] - pos) <= 0.1
+           and q["motion"]["vel"] == 0 and q["safety"]["shutter"] == "open", 40, "Messung bei %d mm" % pos)
+
+
+def shutter_note(c):
+    n = c.cache.get("shutter_stops", 0)
+    c.val("Shutter zwischen den Stufen geschlossen (STOP nötig, Firmware vor V1.6.4)", n)
+    return "" if not n else " – Shutter %d× geschlossen (Firmware vor V1.6.4)" % n
+
+
 def measure_steps(c):
     """Stationary measurement at every step centre: 2 s settling, then 40 samples from /proc (every 50 ms).
     Cached for T18 and T20. -> {pos: {"dist": [...], "thick": [...], "avg": device mean, "n": device n}}"""
     if "steps" in c.cache:
         return c.cache["steps"]
+    c.cache["shutter_stops"] = 0
     d = c.d
-    d.ready(hv=True)
     res = {}
     for pos, dist, thick in STEPS:
-        d.ok("START_MEASURE", pos=pos)
-        d.wait(lambda q: q["motion"]["mode"] == "measure" and abs(q["motion"]["pos"] - pos) <= 0.1
-               and q["motion"]["vel"] == 0 and q["safety"]["shutter"] == "open", 40, "Messung bei %d mm" % pos)
+        measure_at(c, pos)
         time.sleep(2.0)
         ds, ts = [], []
         for _ in range(40):
@@ -970,8 +1006,7 @@ def measure_steps(c):
             if q["measure"]["valid"] and q["measure"]["in_range"]:
                 ds.append(q["measure"]["dist"]); ts.append(q["measure"]["thick"])
             time.sleep(0.05)
-        m = d.proc()["measure"]
-        d.ok("STOP")
+        m = d.proc()["measure"]                                  # no STOP: the shutter stays open
         res[pos] = {"dist": ds, "thick": ts, "avg": m["avg"], "n": m["n"]}
         c.raw_out.append(("%s – Einzelwerte Stufe %d mm (Soll Abstand %.1f, Dicke %.1f)" % (c.tid, pos, dist, thick),
                           "Abstand [mm]: " + " ".join("%.1f" % x for x in ds) +
@@ -980,7 +1015,7 @@ def measure_steps(c):
     return res
 
 
-@test("T18K", 2, "8", "Kalibrierung unter Messbedingungen vor der Messung: 6 Stufen mit HV an und offenem Shutter, gespeichert")
+@test("T18K", 2, "8", "Kalibrierung unter Messbedingungen vor der Messung: 6 Stufen, HV an, Shutter durchgehend offen, gespeichert")
 def t18k(c):
     """Fresh calibration right before T18/T20 (decision 08.11.2026: the open shutter shifts the sensor
     signal, so the table is taken while measuring). Needs Contract V1.6.3 (CALIB during MEAS_HOLD)."""
@@ -988,11 +1023,9 @@ def t18k(c):
     before = d.config()
     if "calib_raw_1" not in before:
         raise Problem("Firmware ohne Kalibriertabelle (vor Contract V1.6.0) – erst K1 flashen")
-    d.ready(hv=True)
+    c.cache["shutter_stops"] = 0
     for i, (pos, dist, thick) in enumerate(STEPS, start=1):
-        d.ok("START_MEASURE", pos=pos)
-        d.wait(lambda q: q["motion"]["mode"] == "measure" and abs(q["motion"]["pos"] - pos) <= 0.1
-               and q["motion"]["vel"] == 0 and q["safety"]["shutter"] == "open", 40, "Messung bei %d mm" % pos)
+        measure_at(c, pos)
         time.sleep(1.0)
         for k in range(6):
             e = d.api("CALIB", action="point", index=i)
@@ -1002,7 +1035,6 @@ def t18k(c):
         if e == -7:
             d.ok("STOP")
             raise Problem("CALIB während der Messung abgelehnt (BUSY): Firmware vor Contract V1.6.3 (Sprint K2)")
-        d.ok("STOP")
         check(e == 0, "Stufe %d mm: CALIB point -> %s" % (pos, ERR.get(e, e)))
     d.ok("CALIB", action="save")
     after = d.config()
@@ -1013,68 +1045,106 @@ def t18k(c):
     c.val("calib_valid", after["calib_valid"], eq=True)
     check(after["calib_valid"], "Tabelle nach der Kalibrierung ungültig")
     c.cache["calibrated"] = True
-    return "6 Punkte mit offenem Shutter übernommen und gespeichert"
+    return "6 Punkte mit HV an und offenem Shutter übernommen und gespeichert" + shutter_note(c)
 
 
-@test("T18", 2, "2, 8", "Stehende Messung je Stufe: Dicke und Abstand ±0,5 mm (Mittelwert, Sigma)")
+@test("T18", 2, "2, 8", "Stehende Messung je Stufe: Dicke und Abstand ±1 mm, 3σ ≤ 1 mm (Mittelwert, Sigma)")
 def t18(c):
+    c.cache.pop("steps", None)                                   # fresh values after T18K
     res = measure_steps(c)
     bad = []
     for pos, dist, thick in STEPS:
         r = res[pos]
         dm, dsd, dmin, dmax, n = stats(r["dist"])
         tm, tsd, tmin, tmax, _ = stats(r["thick"])
-        sts = [c.val("%d mm: Abstand Mittelwert" % pos, dm, "mm", nom=dist, tol=0.5),       # K1: Tabelle
-               c.val("%d mm: Dicke Mittelwert" % pos, tm, "mm", nom=thick, tol=0.5),
-               c.val("%d mm: Dicke Mittelwert der Anlage (avg)" % pos, r["avg"], "mm", nom=thick, tol=0.5),
-               c.val("%d mm: Dicke Sigma" % pos, tsd, "mm", mx=0.17, target="≤ 0,17 (3σ ≤ 0,5)"),
+        sts = [c.val("%d mm: Abstand Mittelwert" % pos, dm, "mm", nom=dist, tol=TOL_MM),
+               c.val("%d mm: Dicke Mittelwert" % pos, tm, "mm", nom=thick, tol=TOL_MM),
+               c.val("%d mm: Dicke Mittelwert der Anlage (avg)" % pos, r["avg"], "mm", nom=thick, tol=TOL_MM),
+               c.val("%d mm: Dicke Sigma" % pos, tsd, "mm", mx=SIGMA_MAX,
+                     target="≤ %.2f (3σ ≤ %.0f)" % (SIGMA_MAX, TOL_MM)),
                c.val("%d mm: Anzahl Einzelwerte" % pos, n, mn=30, warn=False)]
         c.val("%d mm: Dicke Min / Max" % pos, "%.1f / %.1f" % (tmin, tmax), "mm")
         c.val("%d mm: Abstand Sigma" % pos, dsd, "mm")
         if "fail" in sts:
             bad.append("%d mm" % pos)
     check(not bad, "außerhalb der Toleranz: %s" % ", ".join(bad))
-    return "alle Stufen in Toleranz (Einzelwerte im Anhang)"
+    return "alle Stufen in Toleranz (Einzelwerte im Anhang)" + shutter_note(c)
 
 
-@test("T19", 2, "8", "Profilfahrt: Kanten der Stufen erkannt, Statistik plausibel")
-def t19(c):
+def traverse_run(c, start, end, speed):
+    """One profile run start -> end with HV on. From a running stationary measurement or right after the
+    previous run (within the shutter hold time) the shutter stays open; a firmware that answers BUSY to
+    START_TRAVERSE during a stationary measurement (before V1.6.4) needs a STOP first (counted).
+    -> (samples [(pos, thick, on_material)], closed samples in the material zone, device avg, n)"""
     d = c.d
-    d.ready(hv=True)
-    d.ok("START_TRAVERSE", start=80, end=240, speed=5)
+    p = d.proc()
+    if p["motion"]["mode"] == "measure":
+        e = d.api("START_TRAVERSE", start=start, end=end, speed=speed)
+        if e == -7:
+            c.cache["shutter_stops"] = c.cache.get("shutter_stops", 0) + 1
+            d.ok("STOP")
+            d.idle(20, "STOP")
+            d.ok("START_TRAVERSE", start=start, end=end, speed=speed)
+        else:
+            check(e == 0, "START_TRAVERSE -> %s" % ERR.get(e, e))
+    else:
+        if p["state"] != "RUNNING" or not p["motion"]["homed"]:
+            d.ready(hv=True)
+        d.ok("START_TRAVERSE", start=start, end=end, speed=speed)
     d.wait(lambda q: q["motion"]["mode"] == "traverse", 3, "Profilfahrt startet")
-    samples = []
+    samples, closed, running = [], 0, False
     while True:
         p = d.proc()
         if p["motion"]["mode"] == "none": break
         m = p["measure"]
+        if m["valid"]: running = True                            # count only after the run has started
+        if running and 100.0 <= p["motion"]["pos"] <= 230.0 and p["safety"]["shutter"] != "open":
+            closed += 1
         if m["valid"]:
             samples.append((p["motion"]["pos"], m["thick"], m["on_material"]))
         time.sleep(0.05)
-    avg, n = p["measure"]["avg"], p["measure"]["n"]
-    c.val("Messwerte im Lauf", len(samples), mn=201)
-    check(len(samples) > 200, "zu wenige Messwerte (%d)" % len(samples))
-    on = [s[0] for s in samples if s[2]]
-    check(on, "kein Messgut erkannt")
-    first, last = min(on), max(on)
-    c.val("steigende Kante (Messgut ab)", first, "mm", nom=105.0, tol=3.0)
-    c.val("fallende Kante (Messgut bis)", last, "mm", nom=225.0, tol=3.0)
-    bad = []
-    for pos, _, thick in STEPS:
-        v = sorted(s[1] for s in samples if abs(s[0] - pos) <= 5.0)
-        med = v[len(v) // 2] if v else float("nan")
-        c.val("Stufe %d mm: Dicke (Median)" % pos, med, "mm", nom=thick, tol=1.0)
-        c.val("Stufe %d mm: Anzahl Werte" % pos, len(v))
-        if not v or abs(med - thick) > 1.0: bad.append(pos)
-    c.val("Mittelwert der Anlage", avg, "mm", lo=5.0, hi=30.0, warn=False)
-    c.val("Anzahl Werte der Anlage", n, mn=51)
-    check(abs(first - 105) <= 3 and abs(last - 225) <= 3, "Kanten bei %.1f / %.1f mm" % (first, last))
-    check(not bad, "Stufen außerhalb ±1 mm: %s" % bad)
-    check(5.0 <= avg <= 30.0 and n > 50, "Statistik: Mittel %.2f, n %d" % (avg, n))
-    return "Kanten und Stufen in Toleranz"
+    return samples, closed, p["measure"]["avg"], p["measure"]["n"]
 
 
-@test("T20", 2, "8", "Kalibriertabelle (6 Stufen) gespeichert und wirksam: Abweichung je Stufe ±0,5 mm (Mittelwert, Sigma)")
+@test("T19", 2, "8", "Profilfahrt hin und zurück: Kanten in beiden Richtungen, Stufen ±1 mm, Shutter durchgehend offen")
+def t19(c):
+    """Decision 08.11.2026: the edges are measured in both directions and compared (the direction of travel
+    shifts them – sensor spot and filter lag); the mean of both is checked against the stair body.
+    Values beside the material (lower boom) are not assessed."""
+    runs = {}
+    c.cache["shutter_stops"] = 0
+    for name, a, b in (("hin", 80, 240), ("zurück", 240, 80)):
+        runs[name] = traverse_run(c, a, b, 5)
+    bad, edges = [], {}
+    for name, (samples, closed, avg, n) in runs.items():
+        c.val("%s: Messwerte im Lauf" % name, len(samples), mn=201)
+        check(len(samples) > 200, "%s: zu wenige Messwerte (%d)" % (name, len(samples)))
+        on = [s_[0] for s_ in samples if s_[2]]
+        check(on, "%s: kein Messgut erkannt" % name)
+        edges[name] = (min(on), max(on))
+        c.val("%s: Kante Messgut ab (Soll 105)" % name, min(on), "mm")
+        c.val("%s: Kante Messgut bis (Soll 225)" % name, max(on), "mm")
+        c.val("%s: Shutter geschlossen im Messgutbereich (Messpunkte)" % name, closed, eq=0)
+        if closed: bad.append("%s: Shutter zwischendurch zu" % name)
+        for pos, _, thick in STEPS:
+            v = sorted(s_[1] for s_ in samples if abs(s_[0] - pos) <= 5.0)
+            med = v[len(v) // 2] if v else float("nan")
+            st = c.val("%s: Stufe %d mm: Dicke (Median)" % (name, pos), med, "mm", nom=thick, tol=TOL_MM)
+            c.val("%s: Stufe %d mm: Anzahl Werte" % (name, pos), len(v))
+            if st == "fail": bad.append("%s %d mm" % (name, pos))
+        c.val("%s: Mittelwert der Anlage" % name, avg, "mm", lo=5.0, hi=30.0, warn=False)
+        c.val("%s: Anzahl Werte der Anlage" % name, n, mn=51)
+        if not (5.0 <= avg <= 30.0 and n > 50): bad.append("%s: Statistik (Mittel %.2f, n %d)" % (name, avg, n))
+    for i, (label, nom) in enumerate((("Messgut ab", 105.0), ("Messgut bis", 225.0))):
+        h, z = edges["hin"][i], edges["zurück"][i]
+        st1 = c.val("Kante %s: Mittel hin/zurück" % label, (h + z) / 2, "mm", nom=nom, tol=EDGE_TOL_MM)
+        st2 = c.val("Kante %s: Unterschied hin – zurück" % label, abs(h - z), "mm", mx=EDGE_DIR_MAX_MM)
+        if "fail" in (st1, st2): bad.append("Kante %s (hin %.1f, zurück %.1f)" % (label, h, z))
+    check(not bad, "; ".join(bad))
+    return "Kanten in beiden Richtungen und Stufen in Toleranz" + shutter_note(c)
+
+
+@test("T20", 2, "8", "Kalibriertabelle (6 Stufen) gespeichert und wirksam: Abweichung je Stufe ±1 mm (Mittelwert, Sigma)")
 def t20(c):
     cfg = c.d.config()
     for k in sorted(k for k in cfg if k.startswith("calib_") and k != "calib_valid"):
@@ -1090,12 +1160,12 @@ def t20(c):
     bad = []
     for pos, dist, thick in STEPS:
         dm, dsd, _, _, n = stats(res[pos]["dist"])
-        st = c.val("Stufe %d mm: Abweichung Abstand (Mittelwert – %.0f mm)" % (pos, dist), dm - dist, "mm", nom=0.0, tol=0.5)
+        st = c.val("Stufe %d mm: Abweichung Abstand (Mittelwert – %.0f mm)" % (pos, dist), dm - dist, "mm", nom=0.0, tol=TOL_MM)
         c.val("Stufe %d mm: Sigma Abstand" % pos, dsd, "mm")
         if st == "fail":
             bad.append("%d mm" % pos)
     check(not bad, "Kalibrierung nicht wirksam an: %s" % ", ".join(bad))
-    return "Tabelle gültig und kalibriert, Abweichung je Stufe ≤ 0,5 mm"
+    return "Tabelle gültig und kalibriert, Abweichung je Stufe ≤ %.0f mm" % TOL_MM
 
 
 def stress(c, name, *extra, timeout=900):

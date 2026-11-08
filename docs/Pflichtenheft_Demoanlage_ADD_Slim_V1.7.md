@@ -2,12 +2,25 @@
 
 **Stand:** 2026-11-07
 **Autor:** Norbert Walter
-**Version:** 1.7.14 (Kalibrierung unter Messbedingungen)
+**Version:** 1.7.15 (Abnahme Messgenauigkeit: eine Toleranz, Kanten hin/zurück, Shutter offen)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.7.14 → V1.7.15 (08.11.2026, Entscheidung Norbert Walter, A1 nach K2)
+- **Messgenauigkeit: eine pragmatische Toleranz von ±1 mm für alle Stufen** (Mittelwert von Abstand und
+  Dicke), Streuung 3σ ≤ 1 mm. Der Sensor wird mit wachsendem Abstand ungenauer (A1 nach K2: 115 mm
+  −0,62 mm, σ 0,30 mm; 135 … 215 mm innerhalb ±0,31 mm).
+- Werte neben dem Messgut (Sensor sieht den unteren Ausleger) werden nicht bewertet; dort zählt nur die
+  saubere Kantenerkennung.
+- **Kanten in beiden Fahrtrichtungen:** Profilfahrt hin und zurück; bewertet wird der Mittelwert beider
+  Richtungen (±3 mm gegen 105 / 225 mm) und der Unterschied hin – zurück (≤ 3 mm).
+- **HV bei der Messprüfung durchgehend an, Shutter im Messgutbereich durchgehend offen** (Schonung der
+  Shutter-Mechanik), auch bei der Kalibrierung am Stufenkörper. Dafür muss die Firmware von einer
+  stehenden Messung direkt zur nächsten Stufe bzw. in die Profilfahrt wechseln können (Contract
+  V1.6.4, folgt); bis dahin schließt der Shutter zwischen den Stufen kurz (das Protokoll zählt es).
 
 ### V1.7.13 → V1.7.14 (Contract V1.6.3, 08.11.2026, Entscheidung Norbert Walter, Sprint K2)
 - **Kalibrierung unter Messbedingungen.** Der offene Shutter (am Board der Spindelausgang) verschiebt
@@ -1009,7 +1022,7 @@ Die Zeiten der 🤖-Sprints sind Rechenzeit von Qwen lokal (ca. 18 Token/s), nic
 - [ ] Router aus: 3 Versuche, dann 2 min Pause (Log), Router wieder an → Verbindung kommt automatisch zurück
 
 **8. Betriebsmodi**
-- [ ] Stehende Messung: Mittelwert auf Treppenstufe ±0,5 mm
+- [ ] Stehende Messung: Mittelwert auf jeder Treppenstufe ±1 mm, 3σ ≤ 1 mm (V1.7.15)
 - [ ] Profilfahrt: Kanten der Treppenstufen erkannt, Statistik plausibel
 - [ ] Kalibrierung (6 Stufen, unter Messbedingungen, auch automatisch) gespeichert und wirksam
 

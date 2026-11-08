@@ -14,7 +14,7 @@ Gesamtergebnis.
 | Blaue LED steht still, wenn die Steuerschleife hängt | – | n. a. | ohne Testfirmware nicht auslösbar |
 | Bedienvorrang (nur mit `LOCAL_HOLD_MS > 0`) | – | n. a. | `LOCAL_HOLD_MS = 0` |
 | Öffner: Drücken und Drahtbruch lösen aus; falsche Einstellung = Dauer-Not-Aus | H08 | ⏭ | nach dem Umbau auf Öffner |
-| Messgenauigkeit ±0,5 mm (T18/T19) mit Kalibriertabelle | nach Sprint K1 | ⏭ | Zweipunkt-Kalibrierung reicht nicht (Analyse 07.11.2026) |
+| Messgenauigkeit ±1 mm (T18K–T20) mit Kalibriertabelle unter Messbedingungen | nach K2 | ⏭ | Toleranz seit 08.11.2026 ±1 mm |
 | Block 9 – ADD + KI | mit Sprint D1 | ⏭ | |
 
 ## Gesamtergebnis
