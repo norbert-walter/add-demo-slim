@@ -468,8 +468,134 @@
   ],
   "validation": {
     "add_version": "1.0",
-    "improvements_applied": [],
-    "validated_by": []
+    "improvements_applied": [
+      "ethic_url, spec_url, doc_url and style_guide_url point to raw GitHub files (ethic_url was 404)",
+      "security.enforcement: E-stop described as firmware-evaluated, normally open, no wire-break detection, no independent safety function",
+      "rules: E-stop no longer called the only safety function; STOP and HV_OFF named as primary stop",
+      "rules: new rule to tell the user to press the E-stop and disconnect power if STOP/HV_OFF do not take effect",
+      "rules: system code 1 ESTOP no longer promises wire-break detection",
+      "Ethical Framework Standard: fallback aligned with ethic_url_required (do not proceed; only safe reads and autonomous safe-direction actions)"
+    ],
+    "validated_by": [
+      {
+        "name": "Claude",
+        "version": "claude-opus-5-5",
+        "mode": "thinking",
+        "validated_at": "2026-11-09T21:08:00+01:00",
+        "status": "passed_with_warnings",
+        "score": {
+          "structure": "pass",
+          "comprehensibility": "pass",
+          "functional": "pass",
+          "rules_compliance": "pass",
+          "security": "warning",
+          "discovery": "pass",
+          "timing_compliance": "warning"
+        },
+        "findings": [
+          {
+            "severity": "error",
+            "category": "discovery",
+            "message": "ethic_url returned 404 (v1.0 instead of v1_0, no extension). AI correctly refused to act. Fixed: raw GitHub URLs for spec_url, ethic_url, doc_url, style guide.",
+            "resolved": true
+          },
+          {
+            "severity": "error",
+            "category": "security",
+            "message": "security.enforcement and rules described the E-stop as independent of the software and as the only safety function; it is a normally open button evaluated by firmware only, without wire-break detection. Fixed in enforcement, rules and system code 1.",
+            "resolved": true
+          },
+          {
+            "severity": "warning",
+            "category": "rules_compliance",
+            "message": "No instruction for the case that STOP/HV_OFF do not take effect. Fixed: new rule to tell the user to press the E-stop and disconnect the power supply.",
+            "resolved": true
+          },
+          {
+            "severity": "warning",
+            "category": "rules_compliance",
+            "message": "Ethical Framework Standard fallback (apply Level 1 rules) contradicted ethic_url_required. Fixed in the framework: do not proceed, only safe read actions and autonomous safe-direction actions.",
+            "resolved": true
+          },
+          {
+            "severity": "warning",
+            "category": "timing_compliance",
+            "message": "The model acts turn by turn and cannot keep the 2 s GET_STATE heartbeat; its fetch tool sends GET only. Motion and HV were therefore executed by an operator-started script written by the model (rule 'offer a script'). In that run the heartbeat held: 113/113 answered, max gap 1.28 s, max request 194 ms.",
+            "resolved": false
+          },
+          {
+            "severity": "warning",
+            "category": "security",
+            "message": "The device serves one HTTP connection at a time. Parallel GET requests during the read-only test waited 23.0 s and 23.2 s (/log). If /api is blocked this long while the watchdog is armed, COMM_TIMEOUT follows. Clients must serialise requests; a per-connection timeout in the firmware is recommended.",
+            "resolved": false
+          },
+          {
+            "severity": "warning",
+            "category": "functional",
+            "message": "Control loop timing (GET_STATE): cycle_max_us 1986, period_max_us 2088, overruns 236 -> 382 during the run. Within the 3 ms of the hardware documentation, above the acceptance values of CONTRACT 6.7 (cycle < 500 us, period < 1500 us). prio_lat_max_us 1155 (<= 2000, ok).",
+            "resolved": false
+          },
+          {
+            "severity": "warning",
+            "category": "functional",
+            "message": "Off the material the sensor reads 69.9 +/- 2.6 mm (65.3 ... 75.6, outside the 40 ... 65 mm fit), so thickness reaches 4.7 mm > edge_threshold 3 mm: on_material flickers (8 transitions instead of 2 at 84.5, 90, 95, 108, 226, 232, 235 mm). Step 1 (5 mm) leaves little margin for a higher threshold; hysteresis or filtering is recommended.",
+            "resolved": false
+          },
+          {
+            "severity": "warning",
+            "category": "functional",
+            "message": "Step thickness at the step centres (+/- 5 mm): 6.4 / 10.3 / 15.4 / 20.0 / 25.0 / 30.2 mm vs. 5 ... 30 mm. Steps 2-6 within +/- 0.45 mm, step 1 +1.4 mm; check calibration point 1.",
+            "resolved": false
+          },
+          {
+            "severity": "warning",
+            "category": "comprehensibility",
+            "message": "/log contains only HTTP timing lines, no commands, sources (API/LOCAL) or state transitions; an AI cannot reconstruct what happened at the device.",
+            "resolved": false
+          },
+          {
+            "severity": "info",
+            "category": "functional",
+            "message": "Real firmware sets motion.mode to none at the end of START_TRAVERSE as the ADD states; the project's fake_device.py keeps 'traverse'.",
+            "resolved": false
+          },
+          {
+            "severity": "info",
+            "category": "security",
+            "message": "GET_CONFIG returns wifi_ssid through the public proxy (wifi_pass only as wifi_pass_set). Consider omitting the SSID remotely.",
+            "resolved": false
+          },
+          {
+            "severity": "info",
+            "category": "structure",
+            "message": "device.ip contains a URL; heartbeat 2 s (ADD) vs. 4 s (CONTRACT/OpenAPI) and CRC hex case (upper-case vs. case-insensitive) are worded differently.",
+            "resolved": false
+          },
+          {
+            "severity": "info",
+            "category": "discovery",
+            "message": "Validation used the LAN address (http://192.168.1.120). The public address was not reachable from the model's sandbox (egress proxy 403); Basic Auth was not exercised.",
+            "resolved": false
+          },
+          {
+            "severity": "info",
+            "category": "rules_compliance",
+            "message": "tools_fingerprint lists only the tools used for the device: mcp__mcp-fetch__fetch (all GET reads) and Bash (CRC32 verification, timestamps). Other session tools (connected apps) are not included, because they cannot reach the device. The spec (4.7) asks for all available tools; this narrower reading should be stated in the spec.",
+            "resolved": false
+          }
+        ],
+        "summary": "Document understood completely and applied correctly; all actions executed as described (GET_CONFIG, INIT, HV_ON, START_TRAVERSE 80-240 mm at 10 mm/s, STOP, HV_OFF, PARK) with valid CRC on all 312 exchanges and no device error. Suitable for deployment with claude-opus-5-5 in thinking mode for reading, explaining, diagnosis and for operation through operator-started scripts. Not suitable for live interactive control of motion or HV in a chat, because a turn-by-turn model cannot keep the 2 s heartbeat; the ADD rules handle this correctly. Open warnings: single HTTP connection (23 s waits), control loop overruns, on_material flicker off the material, step 1 offset, log without commands.",
+        "tools_required": [
+          "mcp__mcp-fetch__fetch",
+          "Bash"
+        ],
+        "tools_fingerprint": "Bash|mcp__mcp-fetch__fetch",
+        "capabilities": {
+          "classification": "large",
+          "ethic_url_usable": true
+        }
+      }
+    ]
   },
   "ui": {"style_guide_url": "https://raw.githubusercontent.com/norbert-walter/add-demo-slim/refs/heads/master/docs/reference/ADD_Style_Guide_IMS_V1_0.md", "style_guide_version": "1.0", "dashboard_demo_url": "https://test.norbert-walter.dnshome.de/", "theme_default": "dark"}
 }
