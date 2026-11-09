@@ -1,12 +1,12 @@
 {
   "schema": "add",
   "version": "1.0",
-  "spec_url": "https://norbert-walter.github.io/ai-device-description-add/ADD_AI_Reference_v1_0.html",
+  "spec_url": "hhttps://raw.githubusercontent.com/norbert-walter/ai-device-description-add/refs/heads/main/ADD_AI_Reference_v1_0.md",
   "spec_license": "CC BY 4.0 — © 2026 Norbert Walter",
   "autonomy": {
     "level": 2,
     "scores": {"reversibility": 1, "scope_of_effect": 1, "error_tolerance": 0},
-    "ethic_url": "https://norbert-walter.github.io/ai-device-description-add/ADD_Ethical_Framework_Standard_v1.0",
+    "ethic_url": "https://raw.githubusercontent.com/norbert-walter/ai-device-description-add/refs/heads/main/ADD_Ethical_Framework_Standard_v1_0.md",
     "ethic_url_required": "Fetch and apply this document before any action. If unreachable, do not proceed.",
     "scores_note": "The demo itself is harmless (LEDs instead of HV and radiation, a small stepper axis), but it models a radiometric thickness gauge and is operated remotely over the internet at fairs and demonstrations. reversibility 1: a wrong motion or fault needs INIT or ACK at the device; nothing is damaged. scope_of_effect 1: visitors may stand at the moving axis. error_tolerance 0: the device stops itself (end switches, watchdog, state machine); errors are corrected by the operator. Level 2 is chosen deliberately so that the AI behaves as at the real gauge."
   },
@@ -20,7 +20,7 @@
     "hardware": "ESP32 (MKS DLC32 V2.1), TMC2209 stepper driver, Sharp GP2Y0A41SK0F distance sensor, MKS TS35-R touch display",
     "location": "Demonstration setup of Norbert Walter, operated remotely over the internet",
     "description": "Scale model (about 1:5) of a radiometric thickness gauge as used in rolling mills. A C-frame moves on a linear axis (0 ... 242 mm) over a six-step body (step centres 115 ... 215 mm, thickness 5 ... 30 mm) and measures its thickness with an optical distance sensor. X-ray high voltage (HV) and shutter are simulated by LEDs. Zones: park 0 ... 20 mm (shutter always closed), service 20 ... 60 mm (shutter only manually), measuring zone > 60 ... 242 mm (shutter only by the measuring programmes). Safety states: SAFE_START, READY, RUNNING (HV on), FAULT, WAIT_ACK, RECOVER.",
-    "doc_url": "https://github.com/norbert-walter/add-demo-slim/blob/master/docs/CONTRACT.md",
+    "doc_url": "https://raw.githubusercontent.com/norbert-walter/add-demo-slim/refs/heads/master/docs/CONTRACT.md",
     "doc_url_note": "English contract of the device behaviour. §3 states and error codes, §4 CRC frame, §5 HTTP interface and commands, §6 safety logic (zones, shutter, watchdog, LOCAL priority), §7.3 calibration procedure, §9 parameters and ranges."
   },
   "security": {
@@ -470,5 +470,5 @@
     "improvements_applied": [],
     "validated_by": []
   },
-  "ui": {"style_guide_url": "https://github.com/norbert-walter/add-demo-slim/blob/master/docs/reference/ADD_Style_Guide_IMS_V1_0.md", "style_guide_version": "1.0", "dashboard_demo_url": "https://test.norbert-walter.dnshome.de/", "theme_default": "dark"}
+  "ui": {"style_guide_url": "https://raw.githubusercontent.com/norbert-walter/add-demo-slim/refs/heads/master/docs/reference/ADD_Style_Guide_IMS_V1_0.md", "style_guide_version": "1.0", "dashboard_demo_url": "https://test.norbert-walter.dnshome.de/", "theme_default": "dark"}
 }

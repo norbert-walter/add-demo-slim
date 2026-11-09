@@ -20,7 +20,7 @@
     },
     {}
   ],
-  "externalDocs": {"description": "CONTRACT (device behaviour, normative)", "url": "https://github.com/norbert-walter/add-demo-slim/blob/master/docs/CONTRACT.md"},
+  "externalDocs": {"description": "CONTRACT (device behaviour, normative)", "url": "https://raw.githubusercontent.com/norbert-walter/add-demo-slim/refs/heads/master/docs/CONTRACT.md"},
   "paths": {
     "/proc": {
       "get": {
