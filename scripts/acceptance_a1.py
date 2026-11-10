@@ -707,14 +707,14 @@ def m11(c):
     if not c.interactive:
         raise Skip("Weboberfläche nur von Hand")
     c.prompt("Tablet mit WLAN 'ADD-Demo' (Passwort adddemo1) verbinden und http://192.168.4.1/ öffnen. "
-             "Für die lokale Datei am PC: web-ui/ims-demo-ui.html aus dem AKTUELLEN Repository öffnen (nach git pull; "
+             "Für die lokale Datei am PC: web-ui/index.html aus dem AKTUELLEN Repository öffnen (nach git pull; "
              "eine alte Kopie aus Downloads o. Ä. passt nicht zur Firmware), Adresse %s eingeben" % c.d.host)
     c.asks(["Seite lädt ohne Internet, Werte aktualisieren sich mindestens zweimal pro Sekunde?",
             "Verlauf auf der Prozessseite zeigt bis zu 100 Punkte?",
             "Hilfe-Symbol öffnet /doc in einem neuen Tab mit Beschreibung und Linktabelle?",
             "Einstellungen: Wert ändern, Speichern, Neu laden -> Wert bleibt?",
             "Einstellungen: ungültiger Wert wird rot markiert und nicht gesendet?",
-            "web-ui/ims-demo-ui.html am PC lokal geöffnet: Verbindungsdialog, Verbindung klappt?"])
+            "web-ui/index.html am PC lokal geöffnet: Verbindungsdialog, Verbindung klappt?"])
     if c.ask("Router-Test durchführen (SSID/Passwort setzen, Neustart, Router aus/an – ca. 10 min)?"):
         c.asks(["Anlage im Heimnetz erreichbar (IP im Display), AP ADD-Demo bleibt erreichbar?",
                 "Router aus: Log zeigt sta: attempt 1/3 … 3/3, dann sta: backoff 120 s?",

@@ -13,7 +13,7 @@ agentenbasierte Entwicklung mit code-server + Cline.
 | `docs/Sprint_Prompts_Demoanlage_ADD_Slim_V2.md` | Sprint-Plan V3 (Reihenfolge, Begründung, Ablauf), bisherige Prompts |
 | `docs/sprints/` | Sprint-Dateien für Cline (eine Aufgabe pro Datei) |
 | `docs/reviews/` | Review-Protokolle je Sprint |
-| `web-ui/ims-demo-ui.html` | Weboberfläche zum lokalen Öffnen (Verbindungsdialog, Demo-Modus); bytegleiche Kopie von `data/www/index.html` |
+| `web-ui/index.html` | Weboberfläche zum lokalen Öffnen (Verbindungsdialog, Demo-Modus); bytegleiche Kopie von `data/www/index.html` |
 | `docs/Hardware_Dokumentation_V1_0.md` | Hardware-Dokumentation: Sicherheitshinweise, Komponenten, Anschlüsse, Motortreiber, Inbetriebnahme, Fehlersuche |
 | `docs/Software_Dokumentation_V1_0.md` | Software-Dokumentation: Architektur, Sicherheitslogik, Entwicklung mit KI, Module, pio-Befehle, API, Endpunkte, Bedienoberflächen, Kalibrierung, ADD mit KI, Tests und Werkzeuge |
 | `docs/REST_API_V1_0.md` | Kurzübersicht der REST-API: Befehle, Parameter, Fehlercodes, `/proc`, Endpunkte |

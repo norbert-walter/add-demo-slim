@@ -8,7 +8,7 @@ data/www/index.html carries a byte-identical copy of data/www/app.js between the
     python3 scripts/embed_app.py
 
 It replaces only the text between the two marker lines ("</script>" written as "<\\/script>") and
-then copies index.html to web-ui/ims-demo-ui.html. Prints "embedded <n> bytes" or an error.
+then copies index.html to web-ui/index.html. Prints "embedded <n> bytes" or an error.
 V1.6.5: then runs build_data.py (gzip copies, add.html).
 """
 import os, sys
@@ -16,7 +16,7 @@ import os, sys
 REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 APP = os.path.join(REPO, 'data', 'www', 'app.js')
 INDEX = os.path.join(REPO, 'data', 'www', 'index.html')
-COPY = os.path.join(REPO, 'web-ui', 'ims-demo-ui.html')
+COPY = os.path.join(REPO, 'web-ui', 'index.html')
 START = '/* ===== ADDAPP: copy of data/www/app.js (byte for byte, checked by test/js/test_pages.js) ===== */\n'
 END = '/* ===== end of ADDAPP ===== */\n'
 

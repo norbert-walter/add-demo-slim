@@ -129,9 +129,9 @@ test('calibration page: 6-point table (V1.6.0, Sprint K1)', () => {
   for (const f of ['A.calibRows(', 'A.calibValid(', 'A.calibApply(']) assert.ok(page.includes(f), 'page script must use ' + f);
 });
 
-test('web-ui/ims-demo-ui.html is a byte-identical copy of data/www/index.html', () => {
-  const copy = fs.readFileSync(path.join(__dirname, '..', '..', 'web-ui', 'ims-demo-ui.html'), 'utf8').replace(/\r\n/g, '\n');
-  assert.equal(copy, read('index.html'), 'copy data/www/index.html to web-ui/ims-demo-ui.html');
+test('web-ui/index.html is a byte-identical copy of data/www/index.html', () => {
+  const copy = fs.readFileSync(path.join(__dirname, '..', '..', 'web-ui', 'index.html'), 'utf8').replace(/\r\n/g, '\n');
+  assert.equal(copy, read('index.html'), 'copy data/www/index.html to web-ui/index.html (scripts/embed_app.py)');
 });
 
 test('settings: redirects to the settings page of the single-page UI', () => {
