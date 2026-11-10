@@ -37,6 +37,7 @@ agentenbasierte Entwicklung mit code-server + Cline.
 | `scripts/verify_reference.sh` | alle nativen Tests gegen die Referenzimplementierung (`referenz_logic.zip`, separat geliefert) in einem temporären Worktree – Nachweis, dass die eingefrorenen Tests widerspruchsfrei und erfüllbar sind |
 | `scripts/stress_api.py` | Abnahme V1.1: STOP-Latenz, Queue-Flut, parallele Anfragen, Dauerlauf, Bedienvorrang |
 | `scripts/build_data.py` | erzeugt `data/add.html` aus `add.json` und die gzip-Kopien (`*.gz`) – nach jeder Änderung an den Dateien in `data/`, vor `uploadfs` |
+| `scripts/diag_http.py` | D1.2: Ladezeiten direkt und über den Proxy, normal und gzip, mit Zeitverlauf (nur GET) |
 | `scripts/check_add.py` | D1: prüft am laufenden Gerät nur lesend `/llms.txt`, `/add`, `/add.html`, `/openapi.json` und die Schemas von `/proc` und Antworten (Basic Auth mit `--auth`: Benutzer und Passwort werden abgefragt; gzip und Ladezeit) |
 | `data/add.json`, `data/openapi.json` | D1: ADD-Dokument (verbindlich für KI-Agenten) und OpenAPI 3.1 der HTTP-API (Erweiterung) |
 
