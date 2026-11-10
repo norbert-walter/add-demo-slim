@@ -199,6 +199,9 @@
         ]
       }
     },
+    "/favicon.ico": {
+      "get": {"summary": "Browser icon", "description": "IMS logo, 16/32/48 px (V1.6.5); Cache-Control: max-age=86400, no gzip copy.", "responses": {"200": {"description": "OK", "content": {"image/x-icon": {"schema": {"type": "string", "format": "binary"}}}}, "404": {"description": "file not present on the device"}}, "parameters": [{"$ref": "#/components/parameters/t"}]}
+    },
     "/log": {
       "get": {
         "summary": "Device log",
