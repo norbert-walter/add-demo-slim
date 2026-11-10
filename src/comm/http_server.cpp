@@ -57,21 +57,29 @@ static void notFound() {
     server.send(404, "application/json", "{\"error\":\"not found\"}");
 }
 
-/// Stream a SPIFFS file. If noStore is true, add Cache-Control: no-store header.
-static void sendFile(const char* path, const char* type, bool noStore) {
-    if (!SPIFFS.exists(path)) {
+/// V1.6.5: file route helper (gzip copy when accepted).
+static void sendFile(const char* path, const char* type, const char* cache, bool pragma = false) {
+    // 1. Determine whether the client accepts gzip and a pre-compressed copy exists.
+    bool useGz = server.header("Accept-Encoding").indexOf("gzip") >= 0 && SPIFFS.exists(String(path) + ".gz");
+
+    // 2. If no gzip and the plain file is missing -> 404 (no further headers).
+    if (!useGz && !SPIFFS.exists(path)) {
         notFound();
         return;
     }
-    File f = SPIFFS.open(path, "r");
-    if (noStore) server.sendHeader("Cache-Control", "no-store");
+
+    // 3. Open the file (gzip copy or plain), send headers, stream, close.
+    File f = useGz ? SPIFFS.open(String(path) + ".gz", "r") : SPIFFS.open(path, "r");
+    if (cache) server.sendHeader("Cache-Control", cache);
+    if (pragma) server.sendHeader("Pragma", "no-cache");
+    server.sendHeader("Vary", "Accept-Encoding");
     cors();
     server.streamFile(f, type);
     f.close();
 }
 
-/// V1.5.22: a font file, cacheable for one day (Cache-Control: max-age=86400).
-static void sendFont(const char* path) {
+/// V1.6.5: cached font / favicon helper (no gzip lookup).
+static void sendCached(const char* path, const char* type) {
     if (!SPIFFS.exists(path)) {
         notFound();
         return;
@@ -79,68 +87,8 @@ static void sendFont(const char* path) {
     File f = SPIFFS.open(path, "r");
     server.sendHeader("Cache-Control", "max-age=86400");
     cors();
-    server.streamFile(f, "font/woff2");
+    server.streamFile(f, type);
     f.close();
-}
-
-/// Read a file in blocks and escape "</" as "<\/". Block-wise sendContent (V1.5.17).
-static void sendScriptJson(File& f) {
-    uint8_t buf[64];
-    char out[2048];  // plenty for worst case: every byte → 3 chars ('</' → '<\/')
-    int oi = 0;        // output index
-    bool pending_lt = false;
-
-    auto flush_out = [&]() {
-        if (oi > 0) { server.sendContent(out, oi); oi = 0; }
-    };
-
-    while (f.available()) {
-        size_t n = f.read(buf, sizeof buf);
-        for (size_t i = 0; i < n; ++i) {
-            if (pending_lt && buf[i] == '/') {
-                // '</' across block boundary → '<\/'
-                out[oi++] = '<'; out[oi++] = '\\'; out[oi++] = '/';
-                pending_lt = false;
-            } else {
-                // flush any pending '<' from previous block
-                if (pending_lt) {
-                    out[oi++] = '<';
-                    pending_lt = false;
-                }
-                if (buf[i] == '<') {
-                    pending_lt = true;
-                } else {
-                    out[oi++] = (char)buf[i];
-                }
-            }
-        }
-        flush_out();
-    }
-    // A '<' as the very last byte of the file is sent too
-    if (pending_lt) server.sendContent("<");
-}
-
-/// Read a file in blocks and HTML-escape & < >. Block-wise sendContent (V1.5.17).
-static void sendHtmlEscaped(File& f) {
-    uint8_t buf[64];
-    char out[2048];  // worst case: '&' → '&amp;' = 5 chars per input byte
-    int oi = 0;
-
-    auto flush_out = [&]() {
-        if (oi > 0) { server.sendContent(out, oi); oi = 0; }
-    };
-
-    while (f.available()) {
-        size_t n = f.read(buf, sizeof buf);
-        for (size_t i = 0; i < n; ++i) {
-            char c = (char)buf[i];
-            if      (c == '&') { out[oi++] = '&'; out[oi++] = 'a'; out[oi++] = 'm'; out[oi++] = 'p'; out[oi++] = ';'; }
-            else if (c == '<') { out[oi++] = '&'; out[oi++] = 'l'; out[oi++] = 't'; out[oi++] = ';'; }
-            else if (c == '>') { out[oi++] = '&'; out[oi++] = 'g'; out[oi++] = 't'; out[oi++] = ';'; }
-            else               { out[oi++] = c; }
-        }
-        flush_out();
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -148,38 +96,7 @@ static void sendHtmlEscaped(File& f) {
 // ---------------------------------------------------------------------------
 
 static void handleAddHtml() {
-    const char* type = "text/html; charset=utf-8";
-
-    if (!SPIFFS.exists("/add.json")) {
-        notFound();
-        return;
-    }
-
-    cors();
-    server.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-    server.sendHeader("Pragma", "no-cache");
-    server.setContentLength(CONTENT_LENGTH_UNKNOWN);
-    server.send(200, type, "");
-
-    // First open: script JSON with "</" -> "<\/"
-    {
-        File f = SPIFFS.open("/add.json", "r");
-        server.sendContent("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>ADD</title>\n");
-        server.sendContent("<script type=\"application/ld+json\">\n");
-        sendScriptJson(f);
-        f.close();
-    }
-
-    // Second open: HTML-escaped JSON in <pre>
-    {
-        File f = SPIFFS.open("/add.json", "r");
-        server.sendContent("\n</script></head><body><pre>\n");
-        sendHtmlEscaped(f);
-        f.close();
-    }
-
-    server.sendContent("\n</pre></body></html>\n");
-    server.sendContent("");  // finish chunked transfer
+    sendFile("/add.html", "text/html; charset=utf-8", "no-store, no-cache, must-revalidate", true);
 }
 
 static void handleLlms() {
@@ -285,19 +202,25 @@ static void handleApi() {
 // ---------------------------------------------------------------------------
 
 void httpServerInit() {
+    // V1.6.5: collect Accept-Encoding before routes so sendFile can check it.
+    const char* accept_keys[] = {"Accept-Encoding"};
+    server.collectHeaders(accept_keys, 1);
+
     // Static file routes
-    server.on("/", HTTP_GET, []() { sendFile("/www/index.html", "text/html", false); });
-    server.on("/settings", HTTP_GET, []() { sendFile("/www/settings.html", "text/html", false); });
-    server.on("/add", HTTP_GET, []() { sendFile("/add.json", "application/json", true); });
-    server.on("/openapi.json", HTTP_GET, []() { sendFile("/openapi.json", "application/json", true); });
-    server.on("/doc", HTTP_GET, []() { sendFile("/doc.html", "text/html", false); });   // V1.5.27: HTML
-    // V1.5.22: web UI assets (Sprint W1); fonts may be cached by the browser
-    server.on("/app.js", HTTP_GET, []() { sendFile("/www/app.js", "application/javascript", false); });
-    server.on("/style.css", HTTP_GET, []() { sendFile("/www/style.css", "text/css", false); });
-    server.on("/font-u400.woff2", HTTP_GET, []() { sendFont("/www/font-u400.woff2"); });
-    server.on("/font-u700.woff2", HTTP_GET, []() { sendFont("/www/font-u700.woff2"); });
-    server.on("/font-m400.woff2", HTTP_GET, []() { sendFont("/www/font-m400.woff2"); });
-    server.on("/font-m700.woff2", HTTP_GET, []() { sendFont("/www/font-m700.woff2"); });
+    server.on("/", HTTP_GET, []() { sendFile("/www/index.html", "text/html", nullptr); });
+    server.on("/settings", HTTP_GET, []() { sendFile("/www/settings.html", "text/html", nullptr); });
+    server.on("/add", HTTP_GET, []() { sendFile("/add.json", "application/json", "no-store"); });
+    server.on("/openapi.json", HTTP_GET, []() { sendFile("/openapi.json", "application/json", "no-store"); });
+    server.on("/doc", HTTP_GET, []() { sendFile("/doc.html", "text/html", nullptr); });   // V1.5.27: HTML
+    // V1.5.22: web UI assets (Sprint W1)
+    server.on("/app.js", HTTP_GET, []() { sendFile("/www/app.js", "application/javascript", nullptr); });
+    server.on("/style.css", HTTP_GET, []() { sendFile("/www/style.css", "text/css", nullptr); });
+    // V1.6.5: fonts and favicon (sendCached — no gzip lookup)
+    server.on("/font-u400.woff2", HTTP_GET, []() { sendCached("/www/font-u400.woff2", "font/woff2"); });
+    server.on("/font-u700.woff2", HTTP_GET, []() { sendCached("/www/font-u700.woff2", "font/woff2"); });
+    server.on("/font-m400.woff2", HTTP_GET, []() { sendCached("/www/font-m400.woff2", "font/woff2"); });
+    server.on("/font-m700.woff2", HTTP_GET, []() { sendCached("/www/font-m700.woff2", "font/woff2"); });
+    server.on("/favicon.ico", HTTP_GET, []() { sendCached("/www/favicon.ico", "image/x-icon"); });
 
     // Dynamic handlers
     server.on("/add.html", HTTP_GET, handleAddHtml);
