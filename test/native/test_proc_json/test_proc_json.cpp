@@ -124,21 +124,30 @@ void test_response_cap_too_small() {
 }
 
 // V1.1: GET_STATE extra
-void test_state_extra_exact() {
-    char e[192];
+void test_state_extra_exact() {           // V1.6.6: BootInfo appended
+    char e[320];
     CycleStats cs; cs.cycle_max_us = 312; cs.period_max_us = 1010; cs.overruns = 0; cs.prio_lat_max_us = 1450;
-    int n = stateExtraToJson(SafetyState::READY, ErrorCode::NONE, true, cs, e, sizeof(e));
+    BootInfo bi; bi.reset_reason = 9; bi.boots = 4; bi.brownouts = 2; bi.bod_level = 7;
+    int n = stateExtraToJson(SafetyState::READY, ErrorCode::NONE, true, cs, bi, e, sizeof(e));
     TEST_ASSERT_EQUAL_INT((int)strlen(e), n);
     TEST_ASSERT_EQUAL_STRING(
         "\"state\":\"READY\",\"sys_err\":0,\"local\":true,\"cycle_max_us\":312,"
-        "\"period_max_us\":1010,\"overruns\":0,\"prio_lat_max_us\":1450", e);
+        "\"period_max_us\":1010,\"overruns\":0,\"prio_lat_max_us\":1450,"
+        "\"reset_reason\":\"BROWNOUT\",\"boots\":4,\"brownouts\":2,\"bod_level\":7", e);
+    BootInfo b0;                                         // defaults: before systemInit
+    stateExtraToJson(SafetyState::READY, ErrorCode::NONE, false, cs, b0, e, sizeof(e));
+    TEST_ASSERT_NOT_NULL(strstr(e, ",\"reset_reason\":\"UNKNOWN\",\"boots\":0,\"brownouts\":0,\"bod_level\":0"));
 }
 void test_state_extra_worst_case_and_in_response() {
-    char e[192];
+    char e[320];
     CycleStats cs; cs.cycle_max_us = cs.period_max_us = cs.overruns = cs.prio_lat_max_us = 4294967295u;
-    int n = stateExtraToJson(SafetyState::SAFE_START, (ErrorCode)255, false, cs, e, sizeof(e));
-    TEST_ASSERT_TRUE(n > 0 && n < 192);
-    TEST_ASSERT_EQUAL_INT(-1, stateExtraToJson(SafetyState::READY, ErrorCode::NONE, false, CycleStats{}, e, 20));
+    BootInfo bi; bi.reset_reason = 14; bi.boots = bi.brownouts = 4294967295u; bi.bod_level = 255;
+    int n = stateExtraToJson(SafetyState::SAFE_START, (ErrorCode)255, false, cs, bi, e, sizeof(e));
+    TEST_ASSERT_TRUE(n > 0 && n < 320);
+    TEST_ASSERT_NOT_NULL(strstr(e, "\"reset_reason\":\"PWR_GLITCH\",\"boots\":4294967295,\"brownouts\":4294967295,\"bod_level\":255"));
+    TEST_ASSERT_EQUAL_INT(-1, stateExtraToJson(SafetyState::READY, ErrorCode::NONE, false, CycleStats{}, BootInfo{}, e, 20));
+    TEST_ASSERT_EQUAL_INT(-1, stateExtraToJson(SafetyState::SAFE_START, (ErrorCode)255, false, cs, bi, e, (size_t)n));
+    TEST_ASSERT_EQUAL_INT(n, stateExtraToJson(SafetyState::SAFE_START, (ErrorCode)255, false, cs, bi, e, (size_t)n + 1));
     int m = responseToJson(CmdId::GET_STATE, ApiError::OK, nullptr, e, B, sizeof(B));
     TEST_ASSERT_TRUE(m > 0);
     TEST_ASSERT_TRUE(crcFrameVerify(B, (size_t)m));

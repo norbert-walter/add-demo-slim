@@ -47,6 +47,11 @@ void test_init_outputs_low_before_anything_else() {
     TEST_ASSERT_EQUAL_INT(1, count("fas bit 7 0"));                 // buzzer off
     TEST_ASSERT_EQUAL_INT(1, (int)shimFas().bit_writes);            // and nothing else on the mux
     TEST_ASSERT_EQUAL_INT(3, count("dw 32 0") + count("dw 4 0") + count("dw 2 0"));
+    // V1.6.6: weakest drive for shutter and HV LED, right after the outputs (step 1a), before the inputs
+    TEST_ASSERT_EQUAL_STRING("drive 32 0", shimHwLog()[6].c_str());
+    TEST_ASSERT_EQUAL_STRING("drive 4 0", shimHwLog()[7].c_str());
+    TEST_ASSERT_EQUAL_INT(2, count("drive 32 0") + count("drive 4 0"));
+    TEST_ASSERT_EQUAL_INT(-1, indexOf("drive 2 0"));                  // heartbeat LED unchanged
     TEST_ASSERT_EQUAL_STRING("", Serial.out.c_str());
 }
 void test_inputs_fail_safe_until_first_update() {

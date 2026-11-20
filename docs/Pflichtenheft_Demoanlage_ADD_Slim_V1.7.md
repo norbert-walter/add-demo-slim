@@ -1,13 +1,24 @@
 # Pflichtenheft – Demoanlage ADD (Slim)
 
-**Stand:** 2026-11-08
+**Stand:** 2026-11-20
 **Autor:** Norbert Walter
-**Version:** 1.7.18 (schnelle ADD-Seite, gzip, Sprint D1.2)
+**Version:** 1.7.19 (Brownout-Schwelle, Startgrund, Sprint B1)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.7.18 → V1.7.19 (20.11.2026, Entscheidung Norbert Walter, Sprint B1)
+- Anlass: zwei ESP32-Module auf demselben Board nach je etwa zwei Wochen ausgefallen (Flash antwortet
+  nicht mehr). Wahrscheinlichste Ursache: HV-LED mit 47 Ω direkt an GPIO 4 (≈ 31 mA). Umbau: HV-LED über
+  NPN-Transistor (Hardware-Doku 1.2). Kein Spannungsüberwachungs-IC am EN-Pin (zu aufwändig).
+- **Brownout-Schwelle** per Build-Flag `BROWNOUT_LEVEL`, Standard **7 (2,80 V)** statt 0 (2,43 V) aus dem
+  Arduino-Core; die Firmware setzt sie als Erstes beim Start und meldet den zurückgelesenen Wert.
+- **Startgrund und Startzähler** (seit dem letzten Einschalten, im RTC-Speicher) in `/log` und in der
+  Antwort auf `GET_STATE` (`reset_reason`, `boots`, `brownouts`, `bod_level`). Contract V1.6.6.
+- GPIO 4 und GPIO 32 mit der **schwächsten Treiberstufe** (die Lasten hängen jetzt an Transistoren).
+- Kalibrierung bleibt unter Messbedingungen (HV an, Shutter offen).
 
 ### V1.7.17 → V1.7.18 (08.11.2026, Entscheidung Norbert Walter, Sprint D1.2)
 - `/add.html` brauchte am Gerät rund 24 s (Laufzeit-Erzeugung in 64-Byte-Blöcken). Jetzt eine fertige
@@ -991,6 +1002,7 @@ Abschnitt „Sprint-Plan V3“.
 | W1 | index.html, settings.html | Sichtprüfung, Bedienung | 🤖 Qwen | 2–3 h |
 | A1 | Integration, Abnahme | Kapitel 10 | 👤 | 3–4 h |
 | D1 | add.json, Python-Demos | KI-Validierung | 👤 + Claude | 2–3 h |
+| B1 | types, system, hal_io, proc_json, http_server | Brownout-Stufe, Startgrund, Startzähler; native Tests, Gerät | 🤖 Qwen | 1–2 h |
 
 Die Zeiten der 🤖-Sprints sind Rechenzeit von Qwen lokal (ca. 18 Token/s), nicht deine Zeit.
 

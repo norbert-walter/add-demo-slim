@@ -14,6 +14,9 @@
  *  halInit(), in this order:
  *    1. for PIN_SHUTTER, PIN_HV_LED, PIN_HEARTBEAT_LED (in this order): pinMode(pin, OUTPUT);
  *       digitalWrite(pin, LOW)                      <- the very first hardware accesses
+ *    1a. V1.6.6: gpio_set_drive_capability((gpio_num_t)PIN_SHUTTER, GPIO_DRIVE_CAP_0) and then
+ *        the same for PIN_HV_LED (header "driver/gpio.h"). Both pins only drive a transistor; the
+ *        weakest drive limits the current a wrongly connected load can draw from the ESP32.
  *    2. pinMode(PIN_LIMIT_FWD / PIN_LIMIT_BWD / PIN_ESTOP, INPUT)   (external pull-ups)
  *    3. (void)analogReadMilliVolts(PIN_SENSOR_ADC), then analogSetPinAttenuation(PIN_SENSOR_ADC,
  *       ADC_11db)   (Arduino 3.x: the pin must be an ADC channel before the attenuation is set)

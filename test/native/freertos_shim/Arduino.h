@@ -9,13 +9,15 @@
 #define ESP_ARDUINO_VERSION_MINOR 1
 #define ESP_ARDUINO_VERSION_PATCH 3
 
+/// V1.6.6: called at Serial.begin (tests check what happened before it)
+inline void (*&shimSerialBeginHook())() { static void (*h)() = nullptr; return h; }
 struct ShimSerial {
     std::mutex m;
     std::string out;                 ///< everything written
     unsigned long baud = 0;
     int writes_in_critical = 0;      ///< calls while the caller held a portMUX critical section
     void note() { if (shimCritDepth() > 0) ++writes_in_critical; }
-    void begin(unsigned long b) { std::lock_guard<std::mutex> l(m); baud = b; }
+    void begin(unsigned long b) { if (shimSerialBeginHook()) shimSerialBeginHook()(); std::lock_guard<std::mutex> l(m); baud = b; }
     void end() {}
     void flush() {}
     explicit operator bool() const { return true; }
