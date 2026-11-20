@@ -308,9 +308,12 @@ rechnet sie mit einer kalibrierten Kennlinie um (Kapitel 6).
 > **Umbau:** HV-LED über NPN-Transistor, 4,7 kΩ Basiswiderstand (≈ 0,55 mA aus GPIO 4), LED aus +3V3 des
 > I2C-Steckers. Firmware ab Contract V1.6.6: schwächste Treiberstufe für GPIO 4 und 32, Brownout-Schwelle
 > 2,80 V, Startgrund und Startzähler in `/log` und `GET_STATE`.
-> Der LED-Strom verschob auch die Analogmessung (25 … 60 mV am Sensorsignal). Kalibriert wird trotzdem
-> weiter unter Messbedingungen (HV an, Shutter offen; Abnahme T18K) – so wie an einer echten Anlage, an
-> der ohne HV nicht gemessen werden kann. Nach dem Umbau neu kalibrieren.
+> Der LED-Strom verschob auch die Analogmessung (25 … 60 mV am Sensorsignal). **Nach dem Umbau behoben
+> (20.11.2026, Norbert Walter):** Das Messsignal bricht bei HV an nicht mehr ein, die Messwerte bleiben
+> stabil, und die Kalibrierkennlinie ist deutlich linearer als vorher. Kalibriert wird trotzdem weiter
+> unter Messbedingungen (HV an, Shutter offen; Abnahme T18K) – so wie an einer echten Anlage, an der ohne
+> HV nicht gemessen werden kann. Die Wiederholmessung der Abnahme (±2 mm, σ ≤ 0,67 mm) sollte mit dem
+> umgebauten Board wiederholt werden; die Grenze stammt aus der Zeit mit dem Störeinfluss.
 
 **Summer.**
 Aktiver Summer auf dem Board (Ausgang i2so.7), feste Tonhöhe. Die Signale unterscheiden sich im
@@ -843,4 +846,4 @@ Referenzpunkt anfahren und erfassen, Basis erfassen, speichern.
 |---|---|---|
 | 1.0 | 2026-11-07 | Erste Ausgabe auf Basis von Pflichtenheft V1.7.10 und Smoketest 0a |
 | 1.1 | 2026-11-08 | Echter TMC2209 eingebaut: `DIR_POSITIVE_HIGH` = true; Messkette mit Kalibriertabelle (6 Stufen); LED-Strom beeinflusst die Analogmessung (bekanntes Problem) |
-| 1.2 | 2026-11-20 | Zwei Modulausfälle (Flash tot); HV-LED hing mit 47 Ω direkt an GPIO 4 (≈ 31 mA) – jetzt über NPN-Transistor; Shutter-LED korrigiert (Spindeltransistor); Hinweis zu GPIO-Lasten; Brownout-Schwelle 2,80 V (Contract V1.6.6) |
+| 1.2 | 2026-11-20 | Zwei Modulausfälle (Flash tot); HV-LED hing mit 47 Ω direkt an GPIO 4 (≈ 31 mA) – jetzt über NPN-Transistor; Shutter-LED korrigiert (Spindeltransistor); Hinweis zu GPIO-Lasten; Brownout-Schwelle 2,80 V (Contract V1.6.6); nach dem Umbau Messsignal bei HV an stabil, Kennlinie linearer |
