@@ -16,6 +16,7 @@
 #include "app/command_queue.h"
 #include "comm/log_buffer.h"
 #include "comm/http_server.h"
+#include "system/system.h"
 
 /// V1.5.25: the Arduino WebServer serves one connection at a time and waits up to 5 s
 /// (HTTP_MAX_DATA_WAIT, fixed in the core) for a connected client to send its request. Browsers
@@ -180,7 +181,7 @@ static void handleApi() {
         CycleStats cs;
         snapshotGetCycleStats(cs);
         static char extra[600];
-        stateExtraToJson(d.state, d.err, d.local, cs, extra, sizeof(extra));
+        stateExtraToJson(d.state, d.err, d.local, cs, systemBootInfo(), extra, sizeof(extra));
         reply(200, cmd.id, ApiError::OK, extra);
     } else if (cmd.id == CmdId::GET_CONFIG) {
         // Local response with paramsToJsonMember

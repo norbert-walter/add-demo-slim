@@ -112,10 +112,11 @@ int responseToJson(CmdId cmd, ApiError err, const char* msg, const char* extra,
 // ---------------------------------------------------------------------------
 
 int stateExtraToJson(SafetyState state, ErrorCode err, bool local,
-                     const CycleStats& cs, char* buf, size_t cap) {
+                     const CycleStats& cs, const BootInfo& bi, char* buf, size_t cap) {
     int n = snprintf(buf, cap,
         "\"state\":\"%s\",\"sys_err\":%d,\"local\":%s,"
-        "\"cycle_max_us\":%lu,\"period_max_us\":%lu,\"overruns\":%lu,\"prio_lat_max_us\":%lu"
+        "\"cycle_max_us\":%lu,\"period_max_us\":%lu,\"overruns\":%lu,\"prio_lat_max_us\":%lu,"
+        "\"reset_reason\":\"%s\",\"boots\":%lu,\"brownouts\":%lu,\"bod_level\":%u"
         , safetyStateName(state)
         , static_cast<int>(err)
         , tf(local)
@@ -123,6 +124,10 @@ int stateExtraToJson(SafetyState state, ErrorCode err, bool local,
         , (unsigned long)cs.period_max_us
         , (unsigned long)cs.overruns
         , (unsigned long)cs.prio_lat_max_us
+        , resetReasonName(bi.reset_reason)
+        , (unsigned long)bi.boots
+        , (unsigned long)bi.brownouts
+        , bi.bod_level
     );
     if (n < 0 || static_cast<int>(cap) <= n) return -1;
     return n;
