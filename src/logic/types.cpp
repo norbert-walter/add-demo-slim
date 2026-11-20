@@ -129,6 +129,51 @@ CalibAction calibActionFromName(const char* name) {
 // ---------------------------------------------------------------------------
 // ApiError messages (short English text, no quotes — embeddable in JSON)
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// V1.6.6: reset reason names (Sprint B1)
+// ---------------------------------------------------------------------------
+const char* resetReasonName(uint8_t reason) {
+    switch (reason) {
+        case  0: return "UNKNOWN";
+        case  1: return "POWERON";
+        case  2: return "EXT";
+        case  3: return "SW";
+        case  4: return "PANIC";
+        case  5: return "INT_WDT";
+        case  6: return "TASK_WDT";
+        case  7: return "WDT";
+        case  8: return "DEEPSLEEP";
+        case  9: return "BROWNOUT";
+        case 10: return "SDIO";
+        case 11: return "USB";
+        case 12: return "JTAG";
+        case 13: return "EFUSE";
+        case 14: return "PWR_GLITCH";
+        case 15: return "CPU_LOCKUP";
+    }
+    return "UNKNOWN";
+}
+
+// ---------------------------------------------------------------------------
+// V1.6.6: boot counters (Sprint B1)
+// ---------------------------------------------------------------------------
+void bootCountUpdate(BootCounters& c, uint8_t reason) {
+    if (reason == 1 || c.magic != BOOT_MAGIC) {
+        c.magic = BOOT_MAGIC;
+        c.boots = 0;
+        c.brownouts = 0;
+    }
+    if (c.boots != 0xFFFFFFFFu) {
+        c.boots += 1;
+    }
+    if (reason == 9 && c.brownouts != 0xFFFFFFFFu) {
+        c.brownouts += 1;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ApiError messages (short English text, no quotes — embeddable in JSON)
+// ---------------------------------------------------------------------------
 const char* apiErrorMessage(ApiError e) {
     switch (e) {
         case ApiError::OK:            return "ok";

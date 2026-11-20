@@ -5,6 +5,7 @@
 
 #include <Arduino.h>
 #include <FastAccelStepper.h>
+#include <driver/gpio.h>
 #include "config.h"
 #include "hal/motion_drv.h"
 #include "hal/hal_io.h"
@@ -77,6 +78,10 @@ void halInit() {
     digitalWrite(PIN_HV_LED, LOW);
     pinMode(PIN_HEARTBEAT_LED, OUTPUT);
     digitalWrite(PIN_HEARTBEAT_LED, LOW);
+
+    // Step 1a: V1.6.6 — weakest drive capability for shutter and HV LED pins
+    gpio_set_drive_capability((gpio_num_t)PIN_SHUTTER, GPIO_DRIVE_CAP_0);
+    gpio_set_drive_capability((gpio_num_t)PIN_HV_LED, GPIO_DRIVE_CAP_0);
 
     // Step 2: inputs (external pull-ups)
     pinMode(PIN_LIMIT_FWD, INPUT);
