@@ -127,9 +127,6 @@ CalibAction calibActionFromName(const char* name) {
 }
 
 // ---------------------------------------------------------------------------
-// ApiError messages (short English text, no quotes — embeddable in JSON)
-// ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
 // V1.6.6: reset reason names (Sprint B1)
 // ---------------------------------------------------------------------------
 const char* resetReasonName(uint8_t reason) {
