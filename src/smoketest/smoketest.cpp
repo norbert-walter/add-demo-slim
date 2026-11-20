@@ -78,7 +78,7 @@
  *
  *  -- distance sensor (section 5) -------------------------------------------------
  *  adc [n]                  n readings (1..200, default 10) every 100 ms:
- *                           mV (median-mean of ADC_SAMPLES) and mm (curve 168.8*V^-1.398)
+ *                           mV (median-mean of ADC_SAMPLES) and mm (curve 124.5*V^-1.144)
  *  adcraw                   raw analogRead() vs analogReadMilliVolts() and the eFuse
  *                           calibration source (protocol 5.2)
  *
@@ -154,10 +154,10 @@ static float medianMean(uint16_t* s, size_t n, size_t d) {
     return (float)(sum / (n - 2 * d));
 }
 
-/// Sharp GP2Y0A41SK0F curve fitted to the demo (CONTRACT §7.1, V1.4.2): mm = 168.8 * V^-1.398.
+/// Sharp GP2Y0A41SK0F curve fitted to the demo (CONTRACT §7.1, V1.6.7): mm = 124.5 * V^-1.144.
 /// Requires the 11 kOhm load Vo-GND at the sensor (without it the input hangs at full scale).
 /// Returns 9999 for "no signal" (<= 1 mV).
-static float sensorMvToMm(float mv) { return mv > 1.0f ? 168.8f * powf(mv / 1000.0f, -1.398f) : 9999.0f; }
+static float sensorMvToMm(float mv) { return mv > 1.0f ? 124.5f * powf(mv / 1000.0f, -1.144f) : 9999.0f; }
 
 /// Valid measuring range of the sensor.
 static bool sensorInRange(float mm) { return mm >= 35.0f && mm <= 300.0f; }   // V1.4.2

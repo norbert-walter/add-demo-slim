@@ -2,12 +2,19 @@
 
 **Stand:** 2026-11-20
 **Autor:** Norbert Walter
-**Version:** 1.7.19 (Brownout-Schwelle, Startgrund, Sprint B1)
+**Version:** 1.7.20 (Sensorkennlinie nach dem LED-Umbau)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.7.19 → V1.7.20 (20.11.2026, Entscheidung Norbert Walter, ohne Sprint)
+- Nach dem LED-Umbau lag der unkalibrierte Abstand bis 11,5 mm neben der Referenz (T18K ❌); die Kennlinie
+  von V1.4.2 war unter dem Einfluss des LED-Stroms angepasst worden. Neue Kennlinie `124,5 · U^−1,144`
+  aus der Abnahme vom 20.11.2026 (Restfehler 0,15 mm) – praktisch wieder die Kurve von V1.2.
+  Contract V1.6.7. Nach dem Flashen neu kalibrieren.
+- Ergebnis derselben Abnahme mit Kalibrierung: σ der Dicke 0,05 … 0,11 mm (vorher bis 0,6 mm).
 
 ### V1.7.18 → V1.7.19 (20.11.2026, Entscheidung Norbert Walter, Sprint B1)
 - Anlass: zwei ESP32-Module auf demselben Board nach je etwa zwei Wochen ausgefallen (Flash antwortet
@@ -736,7 +743,7 @@ nur noch eine mögliche Handlung:
 ### 5.9 Messkette
 
 16 × `analogReadMilliVolts()` alle 20 ms → 4 kleinste und 4 größte verwerfen →
-Mittelwert → `dist = 168,8 · V^-1,398` mm (angepasst an die Kalibrierpunkte, V1.7.2) → IIR α = 0,8 →
+Mittelwert → `dist = 124,5 · V^-1,144` mm (angepasst an die Kalibrierpunkte nach dem LED-Umbau, V1.7.20; vorher `168,8 · V^-1,398`, V1.7.2) → IIR α = 0,8 →
 Kalibriertabelle (6 Stufen, stückweise linear, V1.7.13) → `thick = max(0, base_dist − dist)` mit `base_dist` = 70 mm
 (virtuelle Bezugsebene an der Messgutkante, Stufen 5 … 30 mm). Der Sharp-Sensor liefert nur etwa alle 16,5 ms
 einen neuen Wert; 50 Hz Abtastung genügen.

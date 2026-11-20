@@ -1,7 +1,7 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.6.6 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-20
-**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.19
+**Version:** 1.6.7 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-20
+**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.20
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
 
@@ -169,6 +169,19 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 1 | `test_hardware` crashed in `test_nvs_roundtrip` (Guru Meditation "Cache disabled but cached memory region accessed", PC in `StepperQueue::fill_i2s_buffer`). Cause in FastAccelStepper 96459ed: the I2S TX-done interrupt runs permanently with I2S_MUX and is IRAM-safe, but `fill_i2s_buffer()` and `I2sManager::i2sMuxSetBit()` were in flash; every flash operation (NVS write, SPIFFS read, OTA) crashed the board, also with the motor idle. Fix: both functions `IRAM_ATTR` (fork `norbert-walter/FastAccelStepper`, commit a64ceff on 96459ed; pull request to gin66 pending). Checked with nm/objdump: every function reachable from the interrupt is in IRAM, no literals into flash | `platformio.ini` |
 | 2 | Post-build check `scripts/check_iram.py` (all ESP32 environments): the build fails if one of the I2S interrupt functions is linked into flash (protects against library updates). Verified: fails with 96459ed, passes with a64ceff | `platformio.ini`, `scripts/` |
 | 3 | The nine native H1 tests could not see this (no flash cache on the host); the first five on-device tests were green (inputs, sensor, outputs, E-stop polarity change) | – |
+
+**Changes 1.6.6 → 1.6.7 (sensor curve refitted after the LED rework, 2026-11-20, decision Norbert Walter):**
+
+With the HV LED on a transistor the ADC reads 0.18 … 0.33 V lower at the six steps than before; the raw
+distance was up to 11.5 mm off the reference (acceptance check T18K, plausibility ±7 mm, failed at three
+steps). The V1.4.2 curve had been fitted while the 31 mA LED distorted the reading. Refitted to the
+acceptance run 2026-11-20 (HV on): practically the V1.2 curve again. No API change.
+
+| # | Change | Where |
+|---|---|---|
+| 1 | Sensor curve default **`124.5 · V^-1.144`** (was `168.8 · V^-1.398`): 1.761 V/65 mm … 2.691 V/40 mm, max. error 0.15 mm | §7.1, `measure_logic.h`, smoketest |
+| 2 | A calibration table taken with the old curve no longer fits: take it again (`CALIB`, acceptance T18K) after flashing | §7.1 |
+| 3 | Tests: `test_measure_logic` curve values (1 V → 124.5 mm, 2 V → 56.34, 0.4 V → 355.15, the six measured points). 22 suites, **508/508** | `test/native` |
 
 **Changes 1.6.5 → 1.6.6 (supply robustness, Sprint B1, 2026-11-20, decision Norbert Walter):**
 
@@ -920,9 +933,10 @@ radiation source; HV and shutter are LEDs.
 ### 7.1 Chain (50 Hz)
 
 16 × `analogReadMilliVolts()` → sort, drop 4 lowest + 4 highest, mean →
-`dist_raw = 168.8 · V^-1.398` (V in volt; **mm**; V1.4.2 fit to the six step centres measured
-in smoketest 0a with an 11 kΩ load at the sensor output: 1.972 V/65 mm … 2.777 V/40 mm,
-max. error 0.48 mm; far values only indicative – the lower boom reads ≈ 186 mm) → IIR (α = 0.8, first value
+`dist_raw = 124.5 · V^-1.144` (V in volt; **mm**; V1.6.7 fit to the six step centres of the
+acceptance run 2026-11-20 with the HV LED on a transistor: 1.761 V/65 mm … 2.691 V/40 mm,
+max. error 0.15 mm; far values only indicative; after a change of the curve take the calibration
+table again) → IIR (α = 0.8, first value
 initialises) → calibration table (6 points, piecewise linear, V1.6.0) → `thick = max(0, base_dist − dist)` →
 `on_material = thick > edge_threshold`.
 Outside 35 … 300 mm (V1.4.2): `in_range = false`, IIR reset, thickness 0.

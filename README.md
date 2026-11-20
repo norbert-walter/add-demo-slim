@@ -53,7 +53,7 @@ pio device monitor -e smoketest           # "help"
 
 ## Status der Module
 
-**Stand: 20.11.2026 · Contract V1.6.6 · Pflichtenheft V1.7.19**
+**Stand: 20.11.2026 · Contract V1.6.7 · Pflichtenheft V1.7.20**
 Diese Tabelle wird **nach jedem Sprint** aktualisiert (Implementierung **und** Tests) –
 Teil der Definition of Done in `.clinerules`.
 

@@ -1,7 +1,7 @@
 # Software-Dokumentation – Demoanlage ADD (Slim)
 
-**Version:** 1.4 · **Stand:** 2026-11-20 · **Autor:** Norbert Walter
-**Firmware:** `FW_VERSION` 1.0.0 · **Contract:** V1.6.6 · **Pflichtenheft:** V1.7.19
+**Version:** 1.5 · **Stand:** 2026-11-20 · **Autor:** Norbert Walter
+**Firmware:** `FW_VERSION` 1.0.0 · **Contract:** V1.6.7 · **Pflichtenheft:** V1.7.20
 **Hardware:** siehe `docs/Hardware_Dokumentation_V1_0.md`
 
 ---
@@ -271,7 +271,8 @@ gemessen max. 2,22 / 2,41 / 1,73 ms). Der Netz-Task protokolliert lange Zyklen a
 
 1. 1 ADC-Wert je ms (GPIO 34, 11 dB, `analogReadMilliVolts`), bis zu 16 Werte.
 2. Alle 20 ms: sortieren, 4 kleinste und 4 größte verwerfen, Mittelwert.
-3. Kennlinie: `dist_raw = 168,8 · U^−1,398` (U in V, Ergebnis in mm).
+3. Kennlinie: `dist_raw = 124,5 · U^−1,144` (U in V, Ergebnis in mm; V1.6.7, angepasst nach dem
+   LED-Umbau, Abnahme 20.11.2026). Nach einer Änderung der Kennlinie neu kalibrieren.
 4. Außerhalb 35 … 300 mm: `in_range = false`, Filter zurückgesetzt, Dicke 0.
 5. IIR-Filter (α = 0,8).
 6. Kalibriertabelle mit 6 Punkten (`calib_raw_i` → `calib_ref_i`, i = 1 … 6): zwischen zwei Punkten
@@ -1927,4 +1928,5 @@ Anmerkungen:
 | 1.1 | 2026-11-08 | Kalibriertabelle mit 6 Stufen, unter Messbedingungen (Contract V1.6.3, Sprints K1/K2): Messkette 3.4, Befehle, Parameter, `GET_CONFIG`, NVS Version 5, Kapitel 12.3 neu, Testzahlen |
 | 1.3 | 2026-11-08 | `/add.html` als Datei, gzip-Kopien (Contract V1.6.5, Sprint D1.2): 2.2, 10.5 |
 | 1.2 | 2026-11-08 | ADD-Dokument und OpenAPI (Contract V1.6.4, Sprint D1): 2.2, 10.1, 10.4, 10.5, 13.1 (Einstufung, Bestätigungen, KI und Skripte, Validierung), 13.2 |
+| 1.5 | 2026-11-20 | Sensorkennlinie `124,5 · U^−1,144` nach dem LED-Umbau (Contract V1.6.7): 3.4 |
 | 1.4 | 2026-11-20 | Brownout-Stufe, Startgrund und Startzähler, schwächste Treiberstufe für GPIO 4/32 (Contract V1.6.6, Sprint B1): 3.5, 9.4, 10.3 |

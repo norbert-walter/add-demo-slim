@@ -9,19 +9,19 @@ void setUp() { C = SensorCurve{}; }
 void tearDown() {}
 
 // ---- sensor curve (millimetre, NOT centimetre) ------------------------------
-// V1.4.2: default curve fitted to the demo hardware (smoketest 0a): 168.8 * V^-1.398
-void test_curve_1v_is_168_8_mm() { TEST_ASSERT_FLOAT_WITHIN(0.05f, 168.8f, sensorMvToMm(1000.0f, C)); }
-void test_curve_2v() { TEST_ASSERT_FLOAT_WITHIN(0.2f, 64.05f, sensorMvToMm(2000.0f, C)); }
+// V1.6.7: default curve refitted after the LED rework (acceptance run 2026-11-20): 124.5 * V^-1.144
+void test_curve_1v_is_124_5_mm() { TEST_ASSERT_FLOAT_WITHIN(0.05f, 124.5f, sensorMvToMm(1000.0f, C)); }
+void test_curve_2v() { TEST_ASSERT_FLOAT_WITHIN(0.2f, 56.34f, sensorMvToMm(2000.0f, C)); }
 void test_curve_matches_measured_demo_points() {
-    // measured on the demo axis (smoketest 0a 2026-10-11, step centres 115..215 mm,
-    // 11 kOhm load at the sensor output): volt -> distance in mm
-    const float v[] = {1.972f, 2.091f, 2.236f, 2.403f, 2.588f, 2.777f};
+    // measured on the demo axis (acceptance run 2026-11-20, step centres 115..215 mm,
+    // HV LED via transistor): volt -> distance in mm
+    const float v[] = {1.761f, 1.894f, 2.045f, 2.219f, 2.440f, 2.691f};
     const float d[] = {65.0f, 60.0f, 55.0f, 50.0f, 45.0f, 40.0f};
     for (int i = 0; i < 6; ++i) TEST_ASSERT_FLOAT_WITHIN(1.0f, d[i], sensorMvToMm(v[i] * 1000.0f, C));
 }
 void test_curve_far_end_0v4_out_of_range() {
     float mm = sensorMvToMm(400.0f, C);
-    TEST_ASSERT_FLOAT_WITHIN(0.5f, 607.70f, mm);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 355.15f, mm);
     TEST_ASSERT_FALSE(sensorInRange(mm, C));
 }
 void test_curve_monotonic_decreasing() {
@@ -344,7 +344,7 @@ void test_stability_settles_at_new_level_after_jump() {
 
 int main(int, char**) {
     UNITY_BEGIN();
-    RUN_TEST(test_curve_1v_is_168_8_mm);
+    RUN_TEST(test_curve_1v_is_124_5_mm);
     RUN_TEST(test_curve_2v);
     RUN_TEST(test_curve_matches_measured_demo_points);
     RUN_TEST(test_curve_far_end_0v4_out_of_range);

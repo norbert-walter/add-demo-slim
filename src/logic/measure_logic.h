@@ -15,14 +15,16 @@
 #include "types.h"
 
 /// Sharp GP2Y0A41SK0F: dist_mm = k_mm * V^exponent with V in volt.
-/// V1.4.2: fitted to the six stair steps measured in smoketest 0a (2026-10-11) with the
-/// final wiring (11 kOhm load Vo-GND and 47 uF Vcc-GND at the sensor, R20 removed):
-/// 1.972 V/65 mm, 2.091/60, 2.236/55, 2.403/50, 2.588/45, 2.777 V/40 mm, max. error
-/// 0.48 mm. (V1.2 curve 121.5 * V^-1.142 read 2..9 mm too short with the load.)
-/// Outside 40..65 mm the curve is only indicative (lower boom: 0.93 V reads ~186 mm).
+/// V1.6.7 (2026-11-20): refitted after the HV LED was moved to a transistor (Hardware doc 1.2).
+/// Fitted to the six stair steps of the acceptance run 2026-11-20 (new ESP32 module, HV on):
+/// 1.761 V/65 mm, 1.894/60, 2.045/55, 2.219/50, 2.440/45, 2.691 V/40 mm, max. error 0.15 mm.
+/// Practically the V1.2 curve 121.5 * V^-1.142 again. The V1.4.2 curve 168.8 * V^-1.398
+/// (smoketest 0a) had been fitted while the 31 mA LED on GPIO 4 distorted the ADC reading.
+/// Outside 40..65 mm the curve is only indicative. The 6-point calibration table remains the
+/// reference; after a change of the curve the table must be taken again (CALIB).
 struct SensorCurve {
-    float k_mm     = 168.8f;
-    float exponent = -1.398f;
+    float k_mm     = 124.5f;
+    float exponent = -1.144f;
     float min_mm   = 35.0f;   ///< V1.4.2: valid range of the sensor (40 mm step must not sit on the limit)
     float max_mm   = 300.0f;
 };
