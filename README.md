@@ -53,7 +53,7 @@ pio device monitor -e smoketest           # "help"
 
 ## Status der Module
 
-**Stand: 08.11.2026 · Contract V1.6.5 · Pflichtenheft V1.7.18**
+**Stand: 20.11.2026 · Contract V1.6.6 · Pflichtenheft V1.7.19**
 Diese Tabelle wird **nach jedem Sprint** aktualisiert (Implementierung **und** Tests) –
 Teil der Definition of Done in `.clinerules`.
 
@@ -76,6 +76,7 @@ Teil der Definition of Done in `.clinerules`.
 | K1 | Kalibriertabelle mit 6 Stufen: `logic/types`, `measure_logic`, `api_parse`, `params`, `app_logic`, `system/nvs_config`, `data/www/app.js`, `index.html` | ✅ fertig (Qwen; 1 Korrektur Claude) | native 496/496 · JS 41/41 · Differenztest und Browserprüfung ✅ · Gerät ✅ (A1) | ✅ 08.11.2026, Review_K1 |
 | K2 | Kalibrierung unter Messbedingungen: `logic/app_logic.cpp` (eine Bedingung); Seite und Abnahme T18K von Claude | ✅ fertig (Qwen) | native 499/499 · JS 41/41 · Simulator T18K–T20 ✅ · Gerät ✅ (A1) | ✅ 08.11.2026, Review_K2 |
 | D1 | `data/add.json`, `data/openapi.json` (Erweiterung), Route `/openapi.json`, Demo-Skripte | 🔶 D1.1 + D1.2 fertig (Qwen), Dokumente von Claude | native 500/500 · JS 65/65 · Gerät D1.2 offen · KI-Validierung 09.11.2026 passed_with_warnings | ✅ D1.1 08.11., D1.2 10.11.2026, Review_D1 |
+| B1 | Brownout-Stufe, Startgrund, Startzähler, GPIO-Treiberstufe: `logic/types`, `system/system`, `hal/hal_io`, `logic/proc_json`, `comm/http_server` | ⬜ offen (Qwen) | native 508 erwartet · JS offen bis B1.2 · Gerät offen | Vorbereitung Claude 20.11.2026 |
 
 Reihenfolge und Begründung: `docs/Sprint_Prompts_Demoanlage_ADD_Slim_V2.md`, Abschnitt
 „Sprint-Plan V3“. Die Sprint-Dateien für Cline liegen in `docs/sprints/`.

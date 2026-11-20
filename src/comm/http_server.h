@@ -22,7 +22,8 @@
  *        1. apiParseRequest(); error -> response with that error (HTTP 400 for BAD_CRC/BAD_JSON, else 200)
  *        2. valid packet (CRC ok, known cmd) -> snapshotSetLastApiRx(millis())
  *        3. GET_STATE  -> reply locally: extra = stateExtraToJson(snapshot.state, snapshot.err,
- *                          snapshot.local, CycleStats from snapshotGetCycleStats())   (V1.1)
+ *                          snapshot.local, CycleStats from snapshotGetCycleStats(),
+ *                          systemBootInfo() (system/system.h, V1.6.6))   (V1.1)
  *           GET_CONFIG -> reply locally: extra = paramsToJsonMember(snapshotGetConfig())
  *           others     -> cmdQueueSendAndWait(cmd, API_REPLY_TIMEOUT_MS)
  *        4. responseToJson(); Content-Type application/json; HTTP 200

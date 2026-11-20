@@ -35,8 +35,11 @@
 // =========================================================================
 // Direct GPIO outputs
 // =========================================================================
-#define PIN_SHUTTER          32   // SPINDLE/TTL connector: shutter LED red (HIGH = open), 20 mA
-#define PIN_HV_LED            4   // V1.2: HV LED green (HIGH = on), 20 mA – moved from i2so.3 (verified)
+#define PIN_SHUTTER          32   // SPINDLE/TTL connector: shutter LED red (HIGH = open), via the board's spindle transistor
+#define PIN_HV_LED            4   // V1.2: HV LED green (HIGH = on) – moved from i2so.3 (verified)
+                                  // V1.6.6: drives an NPN transistor (4k7 base resistor, ~0.55 mA); the LED is
+                                  // fed from +3V3 of the I2C connector. Before: LED + 47 Ohm directly on GPIO 4
+                                  // (~31 mA) – most likely cause of two failed ESP32 modules (flash dead).
 #define PIN_HEARTBEAT_LED     2   // V1.3: blue board LED, 0.5 Hz heartbeat from the control task (HIGH = on)
 
 // =========================================================================
@@ -106,6 +109,18 @@
 #define WDT_TIMEOUT_S        10
 #define COMM_TIMEOUT_MS      5000
 #define REBOOT_DELAY_MS      700    // V1.3: >= soundDurationMs(REBOOT) (500 ms) + HTTP reply
+
+// V1.6.6 (Sprint B1): threshold of the ESP32 brownout detector, set by systemInit() at every start.
+// 0..7 = 2.43 / 2.48 / 2.58 / 2.62 / 2.67 / 2.70 / 2.77 / 2.80 V (+/- 0.05 V, estimates of ESP-IDF).
+// The precompiled Arduino libraries use level 0 (2.43 V) - below the minimum supply of a 3.3 V SPI
+// flash (about 2.7 V). Level 7 resets the chip before the flash leaves its specification.
+// Set per build flag, e.g. build_flags = -D BROWNOUT_LEVEL=5
+#ifndef BROWNOUT_LEVEL
+#define BROWNOUT_LEVEL       7
+#endif
+#if BROWNOUT_LEVEL < 0 || BROWNOUT_LEVEL > 7
+#error "BROWNOUT_LEVEL must be 0 ... 7"
+#endif
 
 // =========================================================================
 // Tasks

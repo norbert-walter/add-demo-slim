@@ -52,11 +52,23 @@ struct CycleStats {
     uint32_t prio_lat_max_us = 0;  ///< longest priority command latency: cmdQueueSend -> outputs applied, µs
 };
 
+/// V1.6.6 (Sprint B1) – start information from systemInit() (system/system.h: systemBootInfo()).
+struct BootInfo {
+    uint8_t  reset_reason = 0;   ///< esp_reset_reason_t of this start
+    uint32_t boots        = 0;   ///< starts since power-on (1 = first)
+    uint32_t brownouts    = 0;   ///< brownout resets since power-on
+    uint8_t  bod_level    = 0;   ///< brownout threshold level 0..7 read back from the register
+};
+
 /**
  * V1.1 – extra member list of the GET_STATE response (no leading comma, no frame):
  *   "state":"<SafetyState>","sys_err":<int>,"local":<b>,"cycle_max_us":<u32>,
  *   "period_max_us":<u32>,"overruns":<u32>,"prio_lat_max_us":<u32>
- * @return length (without NUL) or -1 if cap is too small (cap >= 192 never fails).
+ * V1.6.6: four members appended, in this order:
+ *   ,"reset_reason":"<resetReasonName(bi.reset_reason)>","boots":<u32>,"brownouts":<u32>,
+ *   "bod_level":<u8 as %u>
+ * Still one snprintf call.
+ * @return length (without NUL) or -1 if cap is too small (cap >= 320 never fails).
  */
 int stateExtraToJson(SafetyState state, ErrorCode err, bool local, const CycleStats& cs,
-                     char* buf, size_t cap);
+                     const BootInfo& bi, char* buf, size_t cap);

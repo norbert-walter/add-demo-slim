@@ -14,6 +14,10 @@
 #include "app/command_queue.cpp"
 #include "comm/http_server.cpp"   // implementation under test
 
+// V1.6.6: http_server.cpp takes the start information from system.cpp (not linked here)
+static BootInfo g_boot;
+BootInfo systemBootInfo() { return g_boot; }
+
 static std::atomic<bool> g_run{false};
 static std::atomic<bool> g_reply{true};
 static std::thread g_ctrl;
@@ -319,13 +323,15 @@ void test_api_get_state_local() {
     snapshotPublish(d);
     CycleStats cs; cs.cycle_max_us = 312; cs.period_max_us = 1010; cs.overruns = 2; cs.prio_lat_max_us = 1450;
     snapshotSetCycleStats(cs);
+    g_boot.reset_reason = 9; g_boot.boots = 3; g_boot.brownouts = 1; g_boot.bod_level = 7;   // V1.6.6
     int before = g_cmds;
     snapshotSetLastApiRx(RX_MARK);
     std::string b = framed("{\"cmd\":\"GET_STATE\"}");
     const ShimResponse& r = request(HTTP_POST, "/api", &b);
     TEST_ASSERT_EQUAL_INT(200, r.code);
     TEST_ASSERT_EQUAL_STRING("{\"status\":\"ok\",\"err\":0,\"cmd\":\"GET_STATE\",\"state\":\"WAIT_ACK\",\"sys_err\":2,"
-        "\"local\":true,\"cycle_max_us\":312,\"period_max_us\":1010,\"overruns\":2,\"prio_lat_max_us\":1450}",
+        "\"local\":true,\"cycle_max_us\":312,\"period_max_us\":1010,\"overruns\":2,\"prio_lat_max_us\":1450,"
+        "\"reset_reason\":\"BROWNOUT\",\"boots\":3,\"brownouts\":1,\"bod_level\":7}",
         unframe(r.body).c_str());
     TEST_ASSERT_EQUAL_INT(before, (int)g_cmds);                               // answered locally
     TEST_ASSERT_TRUE(snapshotLastApiRx() != RX_MARK);

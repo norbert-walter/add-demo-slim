@@ -1,7 +1,7 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.6.5 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-08
-**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.17
+**Version:** 1.6.6 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-20
+**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.19
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
 
@@ -169,6 +169,23 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 1 | `test_hardware` crashed in `test_nvs_roundtrip` (Guru Meditation "Cache disabled but cached memory region accessed", PC in `StepperQueue::fill_i2s_buffer`). Cause in FastAccelStepper 96459ed: the I2S TX-done interrupt runs permanently with I2S_MUX and is IRAM-safe, but `fill_i2s_buffer()` and `I2sManager::i2sMuxSetBit()` were in flash; every flash operation (NVS write, SPIFFS read, OTA) crashed the board, also with the motor idle. Fix: both functions `IRAM_ATTR` (fork `norbert-walter/FastAccelStepper`, commit a64ceff on 96459ed; pull request to gin66 pending). Checked with nm/objdump: every function reachable from the interrupt is in IRAM, no literals into flash | `platformio.ini` |
 | 2 | Post-build check `scripts/check_iram.py` (all ESP32 environments): the build fails if one of the I2S interrupt functions is linked into flash (protects against library updates). Verified: fails with 96459ed, passes with a64ceff | `platformio.ini`, `scripts/` |
 | 3 | The nine native H1 tests could not see this (no flash cache on the host); the first five on-device tests were green (inputs, sensor, outputs, E-stop polarity change) | – |
+
+**Changes 1.6.5 → 1.6.6 (supply robustness, Sprint B1, 2026-11-20, decision Norbert Walter):**
+
+Two ESP32 modules failed on the same board after about two weeks each, mostly parked with HV on: the
+flash no longer answered (`flash-id`: `ff ffff`, status `0xffffff`), the ESP32 itself ran. Most likely
+cause: the HV LED hung with only 47 Ω directly on GPIO 4 (about 31 mA from an RTC-domain pin, the domain
+that also feeds the flash via VDD_SDIO). The LED is now driven by an NPN transistor (4k7 base, about
+0.55 mA from GPIO 4; LED from +3V3 of the I2C connector). Flash wear by firmware writes was ruled out
+(writes only on SET/CALIB save; a worn flash still answers `flash-id`).
+
+| # | Change | Where |
+|---|---|---|
+| 1 | Brownout threshold set at every start: `BROWNOUT_LEVEL` (build flag, default **7** = 2.80 V ± 0.05; 0..7 = 2.43 … 2.80 V) via `REG_SET_FIELD(RTC_CNTL_BROWN_OUT_REG, RTC_CNTL_DBROWN_OUT_THRES, …)` as the first statement of `systemInit()`; read back and reported. The Arduino libraries use level 0 (2.43 V), below the minimum supply of a 3.3 V SPI flash (about 2.7 V) | `config.h`, `system.h` |
+| 2 | Reset reason and boot counters: `resetReasonName()`, `BootCounters` in RTC memory (`RTC_NOINIT_ATTR`, magic `0xB007C0DE`, reset at power-on), `systemBootInfo()`; boot line in `/log`: `boot: reset BROWNOUT, boots 4, brownouts 2, brownout level 7` | `types.h`, `system.h` |
+| 3 | `GET_STATE` reply extra appended: `"reset_reason":"<name>","boots":<u32>,"brownouts":<u32>,"bod_level":<0..7>` | §5.2, `proc_json.h`, `http_server.h`, `openapi.json` |
+| 4 | `halInit` step 1a: `gpio_set_drive_capability(PIN_SHUTTER / PIN_HV_LED, GPIO_DRIVE_CAP_0)` – both pins only drive transistors | `hal_io.h` |
+| 5 | Shims: `soc/soc.h`, `soc/rtc_cntl_reg.h` (register with read-only bits), `esp_attr.h`, `driver/gpio.h`, `Serial.begin` hook. Tests: types +4, system +4, hal_io, proc_json, http_server adjusted; native 22 suites **508** | `test/` |
 
 **Changes 1.6.4 → 1.6.5 (fast /add.html, gzip copies, Sprint D1.2, 2026-11-08, decision Norbert Walter):**
 
@@ -658,7 +675,7 @@ because of a full normal queue (§6.7).
 | `START_MEASURE` | `pos` (opt., default `measure_pos`) | RUNNING | move to pos (**60 < pos ≤ 242**, V1.5), then stationary measurement until `STOP`; shutter opens automatically |
 | `START_TRAVERSE` | `start`, `end`, `speed` (opt., defaults `traverse_*`) | RUNNING | one run: approach start (10 mm/s, no measurement), traverse to end at speed, stay at end; start and end **> 60 mm** (V1.5), \|end − start\| ≥ 1 mm, end < start allowed; the shutter opens in the run and **stays open for `shutter_hold`** after it (V1.5) so that the next run can follow without closing; HV stays on |
 | `STOP` | – | all | controlled stop; acquisition ends; an automatic shutter closes **in the same cycle** (V1.5); a manually opened shutter is not affected |
-| `GET_STATE` | – | all | heartbeat; reply extra `"state":"READY","sys_err":0,"local":false,"cycle_max_us":312,"period_max_us":1010,"overruns":0,"prio_lat_max_us":1450` (`stateExtraToJson`, §10) |
+| `GET_STATE` | – | all | heartbeat; reply extra `"state":"READY","sys_err":0,"local":false,"cycle_max_us":312,"period_max_us":1010,"overruns":0,"prio_lat_max_us":1450,"reset_reason":"POWERON","boots":1,"brownouts":0,"bod_level":7` (`stateExtraToJson`, §10; last four V1.6.6) |
 | `GET_CONFIG` | – | all | reply extra `"config":{...}` (§5.3) |
 | `SET` | `key`, `value` | all | §9 |
 | `CALIB` | `action`: `point` (with `index` 1 … 6) `base` `save` `reset` (V1.6.0) | SAFE_START, READY, RUNNING | §7.3 |

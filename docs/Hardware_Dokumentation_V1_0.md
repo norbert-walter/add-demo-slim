@@ -1,6 +1,6 @@
 # Hardware-Dokumentation – Demoanlage ADD (Slim)
 
-**Version:** 1.1 · **Stand:** 2026-11-08 · **Autor:** Norbert Walter
+**Version:** 1.2 · **Stand:** 2026-11-20 · **Autor:** Norbert Walter
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.10, Smoketest-Protokoll 0a, `src/config.h`
 
 ---
@@ -293,15 +293,27 @@ rechnet sie mit einer kalibrierten Kennlinie um (Kapitel 6).
 
 | LED | Farbe | Bedeutung | Anschluss |
 |---|---|---|---|
-| HV | grün | simulierte Hochspannung eingeschaltet | GPIO 4, HIGH = an, 20 mA |
-| Shutter | rot | simulierter Shutter offen | GPIO 32 (SPINDLE/TTL), HIGH = an, 20 mA |
+| HV | grün | simulierte Hochspannung eingeschaltet | GPIO 4 über NPN-Transistor (4,7 kΩ Basiswiderstand, ≈ 0,55 mA aus dem GPIO), LED aus +3V3 des I2C-Steckers; HIGH = an |
+| Shutter | rot | simulierter Shutter offen | GPIO 32 (SPINDLE/TTL) über den Spindeltransistor des Boards; HIGH = an |
 | Herzschlag | blau | Firmware läuft (1 s an / 1 s aus) | GPIO 2, LED auf dem Board |
 
-> **Bekanntes Problem (08.11.2026, Norbert Walter):** Die LEDs hängen direkt an den GPIOs (HV etwa
-> 10 mA). Der Strom verschiebt die Analogmessung des Abstandssensors: Mit HV ein bzw. Shutter offen
-> springen die Messwerte um bis zu einige Millimeter (25 … 60 mV am Sensorsignal, A1 nach K1). Bis zur
-> Abhilfe in der Hardware (z. B. LED über Transistor oder mit kleinerem Strom) wird unter Messbedingungen
-> kalibriert (HV an, Shutter offen; Abnahme T18K). Nach einer Änderung an der Hardware neu kalibrieren.
+> **Befund und Umbau (20.11.2026, Norbert Walter):** Bis zum 20.11. hing die grüne HV-LED mit nur
+> **47 Ω direkt an GPIO 4**: (3,3 V − 1,84 V) / 47 Ω ≈ **31 mA aus einem Pin der RTC-Domäne** – der
+> Domäne, aus der der ESP32 auch den Flash versorgt (VDD_SDIO). Die Anlage stand meist geparkt mit HV an.
+> Zwei ESP32-Module sind auf diesem Board nach jeweils etwa zwei Wochen ausgefallen: Der ESP32 läuft,
+> der Flash antwortet nicht mehr (`esptool flash-id`: `ff ffff`, Status `0xffffff`). Der LED-Strom ist
+> die wahrscheinlichste Ursache; bewiesen ist es nicht. Flash-Verschleiß durch Schreiben scheidet aus
+> (die Firmware schreibt nur bei `SET`/`CALIB save`, und ein verschlissener Flash liefert noch seine
+> Kennung). Die Shutter-LED war nie betroffen (Spindeltransistor des Boards).
+> **Umbau:** HV-LED über NPN-Transistor, 4,7 kΩ Basiswiderstand (≈ 0,55 mA aus GPIO 4), LED aus +3V3 des
+> I2C-Steckers. Firmware ab Contract V1.6.6: schwächste Treiberstufe für GPIO 4 und 32, Brownout-Schwelle
+> 2,80 V, Startgrund und Startzähler in `/log` und `GET_STATE`.
+> Der LED-Strom verschob auch die Analogmessung (25 … 60 mV am Sensorsignal). **Nach dem Umbau behoben
+> (20.11.2026, Norbert Walter):** Das Messsignal bricht bei HV an nicht mehr ein, die Messwerte bleiben
+> stabil, und die Kalibrierkennlinie ist deutlich linearer als vorher. Kalibriert wird trotzdem weiter
+> unter Messbedingungen (HV an, Shutter offen; Abnahme T18K) – so wie an einer echten Anlage, an der ohne
+> HV nicht gemessen werden kann. Die Wiederholmessung der Abnahme (±2 mm, σ ≤ 0,67 mm) sollte mit dem
+> umgebauten Board wiederholt werden; die Grenze stammt aus der Zeit mit dem Störeinfluss.
 
 **Summer.**
 Aktiver Summer auf dem Board (Ausgang i2so.7), feste Tonhöhe. Die Signale unterscheiden sich im
@@ -421,9 +433,16 @@ Touch um 180° gedreht (`offset_rotation` = 2), Touch-Kalibrierung in `config.h`
 
 ### 5.4 LEDs
 
-Beide LEDs werden direkt vom ESP32 getrieben (HIGH = an) und brauchen einen **Vorwiderstand**
-(ausgelegt auf 20 mA). Mehr Strom überlastet den GPIO. Die rote LED hängt am Anschluss
-SPINDLE/TTL (GPIO 32), die grüne an GPIO 4.
+Keine LED hängt direkt am ESP32 (HIGH = an):
+
+- **Rot (Shutter):** Anschluss SPINDLE/TTL (GPIO 32); das Board schaltet sie über seinen Spindeltransistor.
+- **Grün (HV):** GPIO 4 → 4,7 kΩ → Basis eines NPN-Transistors; die LED mit Vorwiderstand hängt am
+  Kollektor und wird aus +3V3 des I2C-Steckers versorgt. Empfohlen: 47 … 100 kΩ von der Basis nach GND,
+  damit die HV-Anzeige beim Start und Reset sicher aus bleibt.
+
+> **Wichtig:** Keine Last direkt an einen GPIO hängen, schon gar nicht an die Pins der RTC-Domäne
+> (GPIO 0, 2, 4, 12 … 15, 25 … 27, 32 … 39). Ein Pin soll höchstens wenige mA liefern; mehr gehört über
+> einen Transistor. Hintergrund: Abschnitt 4.3, Befund vom 20.11.2026.
 
 ### 5.5 Not-Aus-Taster
 
@@ -827,3 +846,4 @@ Referenzpunkt anfahren und erfassen, Basis erfassen, speichern.
 |---|---|---|
 | 1.0 | 2026-11-07 | Erste Ausgabe auf Basis von Pflichtenheft V1.7.10 und Smoketest 0a |
 | 1.1 | 2026-11-08 | Echter TMC2209 eingebaut: `DIR_POSITIVE_HIGH` = true; Messkette mit Kalibriertabelle (6 Stufen); LED-Strom beeinflusst die Analogmessung (bekanntes Problem) |
+| 1.2 | 2026-11-20 | Zwei Modulausfälle (Flash tot); HV-LED hing mit 47 Ω direkt an GPIO 4 (≈ 31 mA) – jetzt über NPN-Transistor; Shutter-LED korrigiert (Spindeltransistor); Hinweis zu GPIO-Lasten; Brownout-Schwelle 2,80 V (Contract V1.6.6); nach dem Umbau Messsignal bei HV an stabil, Kennlinie linearer |

@@ -1,7 +1,7 @@
 # Software-Dokumentation – Demoanlage ADD (Slim)
 
-**Version:** 1.3 · **Stand:** 2026-11-08 · **Autor:** Norbert Walter
-**Firmware:** `FW_VERSION` 1.0.0 · **Contract:** V1.6.5 · **Pflichtenheft:** V1.7.18
+**Version:** 1.4 · **Stand:** 2026-11-20 · **Autor:** Norbert Walter
+**Firmware:** `FW_VERSION` 1.0.0 · **Contract:** V1.6.6 · **Pflichtenheft:** V1.7.19
 **Hardware:** siehe `docs/Hardware_Dokumentation_V1_0.md`
 
 ---
@@ -282,7 +282,8 @@ gemessen max. 2,22 / 2,41 / 1,73 ms). Der Netz-Task protokolliert lange Zyklen a
 
 ### 3.5 Startreihenfolge (`main.cpp`)
 
-1. `systemInit()` – Task-Watchdog
+1. `systemInit()` – als Erstes die Brownout-Schwelle (`BROWNOUT_LEVEL`, Standard 7 = 2,80 V; vor
+   `Serial.begin`), dann Startgrund und Startzähler, Logzeile `boot: reset …`, Task-Watchdog
 2. `SPIFFS.begin(true)` – bei Fehler formatieren
 3. `nvsLoadParams()` – Parameter aus dem Flash (sonst Standardwerte)
 4. `cmdQueueInit()`
@@ -954,13 +955,19 @@ Prioritätsbefehle (eigene Warteschlange, nie `BUSY` wegen voller Normal-Queue):
 
 ```json
 {"status":"ok","err":0,"cmd":"GET_STATE","state":"READY","sys_err":0,"local":false,
- "cycle_max_us":1210,"period_max_us":2357,"overruns":6,"prio_lat_max_us":1450,"crc":"…"}
+ "cycle_max_us":1210,"period_max_us":2357,"overruns":6,"prio_lat_max_us":1450,
+ "reset_reason":"POWERON","boots":1,"brownouts":0,"bod_level":7,"crc":"…"}
 ```
 
 | Feld | Bedeutung |
 |---|---|
 | `state`, `sys_err`, `local` | Sicherheitszustand, Systemfehler, Bedienvorrang |
 | `cycle_max_us`, `period_max_us`, `prio_lat_max_us`, `overruns` | Zeitwerte seit dem Start (3.3) |
+| `reset_reason` | Grund des letzten Starts: `POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`, `TASK_WDT`, `WDT`, `DEEPSLEEP`, `BROWNOUT`, `SDIO`, `USB`, `JTAG`, `EFUSE`, `PWR_GLITCH`, `CPU_LOCKUP`, `UNKNOWN` |
+| `boots`, `brownouts` | Starts und Brownout-Starts seit dem letzten Einschalten (RTC-Speicher, nicht im Flash; ein Einschalten setzt beide zurück, `boots` beginnt bei 1) |
+| `bod_level` | Brownout-Stufe 0 … 7, aus dem Register zurückgelesen (7 = 2,80 V) |
+
+Steigt `brownouts`, bricht die 3,3-V-Versorgung ein – Netzteil, Kabel und Lasten prüfen (Hardware-Doku 4.3).
 
 ### 9.5 Parameter (`SET` / `GET_CONFIG`)
 
@@ -1111,6 +1118,7 @@ Die letzten 20 Logzeilen, älteste zuerst. Typische Zeilen:
 
 | Zeile | Bedeutung |
 |---|---|
+| `boot: reset BROWNOUT, boots 12, brownouts 1, brownout level 7` | Startgrund (`esp_reset_reason()`), Starts und Brownouts seit dem letzten Einschalten, eingestellte Brownout-Stufe (zurückgelesen) |
 | `boot: ready, FW 1.0.0` | Start abgeschlossen |
 | `nvs: saved` / `nvs: save deferred until axis idle and HV off` | Parameter gespeichert / Speichern verschoben |
 | `reboot: in 700 ms` | Neustart folgt |
@@ -1919,3 +1927,4 @@ Anmerkungen:
 | 1.1 | 2026-11-08 | Kalibriertabelle mit 6 Stufen, unter Messbedingungen (Contract V1.6.3, Sprints K1/K2): Messkette 3.4, Befehle, Parameter, `GET_CONFIG`, NVS Version 5, Kapitel 12.3 neu, Testzahlen |
 | 1.3 | 2026-11-08 | `/add.html` als Datei, gzip-Kopien (Contract V1.6.5, Sprint D1.2): 2.2, 10.5 |
 | 1.2 | 2026-11-08 | ADD-Dokument und OpenAPI (Contract V1.6.4, Sprint D1): 2.2, 10.1, 10.4, 10.5, 13.1 (Einstufung, Bestätigungen, KI und Skripte, Validierung), 13.2 |
+| 1.4 | 2026-11-20 | Brownout-Stufe, Startgrund und Startzähler, schwächste Treiberstufe für GPIO 4/32 (Contract V1.6.6, Sprint B1): 3.5, 9.4, 10.3 |

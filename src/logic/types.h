@@ -165,3 +165,28 @@ const char* cmdName(CmdId c);                 ///< "INIT", "START_MEASURE", ...,
 CmdId       cmdFromName(const char* name);    ///< exact, case-sensitive; unknown/NULL -> NONE
 CalibAction calibActionFromName(const char* name);  ///< "point","base","save","reset" (exact); else NONE (V1.6.0: "near"/"far" -> NONE)
 const char* apiErrorMessage(ApiError e);      ///< short English text, OK -> "ok"
+
+// ---------------------------------------------------------------------------
+// V1.6.6 (Sprint B1) – reset reason and boot counters (types.cpp, pure logic)
+// ---------------------------------------------------------------------------
+/// Name of an esp_reset_reason_t value (ESP-IDF 5.x numbering), exactly:
+///   0 "UNKNOWN", 1 "POWERON", 2 "EXT", 3 "SW", 4 "PANIC", 5 "INT_WDT", 6 "TASK_WDT", 7 "WDT",
+///   8 "DEEPSLEEP", 9 "BROWNOUT", 10 "SDIO", 11 "USB", 12 "JTAG", 13 "EFUSE", 14 "PWR_GLITCH",
+///   15 "CPU_LOCKUP"; any other value -> "UNKNOWN".
+const char* resetReasonName(uint8_t reason);
+
+/// Boot counters kept in RTC memory (RTC_NOINIT_ATTR in system.cpp): they survive every reset
+/// except a power-on (RTC memory then holds random data -> the magic check catches that).
+constexpr uint32_t BOOT_MAGIC = 0xB007C0DEu;
+struct BootCounters {
+    uint32_t magic     = 0;   ///< BOOT_MAGIC once initialised
+    uint32_t boots     = 0;   ///< starts since power-on, 1 = first start
+    uint32_t brownouts = 0;   ///< starts caused by the brownout detector since power-on
+};
+
+/// Called once per start with the reset reason (esp_reset_reason_t value):
+///  1. If reason == 1 (POWERON) or c.magic != BOOT_MAGIC: c.magic = BOOT_MAGIC, c.boots = 0,
+///     c.brownouts = 0.
+///  2. c.boots += 1 (stays at 0xFFFFFFFF, no overflow).
+///  3. If reason == 9 (BROWNOUT): c.brownouts += 1 (stays at 0xFFFFFFFF, no overflow).
+void bootCountUpdate(BootCounters& c, uint8_t reason);

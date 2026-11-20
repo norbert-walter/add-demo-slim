@@ -200,6 +200,45 @@ void test_frame_verify_short_inputs() {
     }
 }
 
+// ---- V1.6.6 (Sprint B1): reset reason names and boot counters ----
+void test_v166_reset_reason_names() {
+    const char* exp[] = {"UNKNOWN", "POWERON", "EXT", "SW", "PANIC", "INT_WDT", "TASK_WDT", "WDT", "DEEPSLEEP",
+                         "BROWNOUT", "SDIO", "USB", "JTAG", "EFUSE", "PWR_GLITCH", "CPU_LOCKUP"};
+    for (int r = 0; r < 16; ++r) TEST_ASSERT_EQUAL_STRING(exp[r], resetReasonName((uint8_t)r));
+    TEST_ASSERT_EQUAL_STRING("UNKNOWN", resetReasonName(16));
+    TEST_ASSERT_EQUAL_STRING("UNKNOWN", resetReasonName(255));
+}
+void test_v166_boot_counters_power_on_and_resets() {
+    BootCounters c;                                   // random RTC content after power-on:
+    c.magic = 0x12345678u; c.boots = 77; c.brownouts = 5;
+    bootCountUpdate(c, 1);                            // POWERON
+    TEST_ASSERT_EQUAL_HEX32(BOOT_MAGIC, c.magic);
+    TEST_ASSERT_EQUAL_UINT32(1, c.boots);
+    TEST_ASSERT_EQUAL_UINT32(0, c.brownouts);
+    bootCountUpdate(c, 9);                            // BROWNOUT
+    bootCountUpdate(c, 3);                            // SW (REBOOT)
+    bootCountUpdate(c, 9);                            // BROWNOUT
+    bootCountUpdate(c, 6);                            // TASK_WDT
+    TEST_ASSERT_EQUAL_UINT32(5, c.boots);
+    TEST_ASSERT_EQUAL_UINT32(2, c.brownouts);
+    bootCountUpdate(c, 1);                            // power-on again: from the beginning
+    TEST_ASSERT_EQUAL_UINT32(1, c.boots);
+    TEST_ASSERT_EQUAL_UINT32(0, c.brownouts);
+}
+void test_v166_boot_counters_bad_magic_without_power_on() {
+    BootCounters c; c.magic = 0; c.boots = 1000; c.brownouts = 1000;   // RTC memory lost
+    bootCountUpdate(c, 9);                            // a brownout that wiped the RTC memory
+    TEST_ASSERT_EQUAL_HEX32(BOOT_MAGIC, c.magic);
+    TEST_ASSERT_EQUAL_UINT32(1, c.boots);
+    TEST_ASSERT_EQUAL_UINT32(1, c.brownouts);
+}
+void test_v166_boot_counters_saturate() {
+    BootCounters c; c.magic = BOOT_MAGIC; c.boots = 0xFFFFFFFFu; c.brownouts = 0xFFFFFFFFu;
+    bootCountUpdate(c, 9);
+    TEST_ASSERT_EQUAL_UINT32(0xFFFFFFFFu, c.boots);
+    TEST_ASSERT_EQUAL_UINT32(0xFFFFFFFFu, c.brownouts);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_safety_state_names);
@@ -224,5 +263,9 @@ int main(int, char**) {
     RUN_TEST(test_frame_long_body_roundtrip);
     RUN_TEST(test_frame_long_body_fake_crc_rejected);
     RUN_TEST(test_frame_verify_short_inputs);
+    RUN_TEST(test_v166_reset_reason_names);
+    RUN_TEST(test_v166_boot_counters_power_on_and_resets);
+    RUN_TEST(test_v166_boot_counters_bad_magic_without_power_on);
+    RUN_TEST(test_v166_boot_counters_saturate);
     return UNITY_END();
 }

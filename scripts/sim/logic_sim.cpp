@@ -113,7 +113,7 @@ static void api(const char* body) {
     int code = (e == ApiError::BAD_CRC || e == ApiError::BAD_JSON) ? 400 : 200;
     if (e == ApiError::OK && c.id == CmdId::GET_STATE) {
         ProcData d; appFillProc(S, C, hw(), d);
-        stateExtraToJson(S.safety.state, S.safety.err, S.local, cs, extra, sizeof extra);
+        stateExtraToJson(S.safety.state, S.safety.err, S.local, cs, BootInfo{}, extra, sizeof extra);   // simulator: no reset history
         responseToJson(c.id, e, nullptr, extra, buf, sizeof buf);
     } else if (e == ApiError::OK && c.id == CmdId::GET_CONFIG) {
         paramsToJsonMember(S.params, S.flags, extra, sizeof extra);
