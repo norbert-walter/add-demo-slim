@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5.20) – Sprint I1 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.6.8) – Sprints I1 and B2 must make these pass. Do not modify.
 // Host test of the REAL src/display/display.cpp with the LovyanGFX shim (screen model + touch),
 // the real snapshot.cpp and command_queue.cpp. wifi_manager getters are stubs set by the tests.
 // The tests run in this order (display.cpp keeps its state in file-static variables).
@@ -33,6 +33,7 @@ static void tick(uint32_t dt = DISPLAY_TOUCH_POLL_MS) { T += dt; displayTick(T);
 static void settle() { tick(DISPLAY_PERIOD_MS); }                    // guarantees a periodic drawing
 static void touch(int x, int y) { L().touch_down = true; L().touch_x = x; L().touch_y = y; }
 static void release() { L().touch_down = false; }
+static void lift() { release(); tick(DISPLAY_TOUCH_RELEASE_MS); }     // V1.6.8: a release that counts
 static int drain(Command* got, int max) {                            // all queued commands, priority first
     Command pr[CMD_PRIO_MAX_PER_CYCLE]; int n = cmdQueueReceivePriority(pr, CMD_PRIO_MAX_PER_CYCLE), k = 0;
     for (int i = 0; i < n && k < max; ++i) got[k++] = pr[i];
@@ -40,7 +41,8 @@ static int drain(Command* got, int max) {                            // all queu
     return k;
 }
 static Command tap(int x, int y) {                                   // touch-down, one tick, release
-    Command none; touch(x, y); tick(); release(); tick();
+    // V1.6.8: released long enough for the debounce and the button lock
+    Command none; touch(x, y); tick(); release(); tick(DISPLAY_BUTTON_LOCK_MS);
     Command got[8]; int n = drain(got, 8);
     TEST_ASSERT_TRUE_MESSAGE(n <= 1, "at most one command per tap");
     return n ? got[0] : none;
@@ -205,9 +207,9 @@ void test_touch_outside_row_or_held_sends_nothing() {
     TEST_ASSERT_EQUAL_INT((int)CmdId::NONE, (int)tap(240, 259).id);
     touch(32, 290); tick();                                           // INIT once ...
     for (int i = 0; i < 100; ++i) tick();                             // ... held for 2 s: no repeats
-    release(); tick();
+    lift();
     Command got[8]; TEST_ASSERT_EQUAL_INT(1, drain(got, 8));
-    touch(240, 100); tick(); touch(32, 290); tick(); release(); tick(); // slide from status into a button
+    touch(240, 100); tick(); touch(32, 290); tick(); lift();          // slide from status into a button
     TEST_ASSERT_EQUAL_INT(0, drain(got, 8));
 }
 void test_fault_screen_hides_buttons() {
@@ -223,7 +225,7 @@ void test_fault_screen_hides_buttons() {
     TEST_ASSERT_EQUAL_HEX32(COL_BG, L().pixel(32, 290));
     TEST_ASSERT_FALSE(L().visible("INIT"));
     TEST_ASSERT_FALSE(L().visible("POS 155.0") && L().visible("SPEED"));
-    release(); tick();
+    lift();
     for (int x : {32, 96, 430}) tap(x, 290);
     TEST_ASSERT_EQUAL_INT(0, drain(got, 8));                          // hidden buttons never send
 }
@@ -240,8 +242,8 @@ void test_ack_screen_cause_active() {
     TEST_ASSERT_EQUAL_HEX32(COL_GREY, L().pixel(5, 265));
     TEST_ASSERT_EQUAL_HEX32(COL_GREY, L().pixel(475, 316));
     for (int i = 0; i < 100; ++i) tick();
-    release(); tick();
-    touch(240, 290); for (int i = 0; i < 100; ++i) tick(); release(); tick();
+    lift();
+    touch(240, 290); for (int i = 0; i < 100; ++i) tick(); lift();
     TEST_ASSERT_EQUAL_INT(0, drain(got, 8));                          // cause active: never ACK
 }
 void test_ack_hold_one_second_once() {
@@ -249,7 +251,7 @@ void test_ack_hold_one_second_once() {
     D.safety.estop = false; publish(); settle();
     TEST_ASSERT_TRUE(L().visible("ACK - HOLD 1 s"));
     TEST_ASSERT_EQUAL_HEX32(COL_BLACK, fgOf("ACK - HOLD 1 s"));
-    touch(240, 150); for (int i = 0; i < 60; ++i) tick(); release(); tick();       // outside the area
+    touch(240, 150); for (int i = 0; i < 60; ++i) tick(); lift();                  // outside the area
     TEST_ASSERT_EQUAL_INT(0, drain(got, 8));
     TEST_ASSERT_EQUAL_HEX32(COL_WARN, L().pixel(5, 265));
     TEST_ASSERT_TRUE(L().visible("ESTOP OK  TEMP(SIM) 23.0C"));
@@ -261,7 +263,7 @@ void test_ack_hold_one_second_once() {
     TEST_ASSERT_EQUAL_INT((int)CmdId::ACK, (int)got[0].id);
     TEST_ASSERT_EQUAL_INT((int)CmdSource::LOCAL, (int)got[0].source);
     for (int i = 0; i < 100; ++i) tick();
-    release(); tick(); touch(100, 300); for (int i = 0; i < 100; ++i) tick(); release(); tick();
+    lift(); touch(100, 300); for (int i = 0; i < 100; ++i) tick(); lift();
     TEST_ASSERT_EQUAL_INT(0, drain(got, 8));                          // sent once in this episode
 }
 void test_ack_release_cancels_and_progress_bar() {
@@ -274,11 +276,11 @@ void test_ack_release_cancels_and_progress_bar() {
     settle();                                                         // drawn with the progress of the previous tick (~0.6)
     int w = 0; while (w < 470 && L().pixel(10 + w, 310) == COL_TEXT) ++w;
     TEST_ASSERT_TRUE_MESSAGE(w > 200 && w < 460, "progress bar while holding (progress of the previous tick)");
-    release(); tick(); settle();
+    lift(); settle();
     TEST_ASSERT_EQUAL_HEX32(COL_WARN, L().pixel(20, 310));            // bar gone after release
-    touch(400, 280); for (int i = 0; i < 40; ++i) tick(); release(); tick();      // 800 ms: too short
+    touch(400, 280); for (int i = 0; i < 40; ++i) tick(); lift();     // 800 ms: too short
     TEST_ASSERT_EQUAL_INT(0, drain(got, 8));
-    touch(400, 280); for (int i = 0; i < 52; ++i) tick(); release(); tick();
+    touch(400, 280); for (int i = 0; i < 52; ++i) tick(); lift();
     TEST_ASSERT_EQUAL_INT(1, drain(got, 8));
 }
 void test_temp_cause_and_remedies() {
@@ -286,7 +288,7 @@ void test_temp_cause_and_remedies() {
     D.state = SafetyState::READY; publish(); tick();
     D.state = SafetyState::WAIT_ACK; D.err = ErrorCode::TEMP_HIGH; D.safety.temp = 35.0f; publish(); tick();
     TEST_ASSERT_TRUE(L().visible("CAUSE ACTIVE: TEMP_HIGH - RELEASE FIRST"));
-    touch(240, 290); for (int i = 0; i < 60; ++i) tick(); release(); tick();
+    touch(240, 290); for (int i = 0; i < 60; ++i) tick(); lift();
     TEST_ASSERT_EQUAL_INT(0, drain(got, 8));
     struct { ErrorCode e; const char* r; } rem[] = {{ErrorCode::COMM_TIMEOUT, "Remote client lost"},
         {ErrorCode::HOMING_FAILED, "Check home switch, then INIT"}, {ErrorCode::MOTOR_FAULT, "Check axis and end switches"}};
@@ -310,6 +312,58 @@ void test_one_touch_poll_per_tick_and_balanced_writes() {
     TEST_ASSERT_EQUAL_STRING("", Serial.out.c_str());
 }
 
+// ---- V1.6.8 (Sprint B2, acceptance M10 21.11.2026): bouncing finger, button lock ----
+// The tests start on the normal screen (READY, HV off) left by test_temp_cause_and_remedies.
+void test_v168_bouncing_finger_switches_hv_once() {
+    Command got[8];
+    D.safety.hv_on = false; publish(); settle(); drain(got, 8);
+    touch(96, 290); tick();                                           // HV pressed ...
+    release(); tick();                                                // ... 20 ms gap ...
+    touch(96, 290); tick(); tick();                                   // ... contact again
+    release(); tick(); tick(); tick(); tick();                        // 80 ms gap
+    touch(97, 292); tick();
+    lift();
+    TEST_ASSERT_EQUAL_INT(1, drain(got, 8));                          // exactly ONE HV_ON
+    TEST_ASSERT_EQUAL_INT((int)CmdId::HV_ON, (int)got[0].id);
+    tick(DISPLAY_BUTTON_LOCK_MS);
+    touch(160, 290); for (int i = 0; i < 30; ++i) tick();            // MEAS held 600 ms (lock over) ...
+    release(); tick(); tick();                                        // ... 40 ms gap ...
+    touch(160, 290); for (int i = 0; i < 5; ++i) tick();              // ... contact again: same press
+    lift();
+    TEST_ASSERT_EQUAL_INT(1, drain(got, 8));                          // exactly ONE START_MEASURE
+    TEST_ASSERT_EQUAL_INT((int)CmdId::START_MEASURE, (int)got[0].id);
+    tick(DISPLAY_BUTTON_LOCK_MS);
+}
+void test_v168_release_counts_after_100_ms_and_button_lock() {
+    Command got[8];
+    touch(32, 290); tick();                                           // INIT at t0
+    lift();                                                           // released (t0 + 120 ms)
+    TEST_ASSERT_EQUAL_INT(1, drain(got, 8));
+    TEST_ASSERT_EQUAL_INT((int)CmdId::INIT, (int)got[0].id);
+    touch(160, 290); tick(); lift();                                  // new edge on MEAS within 400 ms
+    TEST_ASSERT_EQUAL_INT(0, drain(got, 8));                          // locked
+    touch(430, 290); tick(); lift();                                  // STOP is never locked
+    TEST_ASSERT_EQUAL_INT(1, drain(got, 8));
+    TEST_ASSERT_EQUAL_INT((int)CmdId::STOP, (int)got[0].id);
+    tick(DISPLAY_BUTTON_LOCK_MS);                                     // lock over (also after STOP)
+    TEST_ASSERT_EQUAL_INT((int)CmdId::START_MEASURE, (int)tap(160, 290).id);
+}
+void test_v168_ack_hold_survives_a_bounce() {
+    Command got[8];
+    D.state = SafetyState::WAIT_ACK; D.err = ErrorCode::MOTOR_FAULT; publish(); tick();
+    touch(240, 290); tick();                                          // press starts (t0)
+    for (int i = 0; i < 29; ++i) tick();                              // t0 + 580 ms
+    release(); tick(); tick(); tick();                                // 60 ms gap: no release
+    touch(240, 290);
+    for (int i = 0; i < 17; ++i) tick();                              // t0 + 980 ms
+    TEST_ASSERT_EQUAL_INT(0, drain(got, 8));
+    tick();                                                           // t0 + 1000 ms: counted from the FIRST contact
+    TEST_ASSERT_EQUAL_INT(1, drain(got, 8));
+    TEST_ASSERT_EQUAL_INT((int)CmdId::ACK, (int)got[0].id);
+    lift();
+    D.state = SafetyState::READY; D.err = ErrorCode::NONE; publish(); settle();
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_start_initialises_panel_and_task);
@@ -326,6 +380,9 @@ int main(int, char**) {
     RUN_TEST(test_ack_hold_one_second_once);
     RUN_TEST(test_ack_release_cancels_and_progress_bar);
     RUN_TEST(test_temp_cause_and_remedies);
+    RUN_TEST(test_v168_bouncing_finger_switches_hv_once);
+    RUN_TEST(test_v168_release_counts_after_100_ms_and_button_lock);
+    RUN_TEST(test_v168_ack_hold_survives_a_bounce);
     RUN_TEST(test_one_touch_poll_per_tick_and_balanced_writes);
     return UNITY_END();
 }

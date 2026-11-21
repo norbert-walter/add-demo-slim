@@ -43,16 +43,21 @@
  *  A touch on a hidden button never sends a command.
  *
  * V1.5.20 – exact behaviour (tested natively with the LovyanGFX shim: test/native/test_display).
- *  File-static: LGFX lcd (display/lgfx_config.h), AckPress, previous touch state, current screen
- *  mode, time of the last drawing, a cache of what each screen zone currently shows.
+ *  File-static: LGFX lcd (display/lgfx_config.h), AckPress, TouchFilter, ButtonLock (V1.6.8),
+ *  previous touch state, current screen mode, time of the last drawing, a cache of what each screen
+ *  zone currently shows.
  *  Text: built-in font, setTextSize(n) = 6n x 8n px per character, colours below (RGB888).
  *  displayStart(): if (!lcd.init()) return false; setRotation(1); setBrightness(255);
  *    fillScreen(COL_BG); then xTaskCreatePinnedToCore(<task>, "disp", DISPLAY_TASK_STACK, nullptr,
  *    DISPLAY_TASK_PRIO, nullptr, DISPLAY_TASK_CORE) == pdPASS. The task loops forever:
  *    displayTick(millis()); vTaskDelay(pdMS_TO_TICKS(DISPLAY_TOUCH_POLL_MS)).
  *  displayTick(now), in this order:
- *    1. snapshotGet(d); mode = screenModeOf(d.state); touch = lcd.getTouch(&x, &y) > 0
- *       (exactly one getTouch per tick); in_row = touch && 260 <= y < 320 && 0 <= x < 480.
+ *    1. snapshotGet(d); mode = screenModeOf(d.state); raw = lcd.getTouch(&x, &y) > 0
+ *       (exactly one getTouch per tick).
+ *       V1.6.8: touch = touchFilterUpdate(filter, raw, x, y, now, DISPLAY_TOUCH_RELEASE_MS);
+ *       x = filter.x; y = filter.y (the debounced touch and its last coordinates are used from
+ *       here on, also for the ACK area and the edge detection);
+ *       in_row = touch && 260 <= y < 320 && 0 <= x < 480.
  *    2. Draw if: first call, OR mode differs from the drawn mode (at once – the picture must match
  *       the mode BEFORE the touch is evaluated), OR (uint32_t)(now - last drawing) >= DISPLAY_PERIOD_MS.
  *       Drawing redraws only zones whose content changed (cache); a mode change clears the whole
@@ -60,11 +65,13 @@
  *    3. Buttons: mode NORMAL && in_row && touch-down edge (!previous touch):
  *       x < 384: button x / 64 = INIT, HV, MEAS, TRAV, PARK, SERV -> CmdId INIT, (d.safety.hv_on ?
  *       HV_OFF : HV_ON), START_MEASURE, START_TRAVERSE, PARK, SERVICE; x >= 384: STOP.
- *       Exactly one cmdQueueSend per edge: Command with id, source = LOCAL, want_reply = false,
+ *       V1.6.8: the command is sent only if buttonLockAllow(lock, id == STOP, now,
+ *       DISPLAY_BUTTON_LOCK_MS) is true (STOP always).
+ *       At most one cmdQueueSend per edge: Command with id, source = LOCAL, want_reply = false,
  *       all parameters default (the control task uses the stored parameters).
  *    4. ackPressUpdate(ack, mode, ackCauseActive(d, SafetyConfig{}), in_row, now, ACK_HOLD_MS,
  *       &progress) on EVERY tick; true -> cmdQueueSend(ACK, source LOCAL, want_reply false).
- *    5. previous touch = touch.
+ *    5. previous touch = touch (the debounced state).
  *  Screen (480 x 320; "text(x, y, size)" = top-left datum unless "centred" = middle_center):
  *    Header y 0..31, background COL_PANEL, in all modes:
  *      "ADD DEMO" (8, 8, 2) COL_TEXT; "[ <safetyStateName> ]" (112, 8, 2) (V1.5.21, was 150: "[ SAFE_START ]" reached under "LOCAL"), colour COL_OK for READY /

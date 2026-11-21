@@ -1,7 +1,7 @@
 # ADD Demo System – Interface Contract
 
-**Version:** 1.6.7 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-20
-**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.20
+**Version:** 1.6.8 · **Status:** FROZEN after review by Norbert Walter · **Date:** 2026-11-21
+**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.21
 
 ### Changes 1.4.2 → 1.5 (2026-10-12, decision Norbert Walter: shutter life in continuous profile scans)
 
@@ -169,6 +169,18 @@ module suites and `test_app_logic`, 2026-10-13, no behaviour change):**
 | 1 | `test_hardware` crashed in `test_nvs_roundtrip` (Guru Meditation "Cache disabled but cached memory region accessed", PC in `StepperQueue::fill_i2s_buffer`). Cause in FastAccelStepper 96459ed: the I2S TX-done interrupt runs permanently with I2S_MUX and is IRAM-safe, but `fill_i2s_buffer()` and `I2sManager::i2sMuxSetBit()` were in flash; every flash operation (NVS write, SPIFFS read, OTA) crashed the board, also with the motor idle. Fix: both functions `IRAM_ATTR` (fork `norbert-walter/FastAccelStepper`, commit a64ceff on 96459ed; pull request to gin66 pending). Checked with nm/objdump: every function reachable from the interrupt is in IRAM, no literals into flash | `platformio.ini` |
 | 2 | Post-build check `scripts/check_iram.py` (all ESP32 environments): the build fails if one of the I2S interrupt functions is linked into flash (protects against library updates). Verified: fails with 96459ed, passes with a64ceff | `platformio.ini`, `scripts/` |
 | 3 | The nine native H1 tests could not see this (no flash cache on the host); the first five on-device tests were green (inputs, sensor, outputs, E-stop polarity change) | – |
+
+**Changes 1.6.7 → 1.6.8 (touch debounce, Sprint B2, 2026-11-21, decision Norbert Walter):**
+
+Acceptance M10 (21.11.2026): a light press on `HV` bounced (contact – short gap – contact); the display saw
+two touch-down edges and switched HV on and at once off again. No API change.
+
+| # | Change | Where |
+|---|---|---|
+| 1 | `touchFilterUpdate()`: contact is taken at once, a release only after **100 ms** without contact (`DISPLAY_TOUCH_RELEASE_MS`); coordinates of the last contact are kept while held | `display_logic.h`, `config.h`, §13 |
+| 2 | `buttonLockAllow()`: after a button command other buttons are ignored for **400 ms** (`DISPLAY_BUTTON_LOCK_MS`); **STOP is never locked** (and restarts the lock) | `display_logic.h`, `config.h`, §13 |
+| 3 | `displayTick()` uses the debounced touch for buttons, edge detection and the ACK area: a short gap no longer cancels the 1-s ACK hold | `display.h` |
+| 4 | Tests: `test_display_logic` +6 (18), `test_display` +3 (18), the tap helper of `test_display` releases long enough. 22 suites, **517** | `test/native` |
 
 **Changes 1.6.6 → 1.6.7 (sensor curve refitted after the LED rework, 2026-11-20, decision Norbert Walter):**
 
@@ -1153,6 +1165,13 @@ ACK area (`ackCauseActive`, `ackPressUpdate`):
   (touch-down edge), so a finger still lying on STOP from before the fault never
   acknowledges. Nothing else can be operated in WAIT_ACK – nothing can move
   anyway (motor emergency-stopped every cycle, HV and shutter forced off).
+
+Touch debounce and button lock (V1.6.8, `touchFilterUpdate`, `buttonLockAllow`):
+- contact is taken at once; the touch counts as released only after 100 ms without contact
+  (`DISPLAY_TOUCH_RELEASE_MS`). A bouncing finger gives ONE touch-down edge; a short gap does not
+  cancel the ACK hold. Buttons, edge detection and the ACK area use the debounced touch.
+- after a button command the other buttons are ignored for 400 ms (`DISPLAY_BUTTON_LOCK_MS`);
+  STOP is never locked.
 
 ---
 

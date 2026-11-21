@@ -1,13 +1,20 @@
 # Pflichtenheft – Demoanlage ADD (Slim)
 
-**Stand:** 2026-11-20
+**Stand:** 2026-11-21
 **Autor:** Norbert Walter
-**Version:** 1.7.20 (Sensorkennlinie nach dem LED-Umbau)
+**Version:** 1.7.21 (Touch-Entprellung, Sprint B2)
 **Verbindliche Schnittstellen:** `docs/CONTRACT.md` (englisch, für Agenten) und die Header in `src/**/*.h`
 
 ---
 
 ## 0. Änderungen
+
+### V1.7.20 → V1.7.21 (21.11.2026, Entscheidung Norbert Walter, Sprint B2)
+- Abnahme M10 vom 21.11.2026: Ein leichter Druck auf `HV` prellte, HV ging an und sofort wieder aus.
+- **Touch-Entprellung:** Eine Berührung wirkt sofort; losgelassen ist sie erst nach 100 ms ohne Kontakt.
+  Gilt auch für das ACK-Halten (eine kurze Unterbrechung bricht es nicht ab).
+- **Tastensperre:** Nach einem Tastenbefehl 400 ms keine weitere Taste; **STOP wirkt immer**.
+- Contract V1.6.8.
 
 ### V1.7.19 → V1.7.20 (20.11.2026, Entscheidung Norbert Walter, ohne Sprint)
 - Nach dem LED-Umbau lag der unkalibrierte Abstand bis 11,5 mm neben der Referenz (T18K ❌); die Kennlinie
@@ -705,6 +712,8 @@ Neuzeichnen nur geänderter Zonen. **Sprache: Englisch.**
 - Badge `LOCAL` in der Kopfzeile, solange der Bedienvorrang aktiv ist
 - Sicherheitsflags mit Zusatz `SIM`, z. B. `INTERLOCK(SIM) ●`
 - Touch-Abfrage alle 20 ms, Neuzeichnen alle 200 ms
+- Touch entprellt (V1.7.21): losgelassen erst nach 100 ms ohne Kontakt; nach einem Tastenbefehl
+  400 ms keine weitere Taste, außer STOP
 
 **Fehlerbild (FAULT / WAIT_ACK)** – alle Bedientasten werden ausgeblendet, es gibt
 nur noch eine mögliche Handlung:
@@ -1010,6 +1019,7 @@ Abschnitt „Sprint-Plan V3“.
 | A1 | Integration, Abnahme | Kapitel 10 | 👤 | 3–4 h |
 | D1 | add.json, Python-Demos | KI-Validierung | 👤 + Claude | 2–3 h |
 | B1 | types, system, hal_io, proc_json, http_server | Brownout-Stufe, Startgrund, Startzähler; native Tests, Gerät | 🤖 Qwen | 1–2 h |
+| B2 | display_logic, display | Touch-Entprellung, Tastensperre; native Tests, Abnahme M10 | 🤖 Qwen | 1 h |
 
 Die Zeiten der 🤖-Sprints sind Rechenzeit von Qwen lokal (ca. 18 Token/s), nicht deine Zeit.
 

@@ -1,4 +1,4 @@
-// FROZEN TESTS (Contract V1.5.13) – Sprint L5 must make these pass. Do not modify.
+// FROZEN TESTS (Contract V1.6.8) – Sprints L5 and B2 must make these pass. Do not modify.
 // Covers: src/logic/display_logic.cpp (CONTRACT §13)
 #include <unity.h>
 #include "logic/display_logic.h"
@@ -127,6 +127,62 @@ void test_v1513_progress_1_after_sent_across_wraparound() {
     }
 }
 
+// ---- V1.6.8 (Sprint B2): touch debounce and button lock ----
+void test_v168_touch_down_at_once_with_coordinates() {
+    TouchFilter f;
+    TEST_ASSERT_FALSE(touchFilterUpdate(f, false, 0, 0, 1000, 100));
+    TEST_ASSERT_FALSE(f.down);
+    TEST_ASSERT_TRUE(touchFilterUpdate(f, true, 96, 290, 1020, 100));   // first contact: down at once
+    TEST_ASSERT_EQUAL_INT(96, f.x); TEST_ASSERT_EQUAL_INT(290, f.y);
+    TEST_ASSERT_EQUAL_UINT32(1020, f.last_ms);
+    TEST_ASSERT_TRUE(touchFilterUpdate(f, true, 100, 300, 1040, 100));  // finger moves: coordinates follow
+    TEST_ASSERT_EQUAL_INT(100, f.x); TEST_ASSERT_EQUAL_INT(300, f.y);
+}
+void test_v168_short_gap_is_no_release() {
+    TouchFilter f;
+    touchFilterUpdate(f, true, 96, 290, 1000, 100);
+    for (uint32_t t = 1020; t < 1100; t += 20)                           // 80 ms without contact
+        TEST_ASSERT_TRUE_MESSAGE(touchFilterUpdate(f, false, 0, 0, t, 100), "gap < 100 ms: still down");
+    TEST_ASSERT_EQUAL_INT(96, f.x); TEST_ASSERT_EQUAL_INT(290, f.y);     // kept, not overwritten by 0/0
+    TEST_ASSERT_TRUE(touchFilterUpdate(f, true, 97, 291, 1100, 100));   // contact again: same press
+    TEST_ASSERT_EQUAL_UINT32(1100, f.last_ms);
+}
+void test_v168_release_after_release_ms() {
+    TouchFilter f;
+    touchFilterUpdate(f, true, 10, 270, 1000, 100);
+    TEST_ASSERT_TRUE(touchFilterUpdate(f, false, 0, 0, 1099, 100));     // 99 ms
+    TEST_ASSERT_FALSE(touchFilterUpdate(f, false, 0, 0, 1100, 100));    // 100 ms: released
+    TEST_ASSERT_EQUAL_INT(10, f.x); TEST_ASSERT_EQUAL_INT(270, f.y);     // coordinates kept
+    TEST_ASSERT_FALSE(touchFilterUpdate(f, false, 0, 0, 5000, 100));
+    TEST_ASSERT_TRUE(touchFilterUpdate(f, true, 20, 280, 5020, 100));   // new press
+}
+void test_v168_release_across_wraparound() {
+    TouchFilter f;
+    touchFilterUpdate(f, true, 1, 2, 0xFFFFFFFFu - 40, 100);
+    TEST_ASSERT_TRUE(touchFilterUpdate(f, false, 0, 0, 20, 100));       // 61 ms after the wrap
+    TEST_ASSERT_FALSE(touchFilterUpdate(f, false, 0, 0, 60, 100));      // 101 ms
+}
+void test_v168_button_lock() {
+    ButtonLock b;
+    TEST_ASSERT_TRUE(buttonLockAllow(b, false, 1000, 400));             // first command
+    TEST_ASSERT_TRUE(b.used); TEST_ASSERT_EQUAL_UINT32(1000, b.last_ms);
+    TEST_ASSERT_FALSE(buttonLockAllow(b, false, 1399, 400));            // 399 ms: locked ...
+    TEST_ASSERT_EQUAL_UINT32(1000, b.last_ms);                           // ... and nothing changes
+    TEST_ASSERT_TRUE(buttonLockAllow(b, true, 1200, 400));              // STOP never locked ...
+    TEST_ASSERT_EQUAL_UINT32(1200, b.last_ms);                           // ... and restarts the lock
+    TEST_ASSERT_FALSE(buttonLockAllow(b, false, 1599, 400));
+    TEST_ASSERT_TRUE(buttonLockAllow(b, false, 1600, 400));             // 400 ms after STOP
+    TEST_ASSERT_TRUE(buttonLockAllow(b, true, 1601, 400));              // STOP right after a button
+}
+void test_v168_button_lock_first_use_and_wraparound() {
+    ButtonLock b;                                                        // unused: no lock even at t = 0
+    TEST_ASSERT_TRUE(buttonLockAllow(b, false, 0, 400));
+    b = ButtonLock{};
+    TEST_ASSERT_TRUE(buttonLockAllow(b, false, 0xFFFFFFFFu - 100, 400));
+    TEST_ASSERT_FALSE(buttonLockAllow(b, false, 200, 400));             // 301 ms after the wrap
+    TEST_ASSERT_TRUE(buttonLockAllow(b, false, 299, 400));              // 400 ms
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_screen_mode);
@@ -141,5 +197,11 @@ int main(int, char**) {
     RUN_TEST(test_v1511_leaving_ack_screen_cancels_running_press);
     RUN_TEST(test_v1512_progress_stays_1_after_sent);
     RUN_TEST(test_v1513_progress_1_after_sent_across_wraparound);
+    RUN_TEST(test_v168_touch_down_at_once_with_coordinates);
+    RUN_TEST(test_v168_short_gap_is_no_release);
+    RUN_TEST(test_v168_release_after_release_ms);
+    RUN_TEST(test_v168_release_across_wraparound);
+    RUN_TEST(test_v168_button_lock);
+    RUN_TEST(test_v168_button_lock_first_use_and_wraparound);
     return UNITY_END();
 }

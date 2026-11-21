@@ -106,6 +106,8 @@
 #define DISPLAY_PERIOD_MS    200
 #define DISPLAY_TOUCH_POLL_MS 20    // V1.1: touch polling (ACK long press, edge detection)
 #define ACK_HOLD_MS          1000   // V1.1: ACK area must be held this long
+#define DISPLAY_TOUCH_RELEASE_MS 100 // V1.6.8: a touch counts as released only after this long without contact
+#define DISPLAY_BUTTON_LOCK_MS   400 // V1.6.8: after a button command other buttons (not STOP) are ignored this long
 #define WDT_TIMEOUT_S        10
 #define COMM_TIMEOUT_MS      5000
 #define REBOOT_DELAY_MS      700    // V1.3: >= soundDurationMs(REBOOT) (500 ms) + HTTP reply

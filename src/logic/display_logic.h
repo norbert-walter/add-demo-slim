@@ -52,3 +52,41 @@ struct AckPress {
  */
 bool ackPressUpdate(AckPress& a, ScreenMode mode, bool cause_active, bool touch_in_area,
                     uint32_t now_ms, uint32_t hold_ms, float* progress);
+
+// ---------------------------------------------------------------------------------------------
+// V1.6.8 (Sprint B2, 21.11.2026): touch debounce and button lock.
+// Acceptance M10: a light press bounced (contact - short gap - contact); the HV button saw two
+// touch-down edges and switched HV on and at once off again.
+// ---------------------------------------------------------------------------------------------
+
+/// Debounced touch state. Zero-initialise.
+struct TouchFilter {
+    bool     down    = false;  ///< debounced touch state
+    uint32_t last_ms = 0;      ///< time of the last poll with raw contact
+    int      x = 0, y = 0;     ///< coordinates of the last poll with raw contact
+};
+
+/**
+ * Called on every touch poll with the raw result of the panel (raw, x, y). Returns f.down.
+ *  - raw: down = true, x = x, y = y, last_ms = now_ms (contact is taken at once – no delay).
+ *  - !raw && down && (uint32_t)(now_ms - last_ms) >= release_ms: down = false (x, y kept).
+ *  - otherwise nothing changes (x, y are NOT overwritten without contact).
+ * A gap in the contact shorter than release_ms (a bouncing finger) is therefore no release and
+ * gives no new touch-down edge; while down, x / y are the last touched coordinates.
+ */
+bool touchFilterUpdate(TouchFilter& f, bool raw, int x, int y, uint32_t now_ms, uint32_t release_ms);
+
+/// Lock between two button commands. Zero-initialise.
+struct ButtonLock {
+    bool     used    = false;  ///< a button command was sent before
+    uint32_t last_ms = 0;      ///< time of the last button command
+};
+
+/**
+ * Called once for every button touch-down edge, before the command is sent. Returns true if the
+ * command may be sent.
+ *  - is_stop: always true (STOP is never locked).
+ *  - otherwise false if used && (uint32_t)(now_ms - last_ms) < lock_ms (nothing changes then).
+ * On true: used = true, last_ms = now_ms (also for STOP).
+ */
+bool buttonLockAllow(ButtonLock& b, bool is_stop, uint32_t now_ms, uint32_t lock_ms);

@@ -1,7 +1,7 @@
 # Software-Dokumentation – Demoanlage ADD (Slim)
 
-**Version:** 1.5 · **Stand:** 2026-11-20 · **Autor:** Norbert Walter
-**Firmware:** `FW_VERSION` 1.0.0 · **Contract:** V1.6.7 · **Pflichtenheft:** V1.7.20
+**Version:** 1.6 · **Stand:** 2026-11-21 · **Autor:** Norbert Walter
+**Firmware:** `FW_VERSION` 1.0.0 · **Contract:** V1.6.8 · **Pflichtenheft:** V1.7.21
 **Hardware:** siehe `docs/Hardware_Dokumentation_V1_0.md`
 
 ---
@@ -1343,6 +1343,11 @@ Lokale Bedienung ohne WLAN, englisch, 480 × 320, Neuzeichnen alle 200 ms, Touch
 - `HV` schaltet je nach Zustand HV_ON oder HV_OFF; `STOP` ist immer aktiv.
 - ACK wird erst nach 1 s ununterbrochenem Drücken gesendet und nur, wenn der Druck auf dem
   Fehlerbild begonnen hat (ein Finger, der noch auf STOP lag, quittiert nie).
+- **Entprellung (V1.6.8):** Eine Berührung wirkt sofort; als losgelassen gilt sie erst nach
+  100 ms ohne Kontakt (`DISPLAY_TOUCH_RELEASE_MS`). Ein leicht drückender, prellender Finger löst
+  deshalb nur einen Tastendruck aus, und eine kurze Unterbrechung bricht das ACK-Halten nicht ab.
+- **Tastensperre (V1.6.8):** Nach einem Tastenbefehl werden 400 ms lang andere Tasten ignoriert
+  (`DISPLAY_BUTTON_LOCK_MS`); **STOP wirkt immer**.
 - Liegt die Ursache noch an (Not-Aus gedrückt, Temperatur > 32 °C), ist die ACK-Fläche grau:
   `CAUSE ACTIVE: … - RELEASE FIRST`.
 - Bei `estop_nc = false` erscheint `ESTOP(NO)` als Warnung.
@@ -1671,7 +1676,7 @@ Bibliotheksfunktionen gibt es Nachbildungen in `test/native/freertos_shim/` (u. 
 | Suite | Tests | Prüft |
 |---|---:|---|
 | `test_env` | 1 | Testumgebung |
-| `test_types_crc` | 22 | Namen, CRC32, Rahmen, Testvektoren |
+| `test_types_crc` | 26 | Namen, CRC32, Rahmen, Testvektoren |
 | `test_safety_logic` | 63 | Regeln R1–R7, Invarianten I1–I8, Zufallstest über 60 000 Schritte |
 | `test_measure_logic` | 44 | Kennlinie, Filter, Kalibriertabelle, Stabilität, Statistik |
 | `test_params` | 21 | Bereiche, Standardwerte, JSON |
@@ -1681,18 +1686,18 @@ Bibliotheksfunktionen gibt es Nachbildungen in `test/native/freertos_shim/` (u. 
 | `test_app_logic` | 92 | vollständige Abläufe mit simulierter Achse (`fake_axis.h`) |
 | `test_proc_json` | 20 | `/proc`, Antworten, Größe ≤ 512 Byte |
 | `test_api_parse` | 27 | Parser, Typen, unsinnige Eingaben (NaN, ±Inf) |
-| `test_display_logic` | 12 | Bildschirmmodus, ACK-Halten |
+| `test_display_logic` | 18 | Bildschirmmodus, ACK-Halten, Touch-Entprellung, Tastensperre |
 | `test_command_queue` | 9 | Warteschlangen mit 8 Threads, Latch, Antworten |
 | `test_log_buffer` | 12 | Ringpuffer, Nebenläufigkeit |
 | `test_nvs_config` | 17 | Laden/Speichern, Schema-Version, Übernahme von Version 4 |
-| `test_system` | 4 | Watchdog, Neustart |
+| `test_system` | 8 | Watchdog, Neustart, Brownout-Stufe, Startzähler |
 | `test_wifi_manager` | 10 | AP, Router, mDNS |
-| `test_http_server` | 21 | alle Endpunkte, CORS, Fehlerfälle |
+| `test_http_server` | 22 | alle Endpunkte, CORS, Fehlerfälle |
 | `test_hal_io` | 16 | Entprellung, Not-Aus-Pegel, Ausgänge |
 | `test_motion_drv` | 10 | Treiber-Anforderungen an FastAccelStepper |
 | `test_net_task` | 21 | Netz-Task, Konsole, Startreihenfolge, verzögertes Speichern |
-| `test_display` | 15 | Display-Task mit Bildschirmmodell und Touch |
-| **Summe** | **479** | |
+| `test_display` | 18 | Display-Task mit Bildschirmmodell und Touch, prellender Finger |
+| **Summe** | **517** | |
 
 Beim Review laufen alle Suiten zusätzlich mit AddressSanitizer und UndefinedBehaviorSanitizer.
 
@@ -1928,5 +1933,6 @@ Anmerkungen:
 | 1.1 | 2026-11-08 | Kalibriertabelle mit 6 Stufen, unter Messbedingungen (Contract V1.6.3, Sprints K1/K2): Messkette 3.4, Befehle, Parameter, `GET_CONFIG`, NVS Version 5, Kapitel 12.3 neu, Testzahlen |
 | 1.3 | 2026-11-08 | `/add.html` als Datei, gzip-Kopien (Contract V1.6.5, Sprint D1.2): 2.2, 10.5 |
 | 1.2 | 2026-11-08 | ADD-Dokument und OpenAPI (Contract V1.6.4, Sprint D1): 2.2, 10.1, 10.4, 10.5, 13.1 (Einstufung, Bestätigungen, KI und Skripte, Validierung), 13.2 |
+| 1.6 | 2026-11-21 | Touch-Entprellung und Tastensperre am Display (Contract V1.6.8, Sprint B2): 12.2; Testtabelle aktualisiert (517) |
 | 1.5 | 2026-11-20 | Sensorkennlinie `124,5 · U^−1,144` nach dem LED-Umbau (Contract V1.6.7): 3.4 |
 | 1.4 | 2026-11-20 | Brownout-Stufe, Startgrund und Startzähler, schwächste Treiberstufe für GPIO 4/32 (Contract V1.6.6, Sprint B1): 3.5, 9.4, 10.3 |
