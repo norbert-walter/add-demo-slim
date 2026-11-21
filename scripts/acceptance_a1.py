@@ -1596,6 +1596,12 @@ def main():
     except Exception:
         cfg_end, log_end = {}, []
     state = c.cache.get("state_end", {})
+    if not state:                          # 21.11.2026: partial run without block 3 – still record GET_STATE
+        try:
+            d.ok("GET_STATE")
+            state = dict(d.last_reply)
+        except Exception:
+            state = {}
     d.run = False
     c.cache["safety_note"] = safety_note
     write_reports(c, args, results, block_time, blocked, pruefer, start, boot, cfg_start, cfg_end, log_end, state)
