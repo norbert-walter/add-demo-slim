@@ -293,7 +293,7 @@ rechnet sie mit einer kalibrierten Kennlinie um (Kapitel 6).
 
 | LED | Farbe | Bedeutung | Anschluss |
 |---|---|---|---|
-| HV | grün | simulierte Hochspannung eingeschaltet | GPIO 4 über NPN-Transistor (4,7 kΩ Basiswiderstand, ≈ 0,55 mA aus dem GPIO), LED aus +3V3 des I2C-Steckers; HIGH = an |
+| HV | grün | simulierte Hochspannung eingeschaltet | GPIO 4 über NPN-Transistor (4,7 kΩ Basiswiderstand, ≈ 0,55 mA aus dem GPIO), LED mit 38 Ω Vorwiderstand aus +3V3 des I2C-Steckers; HIGH = an |
 | Shutter | rot | simulierter Shutter offen | GPIO 32 (SPINDLE/TTL) über den Spindeltransistor des Boards; HIGH = an |
 | Herzschlag | blau | Firmware läuft (1 s an / 1 s aus) | GPIO 2, LED auf dem Board |
 
@@ -305,7 +305,7 @@ rechnet sie mit einer kalibrierten Kennlinie um (Kapitel 6).
 > die wahrscheinlichste Ursache; bewiesen ist es nicht. Flash-Verschleiß durch Schreiben scheidet aus
 > (die Firmware schreibt nur bei `SET`/`CALIB save`, und ein verschlissener Flash liefert noch seine
 > Kennung). Die Shutter-LED war nie betroffen (Spindeltransistor des Boards).
-> **Umbau:** HV-LED über NPN-Transistor, 4,7 kΩ Basiswiderstand (≈ 0,55 mA aus GPIO 4), LED aus +3V3 des
+> **Umbau:** HV-LED über NPN-Transistor, 4,7 kΩ Basiswiderstand (≈ 0,55 mA aus GPIO 4), LED mit 38 Ω aus +3V3 des
 > I2C-Steckers. Firmware ab Contract V1.6.6: schwächste Treiberstufe für GPIO 4 und 32, Brownout-Schwelle
 > 2,80 V, Startgrund und Startzähler in `/log` und `GET_STATE`.
 > Der LED-Strom verschob auch die Analogmessung (25 … 60 mV am Sensorsignal). **Nach dem Umbau behoben
@@ -436,8 +436,8 @@ Touch um 180° gedreht (`offset_rotation` = 2), Touch-Kalibrierung in `config.h`
 Keine LED hängt direkt am ESP32 (HIGH = an):
 
 - **Rot (Shutter):** Anschluss SPINDLE/TTL (GPIO 32); das Board schaltet sie über seinen Spindeltransistor.
-- **Grün (HV):** GPIO 4 → 4,7 kΩ → Basis eines NPN-Transistors; die LED mit Vorwiderstand hängt am
-  Kollektor und wird aus +3V3 des I2C-Steckers versorgt. Empfohlen: 47 … 100 kΩ von der Basis nach GND,
+- **Grün (HV):** GPIO 4 → 4,7 kΩ → Basis eines NPN-Transistors (Emitter an GND); die LED mit
+  **38 Ω** Vorwiderstand hängt am Kollektor und wird aus +3V3 des I2C-Steckers versorgt. Empfohlen: 47 … 100 kΩ von der Basis nach GND,
   damit die HV-Anzeige beim Start und Reset sicher aus bleibt.
 
 > **Wichtig:** Keine Last direkt an einen GPIO hängen, schon gar nicht an die Pins der RTC-Domäne
@@ -792,7 +792,7 @@ Referenzpunkt anfahren und erfassen, Basis erfassen, speichern.
 | 9 | 2 | Mikroschalter (Endschalter) | vorn, hinten |
 | 10 | 1 | Not-Aus-Taster | derzeit Schließer |
 | 11 | 1 | Reset-Taster | |
-| 12 | 1 | LED grün mit Vorwiderstand | HV |
+| 12 | 1 | LED grün, Vorwiderstand 38 Ω, NPN-Transistor, Basiswiderstand 4,7 kΩ | HV |
 | 13 | 1 | LED rot mit Vorwiderstand | Shutter |
 | 14 | 1 | Netzteil 15 V DC, ≥ 1 A | |
 | 15 | 1 | Schleppkette | |
@@ -847,4 +847,4 @@ Referenzpunkt anfahren und erfassen, Basis erfassen, speichern.
 |---|---|---|
 | 1.0 | 2026-11-07 | Erste Ausgabe auf Basis von Pflichtenheft V1.7.10 und Smoketest 0a |
 | 1.1 | 2026-11-08 | Echter TMC2209 eingebaut: `DIR_POSITIVE_HIGH` = true; Messkette mit Kalibriertabelle (6 Stufen); LED-Strom beeinflusst die Analogmessung (bekanntes Problem) |
-| 1.2 | 2026-11-20 | Zwei Modulausfälle (Flash tot); HV-LED hing mit 47 Ω direkt an GPIO 4 (≈ 31 mA) – jetzt über NPN-Transistor; Shutter-LED korrigiert (Spindeltransistor); Hinweis zu GPIO-Lasten; Brownout-Schwelle 2,80 V (Contract V1.6.6); nach dem Umbau Messsignal bei HV an stabil, Kennlinie linearer; Sensorkennlinie neu angepasst (`124,5 · U^−1,144`, Contract V1.6.7) |
+| 1.2 | 2026-11-20 | Zwei Modulausfälle (Flash tot); HV-LED hing mit 47 Ω direkt an GPIO 4 (≈ 31 mA) – jetzt über NPN-Transistor; Shutter-LED korrigiert (Spindeltransistor); Hinweis zu GPIO-Lasten; Brownout-Schwelle 2,80 V (Contract V1.6.6); nach dem Umbau Messsignal bei HV an stabil, Kennlinie linearer; Sensorkennlinie neu angepasst (`124,5 · U^−1,144`, Contract V1.6.7); HV-LED-Vorwiderstand 38 Ω |
