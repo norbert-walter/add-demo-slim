@@ -934,16 +934,23 @@ def t12(c):
     return "Servicezone immer zu"
 
 
-@test("T13", 2, "4", "Hin- und Rückfahrt innerhalb 3 s: Shutter bleibt offen; 3 s nach Ende zu; STOP schließt sofort")
+@test("T13", 2, "4", "Hin- und Rückfahrt innerhalb der Nachlaufzeit: Shutter bleibt offen; shutter_hold s nach Ende zu; STOP schließt sofort")
 def t13(c):
     d = c.d
+    # 21.11.2026: the hold time is a parameter (shutter_hold, default 3 s). The test uses the value that is
+    # active on the device instead of a fixed 3 s; it changes nothing (no NVS write).
+    hold = float(d.config()["shutter_hold"])
+    c.val("shutter_hold (eingestellt)", hold, "s", status="info")
+    if hold < 1.5:
+        raise Problem("shutter_hold = %.1f s: zu kurz, um die Rückfahrt rechtzeitig zu starten (mindestens 1,5 s)" % hold)
+    lo, hi = hold - 0.5, hold + 1.0
     d.ready(hv=True)
     d.ok("START_TRAVERSE", start=100, end=200, speed=10)
     d.wait(lambda q: q["motion"]["mode"] == "traverse" and q["safety"]["shutter"] == "open", 30, "Shutter offen im Lauf")
     d.wait(lambda q: q["motion"]["mode"] == "none", 30, "Ende Hinfahrt")
     t_gap = time.time()
     d.ok("START_TRAVERSE", start=200, end=100, speed=10)
-    c.val("Zeit bis zum Folgebefehl", time.time() - t_gap, "s", mx=3.0)
+    c.val("Zeit bis zum Folgebefehl", time.time() - t_gap, "s", mx=min(3.0, hold - 0.5))
     closed_at = []
     d.wait(lambda q: q["motion"]["mode"] == "traverse", 3, "Rückfahrt startet")
     while True:
@@ -953,10 +960,11 @@ def t13(c):
         time.sleep(0.03)
     check(not closed_at, "Shutter zwischendurch zu bei pos %s" % closed_at[:3])
     t_end = time.time()
-    d.wait(lambda q: q["safety"]["shutter"] == "closed", 6, "Shutter schließt nach der Nachlaufzeit")
+    d.wait(lambda q: q["safety"]["shutter"] == "closed", hold + 3, "Shutter schließt nach der Nachlaufzeit")
     dt = time.time() - t_end
-    c.val("Shutter zu nach Laufende", dt, "s", lo=2.5, hi=4.0, target="3 (2,5 … 4,0)")
-    check(2.5 <= dt <= 4.0, "Shutter nach %.1f s zu" % dt)
+    tgt = "%g (%g … %g)" % (hold, lo, hi)
+    c.val("Shutter zu nach Laufende", dt, "s", lo=lo, hi=hi, target=tgt.replace(".", ","))
+    check(lo <= dt <= hi, "Shutter nach %.1f s zu (eingestellt %.1f s)" % (dt, hold))
     d.ok("START_MEASURE", pos=155)
     d.wait(lambda q: q["motion"]["mode"] == "measure" and q["safety"]["shutter"] == "open", 30, "Messung, Shutter offen")
     d.ok("STOP")
