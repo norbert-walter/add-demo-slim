@@ -34,6 +34,8 @@ ScreenMode s_mode = ScreenMode::NORMAL;  // mode of the current picture
 uint32_t   s_last_draw = 0;              // time of the last drawing
 bool       s_prev_touch = false;         // touch state of the previous tick (edge detection)
 AckPress   s_ack;                        // long press of the ACK area
+TouchFilter s_touch;                     // V1.6.8: touch debounce / release filter
+ButtonLock s_lock;                       // V1.6.8: button command lock
 float      s_progress = 0.0f;            // ACK progress 0..1 (from ackPressUpdate)
 
 enum Zone { Z_STATE, Z_LOCAL, Z_HV, Z_SHUTTER, Z_V0, Z_V1, Z_V2, Z_V3, Z_BAR, Z_ESTOP, Z_TEMP,
@@ -428,7 +430,9 @@ void displayTick(uint32_t now_ms) {
     ProcData d; snapshotGet(d);
     ScreenMode mode = screenModeOf(d.state);
     int x = 0, y = 0;
-    bool touch = lcd.getTouch(&x, &y) > 0;
+    bool raw = lcd.getTouch(&x, &y) > 0;
+    bool touch = touchFilterUpdate(s_touch, raw, x, y, now_ms, DISPLAY_TOUCH_RELEASE_MS);
+    x = s_touch.x; y = s_touch.y;
 
     if (!s_drawn || s_mode != mode || (uint32_t)(now_ms - s_last_draw) >= DISPLAY_PERIOD_MS) {
         draw(d, mode, now_ms);
@@ -442,14 +446,18 @@ void displayTick(uint32_t now_ms) {
         if (x < 384) {
             int idx = x / 64;
             if (idx >= 0 && idx < 6) {
-                if (ids[idx] == CmdId::HV_ON && d.safety.hv_on) {
-                    send(CmdId::HV_OFF);
-                } else {
-                    send(ids[idx]);
+                if (buttonLockAllow(s_lock, false, now_ms, DISPLAY_BUTTON_LOCK_MS)) {
+                    if (ids[idx] == CmdId::HV_ON && d.safety.hv_on) {
+                        send(CmdId::HV_OFF);
+                    } else {
+                        send(ids[idx]);
+                    }
                 }
             }
         } else {
-            send(CmdId::STOP);
+            if (buttonLockAllow(s_lock, true, now_ms, DISPLAY_BUTTON_LOCK_MS)) {
+                send(CmdId::STOP);
+            }
         }
     }
 
