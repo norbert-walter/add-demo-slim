@@ -1,6 +1,6 @@
 # Hardware-Dokumentation – Demoanlage ADD (Slim)
 
-**Version:** 1.2 · **Stand:** 2026-11-20 · **Autor:** Norbert Walter
+**Version:** 1.3 · **Stand:** 2026-11-21 · **Autor:** Norbert Walter
 **Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.10, Smoketest-Protokoll 0a, `src/config.h`
 
 ---
@@ -71,6 +71,7 @@ Bedient wird die Anlage über das Display, über WLAN mit dem Browser (IMS-Bedie
 | `docs/Smoketest_Protokoll.md` | Hardwareprüfung mit Messwerten (Sprint 0a) |
 | `src/config.h` | verbindliche Pinbelegung und Antriebsparameter |
 | `docs/reference/ADD_Style_Guide_IMS_V1_0.md` | Gestaltung von Webseiten für die Anlage |
+| `docs/parts/mechanics/` | Datenblätter und Details der Linearführung (igus drylin W) |
 
 ---
 
@@ -169,6 +170,7 @@ Ein Schrittmotor arbeitet als **Generator**, wenn seine Welle gedreht wird.
 | Display | MKS TS35-R, 3,5", 480 × 320, resistiver Touch |
 | Kommunikation | WLAN 802.11 b/g/n: eigener Access Point (immer an) und optional Router; USB (CH340C) für Flashen und Konsole |
 | Antrieb | Schrittmotor NEMA 17, 0,8 A, Treiber TMC2209, 1/16-Mikroschritt |
+| Linearführung | igus drylin W: Doppelschiene WS-10-40 (40 mm breit), Koppelschlitten WW-10-40 |
 | Übertragung | Zahnstange, 40,77 mm je Motorumdrehung → 78,49 Schritte/mm, Auflösung 0,013 mm |
 | Verfahrweg | 0 … 242 mm (Software), vorderer Endschalter bei 244,3 mm |
 | Geschwindigkeit | 1 … 20 mm/s, Beschleunigung 500 mm/s² |
@@ -177,7 +179,7 @@ Ein Schrittmotor arbeitet als **Generator**, wenn seine Welle gedreht wird.
 | Regelzyklus | 1 ms (Zykluszeit, Jitter und STOP-Latenz jeweils ≤ 3 ms) |
 | Anzeigen | LED grün (HV), LED rot (Shutter), LED blau (Herzschlag), Summer |
 | Bedienelemente | Not-Aus-Taster, Reset-Taster, Touch-Display |
-| Rahmen | 3D-Druck |
+| Rahmen | 3D-Druck (Grundrahmen, Messbügel, Stufenkörper) |
 
 ---
 
@@ -262,8 +264,13 @@ flowchart LR
 
 ### 4.3 Komponenten
 
+**Linearführung (igus drylin W).**
+Der C-förmige Messbügel fährt auf einer Doppelschiene **WS-10-40** (40 mm breit) von igus; als
+Schlitten dient der Koppelschlitten **WW-10-40**. Die Führung ist trockenlaufend (Gleitlager aus
+Kunststoff) und braucht kein Schmiermittel. Datenblätter und Details: `docs/parts/mechanics/`.
+
 **Rahmen und Messbügel (3D-Druck).**
-Grundrahmen, Schlitten und C-förmiger Messbügel sind im 3D-Druck gefertigt. Der Messbügel trägt im
+Grundrahmen und C-förmiger Messbügel sind im 3D-Druck gefertigt. Der Messbügel trägt im
 oberen Ausleger den Abstandssensor; der untere Ausleger liegt unter dem Messgut. Neben dem Messgut
 (bei 242 mm) sieht der Sensor den unteren Ausleger. Die Kabel zum Bügel laufen in einer
 Schleppkette. Wird der Messbügel seitenverkehrt eingebaut, werden Drehrichtung und
@@ -796,8 +803,10 @@ Referenzpunkt anfahren und erfassen, Basis erfassen, speichern.
 | 13 | 1 | LED rot mit Vorwiderstand | Shutter |
 | 14 | 1 | Netzteil 15 V DC, ≥ 1 A | |
 | 15 | 1 | Schleppkette | |
-| 16 | 1 | Rahmen, Schlitten, Messbügel, Stufenkörper | 3D-Druck |
+| 16 | 1 | Rahmen, Messbügel, Stufenkörper | 3D-Druck |
 | 17 | 1 | WLAN-Antenne für ESP32-WROOM-32U | |
+| 18 | 1 | igus drylin W Doppelschiene WS-10-40 | 40 mm breit, Führung des Messbügels |
+| 19 | 1 | igus drylin W Koppelschlitten WW-10-40 | trägt den Messbügel |
 
 ### 10.2 Pinbelegung (vollständig)
 
@@ -848,3 +857,4 @@ Referenzpunkt anfahren und erfassen, Basis erfassen, speichern.
 | 1.0 | 2026-11-07 | Erste Ausgabe auf Basis von Pflichtenheft V1.7.10 und Smoketest 0a |
 | 1.1 | 2026-11-08 | Echter TMC2209 eingebaut: `DIR_POSITIVE_HIGH` = true; Messkette mit Kalibriertabelle (6 Stufen); LED-Strom beeinflusst die Analogmessung (bekanntes Problem) |
 | 1.2 | 2026-11-20 | Zwei Modulausfälle (Flash tot); HV-LED hing mit 47 Ω direkt an GPIO 4 (≈ 31 mA) – jetzt über NPN-Transistor; Shutter-LED korrigiert (Spindeltransistor); Hinweis zu GPIO-Lasten; Brownout-Schwelle 2,80 V (Contract V1.6.6); nach dem Umbau Messsignal bei HV an stabil, Kennlinie linearer; Sensorkennlinie neu angepasst (`124,5 · U^−1,144`, Contract V1.6.7); HV-LED-Vorwiderstand 38 Ω |
+| 1.3 | 2026-11-21 | Linearführung igus drylin W (Doppelschiene WS-10-40, Koppelschlitten WW-10-40): Technische Daten, 4.3, Stückliste, Verweis auf `docs/parts/mechanics/` |
