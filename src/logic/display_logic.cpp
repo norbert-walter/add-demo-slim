@@ -77,3 +77,35 @@ bool ackPressUpdate(AckPress& a, ScreenMode mode, bool cause_active, bool touch_
     a.prev_touch = touch_in_area;
     return false;
 }
+
+bool touchFilterUpdate(TouchFilter& f, bool raw, int x, int y, uint32_t now_ms, uint32_t release_ms) {
+    if (raw) {
+        // Contact: take at once – no delay.
+        f.down = true;
+        f.x = x;
+        f.y = y;
+        f.last_ms = now_ms;
+    } else if (!raw && f.down && (uint32_t)(now_ms - f.last_ms) >= release_ms) {
+        // Released for long enough -> debounced release (x, y kept).
+        f.down = false;
+    }
+    // otherwise: nothing changes (x, y are NOT overwritten without contact).
+    return f.down;
+}
+
+bool buttonLockAllow(ButtonLock& b, bool is_stop, uint32_t now_ms, uint32_t lock_ms) {
+    if (is_stop) {
+        // STOP is never locked.
+        b.used = true;
+        b.last_ms = now_ms;
+        return true;
+    }
+    // Lock: deny if a command was sent within the lock period.
+    if (b.used && (uint32_t)(now_ms - b.last_ms) < lock_ms) {
+        return false;
+    }
+    // Allow and record.
+    b.used = true;
+    b.last_ms = now_ms;
+    return true;
+}
