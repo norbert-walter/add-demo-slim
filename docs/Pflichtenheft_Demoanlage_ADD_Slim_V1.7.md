@@ -351,13 +351,16 @@ optischen Abstandssensor ersetzt. Die Firmware wird agentenbasiert entwickelt
 
 ### Was die Demo zeigen soll
 
-1. KI liest `/add` → versteht Anlage vollständig → erklärt sie einem Benutzer
-2. KI liest `/add` → Benutzer stellt Fragen zu Bedienung und Funktion
-3. Python-Skript steuert Profilfahrt über REST-API – ohne LogiCAD
-4. Python erstellt individuelle Anzeigeseite aus `/proc`-Live-Daten
-5. Fehlersimulation (Zahnstange auskoppeln → `MOTOR_FAULT` bzw. Positionsabweichung) → Fehlerdiagnose mit KI
+1. Ein einfacher Mikrocontroller trägt die gesamte Funktionalität
+2. Ein Mikrocontroller kann Echtzeitfähigkeit mit 1 ms Zykluszeit erreichen
+3. Das Grundkonzept **Black Box** mit definierten Schnittstellen und fixer Firmware ermöglicht alle elementare Kunden-Anwendungen
+4. KI liest `/add` → versteht Anlage vollständig → erklärt sie einem Benutzer
+5. KI liest `/add` → Benutzer stellt Fragen zu Bedienung und Funktion
 6. ADD beschreibt sicherheitsrelevante Zustände → KI versteht Sicherheitslogik
-7. Ein einfacher Mikrocontroller trägt die gesamte Funktionalität
+7. KI kann komplexe Bewegungs- und Messabläufe über REST-API realisieren – ohne LogiCAD
+8. KI kann neue Anzeigeseiten aus `/proc`-Live-Daten erstellen (lokal/extern)
+9. KI kann Fehler erkennen (Referenz-Dickennormal verrutscht → `CALIBRATION_FAULT` bei Funktionstest) → Fehlerdiagnose mit KI
+10. Projektkoordination und Dokumentation liegt volständig im Git (revisionssicher, nachvollziehbar, geschützt) 
 
 ### KI-Einsatzbereiche (mittelfristig)
 
