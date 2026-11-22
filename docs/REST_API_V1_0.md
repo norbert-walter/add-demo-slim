@@ -1,6 +1,6 @@
 # REST-API – Kurzübersicht
 
-**Demoanlage ADD (Slim)** · Version 1.1 · Stand 2026-11-08 · Contract V1.6.4
+**Demoanlage ADD (Slim)** · Version 1.2 · Stand 2026-11-22 · Contract V1.6.8
 Ausführlich: `docs/Software_Dokumentation_V1_0.md` Kapitel 9–11, verbindlich: `docs/CONTRACT.md` §4–§5
 
 ---
@@ -16,7 +16,7 @@ Ausführlich: `docs/Software_Dokumentation_V1_0.md` Kapitel 9–11, verbindlich:
 | Content-Type | beliebig; Browser: `text/plain` (kein CORS-Preflight). Jede Antwort hat `Access-Control-Allow-Origin: *` |
 | Antwort | `{"status":"ok","err":0,"cmd":"…","crc":"…"}` oder `{"status":"error","err":-6,"cmd":"…","msg":"…","crc":"…"}`; HTTP 200, nur `BAD_CRC`/`BAD_JSON` mit HTTP 400 |
 | `OK` bedeutet | angenommen, Ausgänge gesetzt; Bewegungen laufen weiter – Ende in `/proc` (`motion.state`, `motion.mode`) |
-| Heartbeat | solange `safety.comm_armed = true`: mindestens alle 4 s, empfohlen jede Sekunde `GET_STATE`; sonst nach 5 s Fehler `COMM_TIMEOUT`. `GET /proc` zählt nicht |
+| Heartbeat | solange `safety.comm_armed = true`: `GET_STATE` spätestens alle 4 s (Pflicht), empfohlen jede Sekunde; KI-Agenten nach dem ADD-Dokument spätestens alle 2 s; sonst nach 5 s Fehler `COMM_TIMEOUT`. `GET /proc` zählt nicht (CONTRACT §6.5) |
 | Wiederholen | nie automatisch; bei `BUSY` erst `/proc` lesen, nur bei fehlender Wirkung erneut senden |
 
 **Beispiel Rahmen:**
@@ -74,7 +74,7 @@ Bei allen anderen Befehlen werden `params` ignoriert. Zahlen müssen endlich sei
 
 | Befehl | Zusatzfelder |
 |---|---|
-| `GET_STATE` | `"state"`, `"sys_err"`, `"local"`, `"cycle_max_us"`, `"period_max_us"`, `"overruns"`, `"prio_lat_max_us"` |
+| `GET_STATE` | `"state"`, `"sys_err"`, `"local"`, `"cycle_max_us"`, `"period_max_us"`, `"overruns"`, `"prio_lat_max_us"`; seit V1.6.6 `"reset_reason"` (z. B. `POWERON`, `BROWNOUT`), `"boots"`, `"brownouts"` (seit dem Einschalten), `"bod_level"` (Brownout-Stufe 0 … 7) |
 | `GET_CONFIG` | `"config":{…}` mit allen Parametern aus Abschnitt 3 (ohne `wifi_pass`) und zusätzlich `calib_raw_1` … `calib_raw_6`, `calib_valid`, `wifi_pass_set` |
 
 ---
@@ -210,6 +210,9 @@ Nach `ACK` bleiben HV und Shutter aus (kein automatischer Wiederanlauf).
 | `GET /openapi.json` | OpenAPI 3.1 dieser API – technische Referenz, Erweiterung zu ADD (V1.6.4) |
 | `GET /doc` | Dokumentationsseite mit Links (HTML) |
 | `GET /app.js` | ADDAPP (CRC, Rahmen, Regeln) für eigene Webseiten |
+| `GET /favicon.ico` | Symbol für den Browser-Tab (V1.6.5) |
+
+Dateien werden mit gzip ausgeliefert, wenn der Client `Accept-Encoding: gzip` sendet (V1.6.5).
 
 ---
 

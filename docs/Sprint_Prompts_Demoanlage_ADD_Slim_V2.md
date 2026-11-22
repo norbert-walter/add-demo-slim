@@ -1,5 +1,9 @@
 # Sprint-Prompts – Demoanlage ADD (Slim) · V3.0
 
+> **Historisches Dokument (Stand 13.10.2026).** Beschreibt den Sprint-Plan L1 … I1 mit den damaligen
+> Versionen (Pflichtenheft V1.7.6, Contract V1.5.20) und wird nicht mehr nachgeführt. Aktuelle Sprints:
+> `docs/sprints/`, Status: `README.md`, Übersicht: Software-Doku 6.8.
+
 **Stand:** 2026-10-13
 **Autor:** Norbert Walter
 **Basis:** Pflichtenheft V1.7.6, `docs/CONTRACT.md` V1.5.20 (Änderungen seit V1.3: Anhänge am Ende)

@@ -1,6 +1,6 @@
 # HTTP-Endpunkte – Kurzübersicht
 
-**Demoanlage ADD (Slim)** · Version 1.0 · Stand 2026-11-08 · Contract V1.6.5
+**Demoanlage ADD (Slim)** · Version 1.1 · Stand 2026-11-22 · Contract V1.6.8 (Endpunkte unverändert seit V1.6.5)
 Befehle für `/api`: `docs/REST_API_V1_0.md` · ausführlich: `docs/Software_Dokumentation_V1_0.md`
 Kapitel 10 · verbindlich: `src/comm/http_server.h`
 
@@ -61,7 +61,7 @@ Sie kommen mit `uploadfs` auf die Anlage; `/openapi.json` braucht zusätzlich di
 | Inhalt | eine Zeile JSON, ≤ 512 Byte, feste Feldreihenfolge, CRC als letztes Feld |
 | Abfragetakt | alle 500 ms; nächste Anfrage erst nach Ende der vorigen |
 | Cache umgehen | Zeitstempel anhängen: `/proc?t=<ms>` (Parameter wird ignoriert) |
-| Watchdog | hält den Kommunikations-Watchdog **nicht** am Leben (dafür `GET_STATE` über `/api`) |
+| Watchdog | hält den Kommunikations-Watchdog **nicht** am Leben (dafür `GET_STATE` über `/api`: spätestens alle 4 s, empfohlen 1 s, KI-Agenten 2 s – CONTRACT §6.5) |
 | Felder | `ts`, `state`, `err`, `local`, `motion{…}`, `measure{…}`, `safety{…}`, `crc` – Tabelle in `REST_API_V1_0.md` Abschnitt 6 |
 
 ### 3.2 `POST /api` – Befehle
@@ -95,6 +95,7 @@ Sie kommen mit `uploadfs` auf die Anlage; `/openapi.json` braucht zusätzlich di
 
 | Typische Zeile | Bedeutung |
 |---|---|
+| `boot: reset POWERON, boots 1, brownouts 0, brownout level 7` | Startgrund, Starts und Brownouts seit dem Einschalten, Brownout-Stufe (V1.6.6) |
 | `boot: ready, FW 1.0.0` | Start abgeschlossen |
 | `ap: ADD-Demo 192.168.4.1` | Access Point aktiv |
 | `sta: attempt 1/3` · `sta: connected <IP>` · `sta: backoff 120 s` · `sta: connection lost` | Router-WLAN |

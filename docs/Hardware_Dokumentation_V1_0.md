@@ -1,7 +1,7 @@
 # Hardware-Dokumentation – Demoanlage ADD (Slim)
 
 **Version:** 1.3 · **Stand:** 2026-11-21 · **Autor:** Norbert Walter
-**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.10, Smoketest-Protokoll 0a, `src/config.h`
+**Basis:** Pflichtenheft Demoanlage ADD Slim V1.7.21 (geprüft 22.11.2026), Smoketest-Protokoll 0a, `src/config.h`
 
 ---
 
@@ -413,7 +413,9 @@ Pull-ups sitzen auf dem Board (außer am Sensoreingang, Kapitel 6).
 
 Das Display wird mit **zwei Flachbandkabeln** an die Buchsen **EXP1** und **EXP2** des Mainboards
 angeschlossen (EXP1 an EXP1, EXP2 an EXP2; Kabel nicht vertauschen, Kodiernase beachten). Display
-und Touch teilen sich den SPI-Bus (VSPI):
+und Touch teilen sich den SPI-Bus (VSPI). Der Touch ist resistiv; die Firmware entprellt ihn (losgelassen
+erst nach 100 ms ohne Kontakt, nach einem Tastenbefehl 400 ms Sperre außer für STOP, V1.7.21). Fest
+und eindeutig drücken.
 
 | Signal | ESP32-Pin | Bemerkung |
 |---|---|---|
@@ -861,4 +863,4 @@ Referenzpunkt anfahren und erfassen, Basis erfassen, speichern.
 | 1.0 | 2026-11-07 | Erste Ausgabe auf Basis von Pflichtenheft V1.7.10 und Smoketest 0a |
 | 1.1 | 2026-11-08 | Echter TMC2209 eingebaut: `DIR_POSITIVE_HIGH` = true; Messkette mit Kalibriertabelle (6 Stufen); LED-Strom beeinflusst die Analogmessung (bekanntes Problem) |
 | 1.2 | 2026-11-20 | Zwei Modulausfälle (Flash tot); HV-LED hing mit 47 Ω direkt an GPIO 4 (≈ 31 mA) – jetzt über NPN-Transistor; Shutter-LED korrigiert (Spindeltransistor); Hinweis zu GPIO-Lasten; Brownout-Schwelle 2,80 V (Contract V1.6.6); nach dem Umbau Messsignal bei HV an stabil, Kennlinie linearer; Sensorkennlinie neu angepasst (`124,5 · U^−1,144`, Contract V1.6.7); HV-LED-Vorwiderstand 38 Ω |
-| 1.3 | 2026-11-21 | Linearführung igus drylin W (Doppelschiene WS-10-40, Koppelschlitten WW-10-40): Technische Daten, 4.3, Stückliste, Verweis auf `docs/parts/mechanics/`; HV-LED: Transistor BC547B (Erstaufbau SC236), LED-Strom 21 mA gemessen |
+| 1.3 | 2026-11-21 | Linearführung igus drylin W (Doppelschiene WS-10-40, Koppelschlitten WW-10-40): Technische Daten, 4.3, Stückliste, Verweis auf `docs/parts/mechanics/`; HV-LED: Transistor BC547B (Erstaufbau SC236), LED-Strom 21 mA gemessen; Basis Pflichtenheft V1.7.21 (Touch-Entprellung in 5.2) |

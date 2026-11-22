@@ -400,8 +400,14 @@ Die Haltezeit erlaubt eine fortlaufende Hin-und-her-Profilfahrt: Schickt der Cli
   angenommen wurde (`safety.comm_armed = true`).
 - **Unscharf**, wenn die Achse steht und die HV aus ist, oder bei Bedienung am Display.
 - Scharf und > 5 s kein gültiges `/api`-Paket → Fehler `COMM_TIMEOUT`.
-- Clients halten ihn mit `GET_STATE` (mindestens alle 4 s, empfohlen 1 s) am Leben. `GET /proc`
-  zählt **nicht**.
+- Clients halten ihn mit `GET_STATE` am Leben. `GET /proc` zählt **nicht**. Drei Stufen (CONTRACT §6.5):
+
+| Wer | Intervall `GET_STATE` | Warum |
+|---|---|---|
+| Gerät (Watchdog) | Fehler nach **> 5 s** ohne `/api`-Paket | fest in der Firmware (`COMM_TIMEOUT_MS`) |
+| jeder Client (Mindestanforderung) | **spätestens alle 4 s** | 1 s Reserve für WLAN-Aussetzer |
+| Weboberfläche, `add_client.py`, Skripte (empfohlen) | **jede Sekunde** | so arbeiten die mitgelieferten Clients |
+| KI-Agenten nach dem ADD-Dokument | **spätestens alle 2 s** | bewusst strenger: mehr Reserve für Agenten-Werkzeuge; kann eine KI das nicht halten (Dialog), startet sie keine Fahrt und kein HV, sondern bietet ein Skript an |
 
 ### 4.6 Bedienvorrang (LOCAL)
 
@@ -587,7 +593,7 @@ Pflichtenhefts.
 | I1 | `net_task`, `main`, `display`, Gesamt-Build | zwei Suiten, Gerätetest |
 | W1 | Weboberfläche | JS-Tests, Browserprüfung |
 | IMS-UI | IMS-Bedienoberfläche ersetzt W1 | JS-Tests, Browserprüfung |
-| A1 | Abnahme nach Pflichtenheft Kapitel 10 | `scripts/acceptance_a1.py`; abgenommen 08.11.2026, Volllauf nach dem LED-Umbau 21.11.2026 |
+| A1 | Abnahme nach Pflichtenheft Kapitel 10 | `scripts/acceptance_a1.py`; abgenommen 08.11.2026; Volllauf nach dem LED-Umbau 21.11.2026 36/39, Einzelheiten Kapitel 15 |
 | K1 | Kalibriertabelle mit 6 Stufen | Suiten, JS-Tests, Abnahme T18K–T20 |
 | K2 | Kalibrierung unter Messbedingungen (HV an, Shutter offen) | `test_app_logic`, Abnahme T18K |
 | D1 | `add.json`, `openapi.json`, Route `/openapi.json` (D1.1); `/add.html` als Datei, gzip, Favicon (D1.2); Demo-Skripte | `test_add.js`, `check_add.py`; KI-Validierung 09.11.2026; Demo-Skripte offen |
@@ -1467,7 +1473,7 @@ Nginx-Reverse-Proxy mit TLS und HTTP Basic Auth. Zugangsdaten stehen in keiner D
 | `SET estop_nc`, `wifi_ssid`, `wifi_pass` | keine ADD-Aktion – dem Betreiber vorbehalten |
 
 **KI und Skripte.** Eine KI, die im Dialog arbeitet (eine Anfrage pro Antwort), kann den Herzschlag
-alle 2 s nicht halten; nach 5 s löst der Watchdog `COMM_TIMEOUT` aus (sicher, aber mit ACK). Für
+alle 2 s (die für KI-Agenten bewusst strengere Vorgabe des ADD-Dokuments, 4.5) nicht halten; nach 5 s löst der Watchdog `COMM_TIMEOUT` aus (sicher, aber mit ACK). Für
 automatische Abläufe – Profilfahrten, Messreihen, die Abnahme – sind deshalb Python-Skripte da. Ein
 Skript, das **der Benutzer** startet, läuft ohne Rückfragen: Die Entscheidung, es zu starten, ersetzt
 die Bestätigung je Aktion. Die KI darf solche Skripte schreiben und erklären, aber **nicht selbst
@@ -1931,7 +1937,7 @@ temporären Arbeitsbaum (nur für den Reviewer; die Referenz liegt nicht im Repo
 | FastAccelStepper-Fork | Korrektur des IRAM-Fehlers; Pull Request an das Original offen |
 | `/style.css` | Route liefert 404 (Datei entfernt); kann bei der nächsten Firmware-Änderung entfallen |
 | Demo-Skripte (D1) | `add_traverse_scan.py` / `_2.py` als Entwurf; `demo_traverse.py`, `demo_safety.py` offen |
-| Abnahme außerhalb des Skripts | H05, Ergänzungsblatt |
+| Abnahme | T01 nach dem Volllauf vom 21.11.2026 wiederholen; außerhalb des Skripts: H05, Ergänzungsblatt |
 | Bedienvorrang aus | `LOCAL_HOLD_MS = 0`; einschalten mit einem Wert > 0 in `config.h` |
 
 **Erledigt** (früher hier geführt):
@@ -1940,7 +1946,7 @@ temporären Arbeitsbaum (nur für den Reviewer; die Referenz liegt nicht im Repo
 |---|---|
 | Resonanz bei 5 mm/s | TMC2209 statt des ersten Treibers (Hardware-Doku 1.1) |
 | ADC-Versatz ≈ 235 mV | Ursache war der LED-Strom an GPIO 4; HV-LED über Transistor, Kennlinie neu (V1.6.7) |
-| Sprint A1 | abgenommen 08.11.2026; Volllauf nach dem LED-Umbau 21.11.2026 |
+| Sprint A1 | abgenommen 08.11.2026; Volllauf nach dem LED-Umbau 21.11.2026: 36 von 39 bestanden, Block 1 Sicherheit 7/7. Die drei ❌ ohne Firmwarefehler: M10 (Touch prellte → Sprint B2, Nachtest M10 bestanden), T13 (Skript prüfte fest 3 s, eingestellt waren 5 s → Skript korrigiert), T01 (`/settings` einmal 1053 ms nach dem Router-Test; Wiederholung offen) |
 | ADD-Dokument nicht validiert | KI-Validierung 09.11.2026 passed_with_warnings (13.9) |
 | `/add.html` lädt 24 s | Datei mit gzip-Kopie (V1.6.5), etwa 0,2 s |
 | Touch prellt | Entprellung und Tastensperre (V1.6.8) |
@@ -2030,4 +2036,4 @@ Anmerkungen:
 | 1.4 | 2026-11-20 | Brownout-Stufe, Startgrund und Startzähler, schwächste Treiberstufe für GPIO 4/32 (Contract V1.6.6, Sprint B1): 3.5, 9.4, 10.3 |
 | 1.5 | 2026-11-20 | Sensorkennlinie `124,5 · U^−1,144` nach dem LED-Umbau (Contract V1.6.7): 3.4 |
 | 1.6 | 2026-11-21 | Touch-Entprellung und Tastensperre am Display (Contract V1.6.8, Sprint B2): 12.2; Testtabelle aktualisiert (517) |
-| 1.7 | 2026-11-22 | Nachgeführt: Sprints 6.8 (K1, K2, D1.2, B1, B2), Build-Flag `BROWNOUT_LEVEL` (8.1), Testzahlen 8.5, Favicon und gzip (10.1), `web-ui/index.html` (12.1), Stand der KI-Validierung (13.9), Werkzeuge 14.4 (`check_add`, `diag_http`, `diag_sensor`, `build_data`/`embed_app`, `add_validation_run`, `add_traverse_scan`), Abnahme in drei Blöcken; Kapitel 15 mit erledigten Punkten (Resonanz durch TMC2209 beseitigt u. a.); Umfang 16.4 neu gezählt; Historie aufsteigend sortiert |
+| 1.7 | 2026-11-22 | Heartbeat in drei Stufen (4.5, 13.1); Ergebnis des Volllaufs A1 (6.8, 15). Nachgeführt: Sprints 6.8 (K1, K2, D1.2, B1, B2), Build-Flag `BROWNOUT_LEVEL` (8.1), Testzahlen 8.5, Favicon und gzip (10.1), `web-ui/index.html` (12.1), Stand der KI-Validierung (13.9), Werkzeuge 14.4 (`check_add`, `diag_http`, `diag_sensor`, `build_data`/`embed_app`, `add_validation_run`, `add_traverse_scan`), Abnahme in drei Blöcken; Kapitel 15 mit erledigten Punkten (Resonanz durch TMC2209 beseitigt u. a.); Umfang 16.4 neu gezählt; Historie aufsteigend sortiert |

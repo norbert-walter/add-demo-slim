@@ -843,7 +843,15 @@ the shutter closes at the end of every run (behaviour before V1.5).
   Accepted from the touch display → disarmed (local operation needs no network).
 - Disarmed automatically when the axis is idle and HV is off.
 - Armed and no valid `/api` packet for > 5 s → fault `COMM_TIMEOUT`.
-- Clients keep it alive with `GET_STATE` at least every 4 s (`GET /proc` does not count).
+- Clients keep it alive with `GET_STATE` (`GET /proc` does not count). Three levels (clarified
+  V1.6.8, 2026-11-22 – no change in behaviour):
+
+  | Who | `GET_STATE` interval | Why |
+  |---|---|---|
+  | device (watchdog) | fault after **> 5 s** without an `/api` packet | firmware, `COMM_TIMEOUT_MS` |
+  | every client (binding minimum) | **at most every 4 s** | 1 s margin for WLAN gaps |
+  | web UI, `add_client.py`, scripts (recommended) | **every 1 s** | what the supplied clients do |
+  | AI agents following the ADD document | **at most every 2 s** | deliberately stricter (margin for agent tools); an agent that cannot keep it (turn-by-turn dialog) starts no motion and no HV and offers a script instead |
 
 ### 6.6 LOCAL operator priority (V1.1)
 
