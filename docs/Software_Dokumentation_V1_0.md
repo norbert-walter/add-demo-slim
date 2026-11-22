@@ -1,6 +1,6 @@
 # Software-Dokumentation – Demoanlage ADD (Slim)
 
-**Version:** 1.6 · **Stand:** 2026-11-21 · **Autor:** Norbert Walter
+**Version:** 1.7 · **Stand:** 2026-11-22 · **Autor:** Norbert Walter
 **Firmware:** `FW_VERSION` 1.0.0 · **Contract:** V1.6.8 · **Pflichtenheft:** V1.7.21
 **Hardware:** siehe `docs/Hardware_Dokumentation_V1_0.md`
 
@@ -587,8 +587,12 @@ Pflichtenhefts.
 | I1 | `net_task`, `main`, `display`, Gesamt-Build | zwei Suiten, Gerätetest |
 | W1 | Weboberfläche | JS-Tests, Browserprüfung |
 | IMS-UI | IMS-Bedienoberfläche ersetzt W1 | JS-Tests, Browserprüfung |
-| A1 | Abnahme nach Pflichtenheft Kapitel 10 | vorbereitet: `docs/sprints/A1.md`, `scripts/acceptance_a1.py` |
-| D1 | `add.json`, `openapi.json`, Demo-Skripte | in Arbeit |
+| A1 | Abnahme nach Pflichtenheft Kapitel 10 | `scripts/acceptance_a1.py`; abgenommen 08.11.2026, Volllauf nach dem LED-Umbau 21.11.2026 |
+| K1 | Kalibriertabelle mit 6 Stufen | Suiten, JS-Tests, Abnahme T18K–T20 |
+| K2 | Kalibrierung unter Messbedingungen (HV an, Shutter offen) | `test_app_logic`, Abnahme T18K |
+| D1 | `add.json`, `openapi.json`, Route `/openapi.json` (D1.1); `/add.html` als Datei, gzip, Favicon (D1.2); Demo-Skripte | `test_add.js`, `check_add.py`; KI-Validierung 09.11.2026; Demo-Skripte offen |
+| B1 | Brownout-Schwelle, Startgrund und Startzähler, GPIO-Treiberstufe | fünf Suiten, Gerät (A1 21.11.2026) |
+| B2 | Touch-Entprellung, Tastensperre am Display | `test_display_logic`, `test_display`, Abnahme M10 |
 
 Der aktuelle Stand steht in der Statustabelle der `README.md`, die Befunde in `docs/reviews/`.
 
@@ -733,6 +737,10 @@ Gemeinsame Einstellungen: Plattform pioarduino 55.03.312-1 (Arduino Core 3.3.12,
 115200 Bd für Upload und Monitor, Port `/dev/ttyUSB0` (anderswo mit `--upload-port` überschreiben),
 Partitionstabelle `partitions.csv`, Dateisystem SPIFFS, Nachprüfung `scripts/check_iram.py`.
 
+Build-Flag `BROWNOUT_LEVEL` (V1.6.6): Brownout-Stufe 0 … 7, Standard **7 = 2,80 V** aus `src/config.h`;
+nur zum Abweichen nötig, z. B. `-DBROWNOUT_LEVEL=5` in `build_flags` von `[esp32_base]`. Die eingestellte
+Stufe steht in der Startmeldung, in `/log` und in `GET_STATE` (`bod_level`).
+
 > **Warnung:** Alle Befehle mit `-t upload`, `-t uploadfs`, `pio test -e esp32-test` und
 > `pio device monitor` greifen auf das Gerät zu. Beim Flashen und beim Öffnen der seriellen
 > Schnittstelle startet das Board neu – **der Motor kann sich bewegen**. Fahrbereich frei,
@@ -818,7 +826,7 @@ Für Skripte und den Agenten (nicht interaktiv): `python scripts/serial_cmd.py "
 ```
 pio test -e native
 ```
-Alle 22 nativen Testsuiten (479 Tests) auf dem PC – kein Gerät nötig.
+Alle 22 nativen Testsuiten (517 Tests) auf dem PC – kein Gerät nötig.
 
 ```
 pio test -e native -f native/test_safety_logic
@@ -838,9 +846,9 @@ Not-Aus-Pegelwechsel, NVS, `/proc`-Größe und **Motor 2 mm hin und zurück**). 
 schaltet Ausgänge und bewegt die Achse – nur mit Freigabe.
 
 ```
-node --test test/js/test_app.js test/js/test_pages.js
+node --test test/js/test_app.js test/js/test_pages.js test/js/test_add.js
 ```
-Tests der Weboberfläche (35 Tests; kein PlatformIO-Befehl, Node ≥ 18).
+Tests der Weboberfläche und der ADD-Dokumente (65 Tests; kein PlatformIO-Befehl, Node ≥ 18).
 
 ### 8.6 Sonstiges
 
@@ -1068,11 +1076,16 @@ curl -s -X POST --data '{"cmd":"HV_ON","params":{},"crc":"88F7C802"}' http://192
 | `GET /log` | letzte 20 Logzeilen | text/plain |
 | `GET /app.js` | ADDAPP für eigene Seiten | application/javascript |
 | `GET /font-u400.woff2` … `/font-m700.woff2` | Schriften (1 Tag Cache) | font/woff2 |
+| `GET /favicon.ico` | Symbol für den Browser-Tab (1 Tag Cache) – ab V1.6.5 | image/x-icon |
 | `GET /style.css` | entfällt seit V1.5.26 → 404 | – |
 | andere | `404 {"error":"not found"}` | application/json |
 
 Jede Antwort trägt `Access-Control-Allow-Origin: *`; Seiten auf anderen Rechnern (oder als lokale
 Datei) dürfen die Anlage also abfragen. Fehlt `add.json` bzw. `openapi.json` im Dateisystem, liefern `/add`, `/add.html` bzw. `/openapi.json` 404.
+
+Seit V1.6.5 liegen von `/`, `/app.js`, `/doc`, `/add`, `/add.html` und `/openapi.json` gzip-Kopien im
+Dateisystem (`scripts/build_data.py`). Schickt der Browser `Accept-Encoding: gzip`, kommt die Kopie mit
+`Content-Encoding: gzip`, sonst die Originaldatei. `/add.html` lädt damit in etwa 0,2 s statt 27 s.
 
 ### 10.2 `GET /proc`
 
@@ -1304,8 +1317,8 @@ Kopfzeile mit Alarmbox, Statusboxen für Hochspannung und Shutter, Gerätekennun
 läuft
 
 - **vom Gerät** geladen: spricht direkt mit dem Gerät, kein Dialog,
-- **als lokale Datei** geöffnet: Verbindungsdialog (Host/IP, Port) oder Demo-Modus mit
-  simulierten Daten.
+- **als lokale Datei** geöffnet (`web-ui/index.html`, eine Kopie, die `embed_app.py` anlegt):
+  Verbindungsdialog (Host/IP, Port) oder Demo-Modus mit simulierten Daten.
 
 | Seite | Inhalt |
 |---|---|
@@ -1663,6 +1676,12 @@ Bedienkonzept → liest `/proc` → startet nach Bestätigung eine Profilfahrt (
 Dicke). Das Ergebnis wird im Block `validation.validated_by` des ADD-Dokuments eingetragen und auf
 der Statusseite der Weboberfläche angezeigt.
 
+**Stand:** Validiert am 09.11.2026 mit Claude (`claude-opus-5-5`, Modus „thinking“) über
+`scripts/add_validation_run.py`: **passed_with_warnings**. Die Verbesserungen aus der Validierung
+(`validation.improvements_applied`) sind in `add.json` eingearbeitet, u. a. Not-Aus ehrlich als
+Firmware-Funktion ohne Drahtbrucherkennung beschrieben, STOP und HV_OFF als primärer Halt, Links auf
+GitHub-Rohdateien.
+
 ---
 
 ## 14. Tests und Werkzeuge
@@ -1740,7 +1759,8 @@ Vorfall „move 2010“).
 
 ### 14.4 Python-Werkzeuge (`scripts/`)
 
-Alle nutzen nur die Standardbibliothek (außer `serial_cmd.py`: `pyserial`; `sim_device.py` braucht g++).
+Alle nutzen nur die Standardbibliothek (außer `serial_cmd.py`: `pyserial`; `check_add.py`: `jsonschema` für die
+Schemaprüfung; `sim_device.py` braucht g++).
 
 **`add_client.py` – Referenz-Client der API**
 
@@ -1801,13 +1821,19 @@ blockiert). Ideal, um Skripte und KI-Agenten vor dem ersten Lauf an der Anlage z
 ```
 python3 scripts/acceptance_a1.py --host 192.168.4.1
 ```
-Führt durch die Abnahme nach Pflichtenheft Kapitel 10: **Teil 1** Handprüfungen M01–M12 (der Prüfer
-handelt, das Skript fährt die Achse und prüft die Wirkung nach – auch jede Display-Taste), dann **Teil 2**
-automatische Prüfungen T01–T29 ohne Prüfer. Fragt den Namen des Prüfers ab. Protokoll
-`Abnahme_A1_<JJJJ-MM-TT>_<HHMM>.md` (in `docs/reviews`) mit allen Ergebnissen, einer Tabelle aller
-Messwerte und den Rohdaten. **Bewegt die Achse, schaltet die HV, startet die Anlage neu.**
-Optionen: `--only M09,T18`, `--no-manual` (nur Teil 2), `--tag <zusatz>`, `--pruefer <name>`,
-`--skip-soak`, `--sim` (gegen `sim_device.py`). Ablauf: `docs/sprints/A1.md`.
+Führt durch die Abnahme nach Pflichtenheft Kapitel 10 in drei Blöcken: **Block 1** Sicherheit S01–S07
+(Not-Aus, Endlagen, Fahrtrichtung, Not-Aus-Zeit mit Oszilloskop), **Block 2** weitere Handprüfungen
+M01–M11 (der Prüfer handelt, das Skript fährt die Achse und prüft die Wirkung nach – auch jede
+Display-Taste), **Block 3** automatische Prüfungen T01–T29 ohne Prüfer. Fragt den Namen des Prüfers ab.
+Protokoll `Abnahme_A1_<JJJJ-MM-TT>_<HHMM>_<tag>.md` mit allen Ergebnissen, einer Tabelle aller Messwerte,
+den Rohdaten, `GET_CONFIG` am Anfang und Ende, `GET_STATE` und `/log` am Ende; dazu ein Fehlerbericht
+mit den nicht bestandenen Prüfungen. **Bewegt die Achse, schaltet die HV, startet die Anlage neu.**
+Bei einem Teillauf ohne Block 1 fragt das Skript, ob der Sicherheitsblock mit dem jetzigen Stand
+bestanden war, und vermerkt die Antwort mit Nachweis im Protokoll.
+Optionen: `--only M10,T18`, `--no-manual` (nur Block 3), `--tag <zusatz>`, `--pruefer <name>`,
+`--sicherheit-bestaetigt <protokoll>`, `--skip-soak`, `--soak-minutes <min>`, `--out-dir <ordner>`,
+`--sim` (gegen `sim_device.py`). T13 prüft die eingestellte Nachlaufzeit `shutter_hold`
+(seit 21.11.2026). Ablauf: `docs/sprints/A1.md`.
 
 **`fake_device.py` – simuliertes Gerät**
 
@@ -1829,6 +1855,61 @@ python3 scripts/serial_cmd.py --port /dev/ttyUSB0 "status" --timeout 10
 ```
 Für Smoketest und Firmware-Konsole; wartet nach dem Reset auf `boot: ready`.
 
+**`check_add.py` – ADD-Endpunkte prüfen (nur lesend)**
+
+```
+python3 scripts/check_add.py --base http://192.168.4.1
+```
+Prüft, was ein KI-Agent sieht: `/llms.txt`, `/add` und `/add.html` (dasselbe JSON), `/openapi.json`
+(OpenAPI 3.1, Version passend zum Contract), `/proc`, `GET_STATE` und `GET_CONFIG` gegen die Schemas
+samt CRC, Ablehnung einer falschen CRC und eines ungültigen `SET`, gzip-Auslieferung mit Ladezeiten.
+Ändert nichts. Über die Internetadresse mit `--user <Benutzer>`; das Passwort wird abgefragt und nicht
+gespeichert.
+
+**`diag_http.py` – Ladezeiten der Webdateien**
+
+```
+python3 scripts/diag_http.py --local http://192.168.1.120
+```
+Lädt einige Dateien je einmal ohne und mit gzip und zeigt Zeit bis zum ersten Byte, Verlauf, Gesamtzeit
+und Durchsatz. Mit `--remote <adresse>` zusätzlich über den Reverse-Proxy (Benutzer und Passwort
+werden abgefragt, nicht gespeichert). Nur GET.
+
+**`diag_sensor.py` – hängt der Abstand vom Betriebszustand ab?**
+
+```
+python3 scripts/diag_sensor.py --host 192.168.1.120 --pos 115
+```
+Misst auf einer Stufe je 40 Werte in den Zuständen HV aus, HV an, Messung (Shutter offen), wieder aus
+und nach einer Pause; gibt Mittelwert, Sigma und Abweichung aus. Mit diesem Skript wurde der Einfluss
+des LED-Stroms gefunden. **Bewegt die Achse, schaltet HV und Shutter.**
+
+**`build_data.py` und `embed_app.py` – erzeugte Dateien in `data/`**
+
+`embed_app.py` kopiert `data/www/app.js` in `index.html`, legt die Kopie `web-ui/index.html` an und ruft
+`build_data.py` auf. `build_data.py` erzeugt `data/add.html` aus `add.json` und die gzip-Kopien. Nach
+jeder Änderung dieser Dateien ausführen, dann `uploadfs`; `test/js/test_add.js` meldet veraltete Dateien.
+
+**`add_validation_run.py` – KI-Validierung (Kapitel 13.9)**
+
+```
+python3 scripts/add_validation_run.py --host 192.168.1.120
+```
+Von Claude nach den Regeln in `/add` geschriebener Ablauf: CRC-Selbsttest, `/proc` und `GET_CONFIG`
+lesen, dann `INIT`, `HV_ON`, Profilfahrt mit Aufzeichnung, `STOP`, `HV_OFF` – jeder Schritt mit
+Bewegung oder HV wird einzeln bestätigt. `--selftest` nur ohne Gerät.
+
+**`add_traverse_scan.py`, `add_traverse_scan_2.py` – Profilmessung (Demo-Skripte, Entwurf)**
+
+```
+python3 scripts/add_traverse_scan_2.py --host 192.168.1.120 --cycles 2 --threshold 1.0
+```
+Von Claude nach den Regeln in `/add` geschrieben, vom Bediener gestartet (einmal bestätigen). Fahren
+Messfahrten hin und zurück innerhalb der Nachlaufzeit, sodass der Shutter offen bleibt;
+`add_traverse_scan_2.py` verfolgt dabei die Kanten des Messguts (`--threshold`, Hysterese 3 mm) und
+hält bei Not-Aus, Fehler, STOP am Display oder Endschalter an. Optionen `--start`, `--end`, `--speed`,
+`--cycles`. **Bewegt die Achse, schaltet die HV.** Noch nicht endgültig (Sprint D1).
+
 **`check_iram.py`** – läuft automatisch nach jedem ESP32-Build und bricht ab, wenn der
 I2S-Interruptpfad von FastAccelStepper im Flash statt im IRAM liegt.
 
@@ -1843,15 +1924,26 @@ temporären Arbeitsbaum (nur für den Reviewer; die Referenz liegt nicht im Repo
 |---|---|
 | Not-Aus nur in Software | wirkt über die Firmware; bei der realen Anlage per Relais in Hardware |
 | Not-Aus als Schließer | `estop_nc = false`, keine Drahtbrucherkennung; Umbau auf Öffner empfohlen |
-| ADC-Versatz | ESP-Werte ≈ 235 mV über der Sensorspannung; Kennlinie darauf kalibriert; nach Tausch neu kalibrieren |
+| ADC je Modul verschieden | Die Kennlinie (V1.6.7) passt zum jetzigen ESP32-Modul; nach dem Tausch von Modul oder Sensor neu kalibrieren (Abnahme T18K prüft die Rohwerte auf ±7 mm) |
+| Kurze Pause beim Speichern | Schreiben in den Flash (NVS) hält den Regelzyklus einmal an (beobachtet 17 ms am 20.11.2026); gespeichert wird nur bei stehender Achse und HV aus |
 | Motorzucken beim Start | I2S-Ausgänge bis zur Initialisierung undefiniert |
-| Resonanz bei 5 mm/s | hörbar bei der Referenzfahrt, ohne Schrittverlust |
-| Eine HTTP-Verbindung zur Zeit | Laden der Weboberfläche verzögert `/api` um bis zu 1 s |
+| Eine HTTP-Verbindung zur Zeit | Laden der Weboberfläche verzögert `/api` (bei dauernd geladener Oberfläche bis etwa 0,8 s) |
 | FastAccelStepper-Fork | Korrektur des IRAM-Fehlers; Pull Request an das Original offen |
 | `/style.css` | Route liefert 404 (Datei entfernt); kann bei der nächsten Firmware-Änderung entfallen |
-| Sprint D1 in Arbeit | `add.json` und `openapi.json` als Entwurf (nicht KI-validiert); `/openapi.json` ab Firmware mit Contract V1.6.4; Demo-Skripte offen |
-| Sprint A1 offen | Abnahme nach Pflichtenheft Kapitel 10 |
+| Demo-Skripte (D1) | `add_traverse_scan.py` / `_2.py` als Entwurf; `demo_traverse.py`, `demo_safety.py` offen |
+| Abnahme außerhalb des Skripts | H05, Ergänzungsblatt |
 | Bedienvorrang aus | `LOCAL_HOLD_MS = 0`; einschalten mit einem Wert > 0 in `config.h` |
+
+**Erledigt** (früher hier geführt):
+
+| Punkt | Erledigt durch |
+|---|---|
+| Resonanz bei 5 mm/s | TMC2209 statt des ersten Treibers (Hardware-Doku 1.1) |
+| ADC-Versatz ≈ 235 mV | Ursache war der LED-Strom an GPIO 4; HV-LED über Transistor, Kennlinie neu (V1.6.7) |
+| Sprint A1 | abgenommen 08.11.2026; Volllauf nach dem LED-Umbau 21.11.2026 |
+| ADD-Dokument nicht validiert | KI-Validierung 09.11.2026 passed_with_warnings (13.9) |
+| `/add.html` lädt 24 s | Datei mit gzip-Kopie (V1.6.5), etwa 0,2 s |
+| Touch prellt | Entprellung und Tastensperre (V1.6.8) |
 
 ---
 
@@ -1901,27 +1993,29 @@ Der Flash hat 8 MB; genutzt werden 4 MB.
 
 ### 16.4 Überblick über den Umfang
 
-Stand 2026-11-07 (Commit `13f1936`). Gezählt sind Zeilen; „ohne Leerzeilen“ schließt Kommentare
-ein.
+Stand 2026-11-22 (Commit `cd7688e`, nach Sprint B2). Gezählt sind Zeilen; „ohne Leerzeilen“ schließt
+Kommentare ein.
 
 | Bereich | Dateien | Zeilen | ohne Leerzeilen |
 |---|---:|---:|---:|
-| **Firmware C/C++** (`src/` ohne Smoketest) | 52 | 7 223 | 6 482 |
-| davon reine Logik `src/logic/` | 24 | 3 946 | 3 520 |
+| **Firmware C/C++** (`src/` ohne Smoketest) | 52 | 7 565 | 6 800 |
+| davon reine Logik `src/logic/` | 24 | 4 227 | 3 779 |
 | Smoketest C++ (`src/smoketest/`) | 1 | 855 | 786 |
-| **Tests C/C++** (native, Gerätetest, Nachbildungen) | 44 | 7 694 | 7 469 |
-| **Weboberfläche HTML/JS** (`data/www/`) | 3 | 2 650 | 2 490 |
-| Tests der Weboberfläche JS (`test/js/`) | 2 | 414 | 402 |
-| **Python-Werkzeuge** (`scripts/`) | 5 | 1 024 | 898 |
-| **Projektdokumentation** (`docs/`, `README.md`) | 28 | 9 665 | 7 890 |
-| davon Sprint-Dateien und Review-Protokolle | 20 | 3 185 | 2 643 |
-| ADD-Referenzdokumente (`docs/reference/`, Spezifikation, Developer Guide, Style Guide v1.0) | 4 | 9 025 | 6 697 |
+| **Tests C/C++** (native, Gerätetest, Nachbildungen) | 48 | 8 434 | 8 201 |
+| **Weboberfläche HTML/JS** (`data/www/`) | 3 | 2 927 | 2 765 |
+| Tests JS (`test/js/`: Weboberfläche, ADD-Dokumente) | 3 | 912 | 868 |
+| **Python-Werkzeuge und Simulator** (`scripts/`) | 17 | 5 288 | 4 660 |
+| **Projektdokumentation** (`docs/` ohne `reference/`, `README.md`) | 61 | 16 311 | 13 766 |
+| davon Sprint-Dateien, Reviews und Abnahmeprotokolle | 54 | 10 059 | 8 760 |
+| ADD-Referenzdokumente (`docs/reference/`) | 5 | 9 882 | 7 401 |
 
 Anmerkungen:
 
-- Auf jede Zeile Firmware kommt etwas mehr als eine Zeile Testcode.
-- `index.html` (2 266 Zeilen) enthält CSS, Seitenaufbau, Seitenlogik und eine eingebettete Kopie von
-  `app.js` (371 Zeilen).
+- Auf jede Zeile Firmware kommt etwas mehr als eine Zeile Testcode (517 native Tests, 65 JS-Tests).
+- `index.html` (2 471 Zeilen) enthält CSS, Seitenaufbau, Seitenlogik und eine eingebettete Kopie von
+  `app.js` (443 Zeilen).
+- Seit dem 07.11.2026 (Commit `13f1936`) ist die Firmware um etwa 340 Zeilen gewachsen, die Tests um
+  etwa 740, die Python-Werkzeuge um gut 4 200 (Abnahme, ADD-Prüfung, Diagnose, Simulator, Demo-Skripte).
 - Die Zahlen ändern sich mit jedem Sprint; neu zählen mit
   `git ls-files 'src/*.cpp' 'src/*.h' | xargs wc -l` (entsprechend für die anderen Bereiche).
 
@@ -1931,8 +2025,9 @@ Anmerkungen:
 |---|---|---|
 | 1.0 | 2026-11-07 | Erste Ausgabe (Contract V1.5.27, Pflichtenheft V1.7.10); ADD-Kapitel vorläufig bis Sprint D1. Ergänzt: Bedienwege (1.1), WLAN-Einbuchen per Konsole (10.7, 11.1), Umfang (16.4) |
 | 1.1 | 2026-11-08 | Kalibriertabelle mit 6 Stufen, unter Messbedingungen (Contract V1.6.3, Sprints K1/K2): Messkette 3.4, Befehle, Parameter, `GET_CONFIG`, NVS Version 5, Kapitel 12.3 neu, Testzahlen |
-| 1.3 | 2026-11-08 | `/add.html` als Datei, gzip-Kopien (Contract V1.6.5, Sprint D1.2): 2.2, 10.5 |
 | 1.2 | 2026-11-08 | ADD-Dokument und OpenAPI (Contract V1.6.4, Sprint D1): 2.2, 10.1, 10.4, 10.5, 13.1 (Einstufung, Bestätigungen, KI und Skripte, Validierung), 13.2 |
-| 1.6 | 2026-11-21 | Touch-Entprellung und Tastensperre am Display (Contract V1.6.8, Sprint B2): 12.2; Testtabelle aktualisiert (517) |
-| 1.5 | 2026-11-20 | Sensorkennlinie `124,5 · U^−1,144` nach dem LED-Umbau (Contract V1.6.7): 3.4 |
+| 1.3 | 2026-11-08 | `/add.html` als Datei, gzip-Kopien (Contract V1.6.5, Sprint D1.2): 2.2, 10.5 |
 | 1.4 | 2026-11-20 | Brownout-Stufe, Startgrund und Startzähler, schwächste Treiberstufe für GPIO 4/32 (Contract V1.6.6, Sprint B1): 3.5, 9.4, 10.3 |
+| 1.5 | 2026-11-20 | Sensorkennlinie `124,5 · U^−1,144` nach dem LED-Umbau (Contract V1.6.7): 3.4 |
+| 1.6 | 2026-11-21 | Touch-Entprellung und Tastensperre am Display (Contract V1.6.8, Sprint B2): 12.2; Testtabelle aktualisiert (517) |
+| 1.7 | 2026-11-22 | Nachgeführt: Sprints 6.8 (K1, K2, D1.2, B1, B2), Build-Flag `BROWNOUT_LEVEL` (8.1), Testzahlen 8.5, Favicon und gzip (10.1), `web-ui/index.html` (12.1), Stand der KI-Validierung (13.9), Werkzeuge 14.4 (`check_add`, `diag_http`, `diag_sensor`, `build_data`/`embed_app`, `add_validation_run`, `add_traverse_scan`), Abnahme in drei Blöcken; Kapitel 15 mit erledigten Punkten (Resonanz durch TMC2209 beseitigt u. a.); Umfang 16.4 neu gezählt; Historie aufsteigend sortiert |
