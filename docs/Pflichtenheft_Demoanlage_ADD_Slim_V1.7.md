@@ -360,7 +360,8 @@ optischen Abstandssensor ersetzt. Die Firmware wird agentenbasiert entwickelt
 7. KI kann komplexe Bewegungs- und Messabläufe über REST-API realisieren – ohne LogiCAD
 8. KI kann neue Anzeigeseiten aus `/proc`-Live-Daten erstellen (lokal/extern)
 9. KI kann Fehler erkennen (Referenz-Dickennormal verrutscht → `CALIBRATION_FAULT` bei Funktionstest) → Fehlerdiagnose mit KI
-10. Projektkoordination und Dokumentation liegt volständig im Git (revisionssicher, nachvollziehbar, geschützt) 
+10. Projektkoordination und Dokumentation liegt volständig im Git (revisionssicher, nachvollziehbar, geschützt)
+11. Bedeutung von Agenten im Anlagenbetrieb (Systemüberwachung, automatisierte Fehlerdiagnose, Prozessüberwachung, Qualitätsüberwachung, Reporting, Erkennung von Optimierungspotenzial)
 
 ### KI-Einsatzbereiche (mittelfristig)
 
