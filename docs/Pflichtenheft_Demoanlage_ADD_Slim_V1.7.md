@@ -354,14 +354,15 @@ optischen Abstandssensor ersetzt. Die Firmware wird agentenbasiert entwickelt
 1. Ein einfacher Mikrocontroller trägt die gesamte Funktionalität
 2. Ein Mikrocontroller kann Echtzeitfähigkeit mit 1 ms Zykluszeit erreichen
 3. Das Grundkonzept **Black Box** mit definierten Schnittstellen und fixer Firmware ermöglicht alle elementare Kunden-Anwendungen
-4. KI liest `/add` → versteht Anlage vollständig → erklärt sie einem Benutzer
-5. KI liest `/add` → Benutzer stellt Fragen zu Bedienung und Funktion
-6. ADD beschreibt sicherheitsrelevante Zustände → KI versteht Sicherheitslogik
-7. KI kann komplexe Bewegungs- und Messabläufe über REST-API realisieren – ohne LogiCAD
-8. KI kann neue Anzeigeseiten aus `/proc`-Live-Daten erstellen (lokal/extern)
-9. KI kann Fehler erkennen (Referenz-Dickennormal verrutscht → `CALIBRATION_FAULT` bei Funktionstest) → Fehlerdiagnose mit KI
-10. Projektkoordination und Dokumentation liegt volständig im Git (revisionssicher, nachvollziehbar, geschützt)
-11. Bedeutung von Agenten im Anlagenbetrieb (Systemüberwachung, automatisierte Fehlerdiagnose, Prozessüberwachung, Qualitätsüberwachung, Reporting, Erkennung von Optimierungspotenzial)
+4. Die Firmware wird vollständig mit lokaler KI ohne LogiCAD erstellt
+5. KI liest `/add` → versteht Anlage vollständig → erklärt sie einem Benutzer
+6. KI liest `/add` → Benutzer stellt Fragen zu Bedienung und Funktion
+7. ADD beschreibt sicherheitsrelevante Zustände → KI versteht Sicherheitslogik
+8. KI kann komplexe Bewegungs- und Messabläufe über REST-API realisieren – ohne LogiCAD
+9. KI kann neue Anzeigeseiten aus `/proc`-Live-Daten erstellen (lokal/extern)
+10. KI kann Fehler erkennen (Referenz-Dickennormal verrutscht → `CALIBRATION_FAULT` bei Funktionstest) → Fehlerdiagnose mit KI
+11. Projektkoordination und Dokumentation liegt volständig im Git (revisionssicher, nachvollziehbar, geschützt)
+12. Bedeutung von Agenten im Anlagenbetrieb (Systemüberwachung, automatisierte Fehlerdiagnose, Prozessüberwachung, Qualitätsüberwachung, Reporting, Erkennung von Optimierungspotenzial)
 
 ### KI-Einsatzbereiche (mittelfristig)
 
