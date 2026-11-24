@@ -8,14 +8,14 @@ Der WLAN-QR enthält das Passwort im Klartext. Er wird deshalb nur nach tmp/ ges
 .gitignore) und gehört nicht ins Repository – drucken, dann löschen. Das Passwort wird verdeckt
 abgefragt und nirgends sonst gespeichert.
 
-Braucht:  pip install segno
+Braucht:  python3 -m pip install segno   (mit demselben python3, der das Skript startet)
 """
 import argparse, getpass, os, sys
 
 try:
     import segno
 except ImportError:
-    sys.exit('segno fehlt: pip install segno')
+    sys.exit('segno fehlt für %s – installieren mit:\n  %s -m pip install segno' % (sys.executable, os.path.basename(sys.executable)))
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, '..'))

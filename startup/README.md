@@ -54,7 +54,7 @@ Build nicht; der Web-UI-QR-Code ersetzt es.
 ## 4. QR-Codes erzeugen
 
 ```
-pip install segno
+python3 -m pip install segno
 ```
 ```
 python3 startup/make_qr.py
