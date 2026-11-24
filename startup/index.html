@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#004578">
+<title>Demoanlage ADD</title>
+<meta name="description" content="Einstieg in die Demoanlage ADD: Projektinfo, KI-Helfer und Web-UI.">
+<!--
+  Startseite der Demoanlage ADD (Slim) – Ziel von QR-Code und NFC-Tag am Gerät.
+  Veröffentlicht mit GitHub Pages aus dem Ordner startup/ (.github/workflows/pages.yml).
+  Stil nach docs/reference/ADD_Style_Guide_IMS_V1_0.md (dunkelblau, Ubuntu, keine externen Dateien).
+  Anpassen: Links und Texte direkt hier; den KI-Prompt im <textarea id="prompt"> unten.
+-->
+<style>
+@font-face { font-family: 'Ubuntu'; font-weight: 400; font-display: swap; src: url('fonts/font-u400.woff2') format('woff2'); }
+@font-face { font-family: 'Ubuntu'; font-weight: 700; font-display: swap; src: url('fonts/font-u700.woff2') format('woff2'); }
+:root {
+  --ims-orange: #F39200;
+  --header-bg: #004578;
+  --page-bg: #003759;
+  --panel-bg: #004578;
+  --panel-border: #3B6481;
+  --panel-header-bg: #002847;
+  --fg: #CDE6F9;
+  --fg-dim: #6184A0;
+  --fg-label: #9DBBD3;
+  --btn-bg: #337BAE;
+  --btn-fg: #CDE6F9;
+  --btn-hover-border: #FFA104;
+  --input-bg: #003256;
+  --input-border: #8099AB;
+  --input-fg: #F5FBFF;
+  --ok: #03CA15;
+  --warn: #F0F000;
+  --info: #00B6F8;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--page-bg);
+  color: var(--fg);
+  font: 15px/1.5 'Ubuntu', system-ui, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+a { color: var(--info); }
+.top {
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--panel-border);
+  padding: 14px 16px;
+}
+.top-inner, main, footer { max-width: 640px; margin: 0 auto; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.mark {
+  flex: none; width: 44px; height: 44px; border-radius: 3px;
+  background: var(--panel-header-bg); border: 1px solid var(--panel-border);
+  display: grid; place-items: center;
+  font-weight: 700; font-size: 14px; letter-spacing: 0.04em; color: var(--ims-orange);
+}
+h1 { font-size: 20px; margin: 0; font-weight: 700; }
+.sub { color: var(--fg-label); font-size: 13px; margin: 2px 0 0; }
+.badge {
+  display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 3px;
+  background: var(--ims-orange); color: #002847; font-size: 11px; font-weight: 700;
+  letter-spacing: 0.06em; vertical-align: 2px;
+}
+main { padding: 14px 16px 4px; }
+.intro { margin: 0 0 14px; }
+.note {
+  border-left: 3px solid var(--ok); padding: 6px 10px; margin: 0 0 16px;
+  background: var(--panel-header-bg); font-size: 13px; color: var(--fg-label);
+}
+.panel {
+  background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 3px;
+  margin: 0 0 14px; overflow: hidden;
+}
+.panel-header {
+  background: var(--panel-header-bg); padding: 8px 12px; display: flex; align-items: center; gap: 10px;
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+}
+.num {
+  flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--btn-bg); font-size: 12px; letter-spacing: 0;
+}
+.panel-body { padding: 12px; }
+.panel-body p { margin: 0 0 10px; }
+.panel-body p:last-child { margin-bottom: 0; }
+.btn {
+  display: block; width: 100%; text-align: center; text-decoration: none; cursor: pointer;
+  background: var(--btn-bg); color: var(--btn-fg); border: 1px solid transparent; border-radius: 3px;
+  font: 700 15px/1.2 'Ubuntu', system-ui, sans-serif; padding: 13px 12px; margin: 0 0 8px;
+}
+.btn:hover, .btn:focus-visible { border-color: var(--btn-hover-border); outline: none; }
+.btn-secondary { background: var(--panel-header-bg); border-color: var(--panel-border); font-weight: 400; }
+.btn:last-child { margin-bottom: 0; }
+.small { font-size: 13px; color: var(--fg-label); }
+ol.steps { margin: 0 0 12px; padding-left: 20px; }
+ol.steps li { margin: 0 0 4px; }
+code { font-family: ui-monospace, monospace; font-size: 13px; color: var(--input-fg); }
+details { margin-top: 10px; }
+summary { cursor: pointer; color: var(--fg-label); font-size: 13px; }
+textarea {
+  width: 100%; min-height: 190px; margin-top: 8px; resize: vertical;
+  background: var(--input-bg); color: var(--input-fg); border: 1px solid var(--input-border); border-radius: 3px;
+  font: 13px/1.45 'Ubuntu', system-ui, sans-serif; padding: 8px;
+}
+.toast {
+  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+  background: var(--panel-header-bg); border: 1px solid var(--ok); color: var(--fg);
+  padding: 8px 14px; border-radius: 3px; font-size: 13px; opacity: 0; transition: opacity .2s;
+  pointer-events: none; max-width: calc(100% - 32px);
+}
+.toast.show { opacity: 1; }
+.warn-line { border-left-color: var(--warn); }
+footer { padding: 4px 16px 24px; font-size: 12px; color: var(--fg-dim); }
+footer a { color: var(--fg-label); }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner brand">
+    <div class="mark" aria-hidden="true">ADD</div>
+    <div>
+      <h1>Demoanlage ADD <span class="badge">DEMO</span></h1>
+      <p class="sub">1:5-Modell eines radiometrischen Dickenmessers</p>
+    </div>
+  </div>
+</header>
+
+<main>
+  <p class="intro">Diese Anlage beschreibt sich selbst für KI-Agenten – mit <strong>ADD</strong>
+    (AI Device Description), einem offenen Standard. Eine KI liest daraus, was die Anlage kann,
+    welche Aktionen eine Bestätigung brauchen und welche Sicherheitsregeln gelten.</p>
+  <p class="note">Keine Strahlung: Hochspannung und Shutter sind nur LEDs. Der Messkopf fährt
+    aber wirklich – nicht in den Fahrbereich greifen.</p>
+
+  <section class="panel" aria-labelledby="h-info">
+    <div class="panel-header" id="h-info"><span class="num">1</span>Projektinfo</div>
+    <div class="panel-body">
+      <p>Firmware, Weboberfläche, ADD-Dokument und die ganze Dokumentation – offen auf GitHub.</p>
+      <a class="btn" href="https://github.com/norbert-walter/add-demo-slim">Projekt auf GitHub</a>
+      <a class="btn btn-secondary" href="https://github.com/norbert-walter/ai-device-description-add">Der ADD-Standard</a>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="h-ki">
+    <div class="panel-header" id="h-ki"><span class="num">2</span>KI-Helfer</div>
+    <div class="panel-body">
+      <p>Claude liest das ADD-Dokument der Anlage und erklärt dir Aufbau, Bedienung und
+        Sicherheitsregeln. Der Helfer hat keinen Zugriff auf die Anlage selbst – er erklärt nur.</p>
+      <a class="btn" id="kiWeb" href="https://claude.ai/new" target="_blank" rel="noopener">Prompt kopieren und Claude öffnen</a>
+      <a class="btn btn-secondary" id="kiDesktop" href="claude://claude.ai/new">In Claude Desktop öffnen</a>
+      <p class="small">Steht der Text in Claude nicht schon im Eingabefeld: einfach einfügen und
+        absenden. Ein Claude-Konto ist nötig.</p>
+      <details>
+        <summary>Prompt ansehen</summary>
+<textarea id="prompt" readonly>Du bist der KI-Helfer für die „Demoanlage ADD (Slim)“, ein 1:5-Modell eines radiometrischen Dickenmessers. Die Anlage beschreibt sich selbst mit ADD (AI Device Description).
+
+Lies zuerst das ADD-Dokument der Anlage:
+https://raw.githubusercontent.com/norbert-walter/add-demo-slim/refs/heads/master/data/add.json
+
+Erkläre mir dann auf Deutsch und in einfachen Worten:
+1. was die Anlage misst und wie sie aufgebaut ist,
+2. wie man sie bedient und welche Aktionen es gibt,
+3. welche Aktionen eine Bestätigung brauchen und welche Sicherheitsregeln gelten,
+4. was ADD ist und warum ein KI-Agent damit sicher mit einem Gerät umgehen kann.
+
+Du hast keinen Zugriff auf die Anlage selbst: Steuere nichts und erfinde keine Messwerte. Halte dich an die Angaben im ADD-Dokument. Beantworte danach meine Fragen. Wenn ich die Anlage bedienen möchte, verweise mich auf die Web-UI im WLAN der Anlage.</textarea>
+      </details>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="h-ui">
+    <div class="panel-header" id="h-ui"><span class="num">3</span>Web-UI</div>
+    <div class="panel-body">
+      <ol class="steps">
+        <li>Mit dem WLAN der Anlage verbinden: den <strong>WLAN-QR-Code am Gerät</strong> scannen.</li>
+        <li>Web-UI öffnen – sie funktioniert nur in diesem WLAN.</li>
+      </ol>
+      <a class="btn" href="http://192.168.2.100/">Web-UI öffnen</a>
+      <a class="btn btn-secondary" href="http://add.demo/">Alternativ: add.demo</a>
+      <p class="small">Adresse von Hand: <code>http://192.168.2.100/</code>. <strong>STOP</strong>
+        am Display und in der Web-UI wirkt immer.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Demoanlage ADD (Slim) · Norbert Walter ·
+  <a href="https://github.com/norbert-walter/add-demo-slim">Quellen auf GitHub</a> ·
+  Schrift Ubuntu (<a href="fonts/LICENCE-ubuntu-font.txt">Lizenz</a>)
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+  var text = document.getElementById('prompt').value;
+  var q = encodeURIComponent(text);
+  var web = document.getElementById('kiWeb');
+  var desk = document.getElementById('kiDesktop');
+  web.href = 'https://claude.ai/new?q=' + q;
+  desk.href = 'claude://claude.ai/new?q=' + q;
+
+  function toast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(function () { t.classList.remove('show'); }, 2500);
+  }
+
+  function copyFallback() {
+    var ta = document.getElementById('prompt');
+    ta.parentNode.open = true;
+    ta.removeAttribute('readonly');
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    ta.setAttribute('readonly', '');
+    return ok;
+  }
+
+  // Copy the prompt, then open Claude in the same click (keeps the user gesture for the popup).
+  web.addEventListener('click', function () {
+    var done = function (ok) { toast(ok ? 'Prompt kopiert' : 'Prompt bitte unter „Prompt ansehen“ kopieren'); };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(copyFallback()); });
+    } else {
+      done(copyFallback());
+    }
+  });
+})();
+</script>
+</body>
+</html>
